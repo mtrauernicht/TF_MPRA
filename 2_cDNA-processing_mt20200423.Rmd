@@ -39,6 +39,12 @@ StartTime <-Sys.time()
 # 8-digit Date tag:
 Date <- substr(gsub("-","",Sys.time()),1,8) 
 # libraries:
+library(RColorBrewer)
+library(ggplot2)
+library(dplyr)
+library(maditr)
+library(tibble)
+library(pheatmap)
 ```
 
 ### Custom functions
@@ -99,55 +105,35 @@ corColor <- function(data, mapping, color = I("black"), sizeRange = c(1, 3), ...
 ## Data import
 ```{r}
 # Import processed bc counts from the preprocessing step
-bc_df <- read.csv("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/results/mt20200424_barcodes_processed.csv", header = T)
+cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/results/mt20200430_reporter_activity_filt.csv", header = T)
+cDNA_df$background <- as.character(cDNA_df$background)
+cDNA_df <- na.omit(cDNA_df)
 ```
 
 # Analysis
 
-## Annotate controls
-```{r}
-# Annotate the mutated motif of each TF
-bc_df$neg_ctrls <- "No"
-bc_df$neg_ctrls[grep("neg", bc_df$TF)] <- "Yes"
-
-# Annotate hPGK postive control
-bc_df$hPGK <- "No"
-bc_df$hPGK[grep("hPGK", bc_df$TF)] <- "Yes"
-
-# Annotate enhancer controls
-bc_df$native_enhancer <- "No"
-bc_df$native_enhancer[grep("klf2", bc_df$TF)] <- "Yes"
-
-# Annotate random promoter control
-bc_df$rand_promoter <- "No"
-bc_df$rand_promoter[grep("Random", bc_df$promoter)] <- "Yes"
-
-bc_df$background <- as.character(bc_df$background)
-```
-
 
 
 ## First insights into data distribution - reporter activity distribution plots
-```{r}
+```{r data_density, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 ## reporter activity distribution over all experiments
-bc_df_cDNA <- bc_df[-grep("pDNA", bc_df$condition),]
 colors <- c("#3D9F83", "#EFD279")
 
 ## reporter activity distribution for each experiment individually
-ggplot(data = bc_df_cDNA, aes(x = activity)) + 
+ggplot(data = cDNA_df, aes(x = activity)) + 
   geom_density(fill = "#3D9F83") + xlab("normalized reporter activity: cDNA/pDNA") + 
   labs(title = "reporter activity distribution") +
   xlim(0,2) + theme_classic() + facet_wrap(vars(condition))
 
 ## reporter activity distribution for each experiment individually
-ggplot(data = bc_df_cDNA, aes(x = activity, color = condition)) + 
+ggplot(data = cDNA_df, aes(x = activity, color = condition)) + 
   stat_ecdf() + xlab("normalized reporter activity: cDNA/pDNA") + 
   labs(title = "reporter activity distribution") + ylab("fraction") +
   xlim(0,5) + theme_classic()
 
 
 ## reporter activity distribution - highlight negative motif controls
-ggplot(bc_df_cDNA[bc_df_cDNA$hPGK == "No",], aes(x = activity, fill = neg_ctrls, alpha = 0.4)) + 
+ggplot(cDNA_df[cDNA_df$hPGK == "No",], aes(x = activity, fill = neg_ctrls, alpha = 0.4)) + 
   geom_density() + xlab("normalized reporter activity: cDNA/pDNA") + 
   labs(title = "reporter activity distribution - negative ctrls") +
   scale_fill_manual(values = colors) +
@@ -155,43 +141,51 @@ ggplot(bc_df_cDNA[bc_df_cDNA$hPGK == "No",], aes(x = activity, fill = neg_ctrls,
 
 
 ## reporter activity distribution - highlight positive hPGK control
-ggplot(bc_df_cDNA, aes(x = activity, fill = hPGK, alpha = 0.4)) + 
+ggplot(cDNA_df, aes(x = activity, fill = hPGK, alpha = 0.4)) + 
   geom_density() + xlab("normalized reporter activity: cDNA/pDNA") + 
   labs(title = "reporter activity distribution - hPGK") +
   scale_fill_manual(values = colors) +
   xlim(0,5) + theme_classic()
 
 ## reporter activity distribution - highlight Miguels enhancer control
-ggplot(bc_df_cDNA, aes(x = activity, fill = native_enhancer, alpha = 0.4)) + 
+ggplot(cDNA_df, aes(x = activity, fill = native_enhancer, alpha = 0.4)) + 
   geom_density() + xlab("normalized reporter activity: cDNA/pDNA") + 
   labs(title = "reporter activity distribution - native enhancers") +
   scale_fill_manual(values = colors) +
   xlim(0,5) + theme_classic()+ facet_wrap(vars(condition))
 
+## reporter activity distribution - highlight Miguels enhancer control
+ggplot(cDNA_df, aes(x = activity, fill = native_enhancer, alpha = 0.4)) + 
+  geom_density() + xlab("normalized reporter activity: cDNA/pDNA") + 
+  labs(title = "reporter activity distribution - native enhancers") +
+  scale_fill_manual(values = colors) +
+  xlim(10,20) + theme_classic()+ facet_wrap(vars(condition))
+
 
 ## reporter activity distribution - highlight different promoters
-ggplot(bc_df_cDNA, aes(x = activity, fill = promoter, alpha = 0.4)) + 
+ggplot(cDNA_df, aes(x = activity, fill = promoter, alpha = 0.4)) + 
   geom_density() + xlab("normalized reporter activity: cDNA/pDNA") + 
   labs(title = "reporter activity distribution - promoters") +
   scale_fill_brewer("Dark2") +
   xlim(0,5) + theme_classic()
 
 ## reporter activity distribution - highlight random promoters
-ggplot(bc_df_cDNA, aes(x = activity, fill = rand_promoter, alpha = 0.4)) + 
+ggplot(cDNA_df, aes(x = activity, fill = rand_promoter, alpha = 0.4)) + 
   geom_density() + xlab("normalized reporter activity: cDNA/pDNA") + 
   labs(title = "reporter activity distribution - random promoter") +
   scale_fill_manual(values = colors) +
   xlim(0,5) + theme_classic()
 
 ## reporter activity distribution - highlight different distances
-ggplot(bc_df_cDNA[bc_df_cDNA$distance != "",], aes(x = activity, fill = distance, alpha = 0.4)) + 
+ggplot(cDNA_df[cDNA_df$distance != "",], 
+       aes(x = activity, fill = distance, alpha = 0.4)) + 
   geom_density() + xlab("normalized reporter activity: cDNA/pDNA") + 
   labs(title = "reporter activity distribution - distances") +
   scale_fill_manual(values = colors) +
   xlim(0,5) + theme_classic()
 
 ## reporter activity distribution - highlight different spacings
-ggplot(bc_df_cDNA[bc_df_cDNA$spacing != "",], aes(x = activity, fill = spacing, alpha = 0.4)) + 
+ggplot(cDNA_df[cDNA_df$spacing != "",], aes(x = activity, fill = spacing, alpha = 0.4)) + 
   geom_density() + xlab("normalized reporter activity: cDNA/pDNA") + 
   labs(title = "reporter activity distribution - spacings") +
   scale_fill_manual(values = colors) +
@@ -199,7 +193,7 @@ ggplot(bc_df_cDNA[bc_df_cDNA$spacing != "",], aes(x = activity, fill = spacing, 
 
 colors2 <- c("#3D9F83", "#EFD279", "#056B58")
 ## reporter activity distribution - highlight different backgrounds
-ggplot(bc_df_cDNA[bc_df_cDNA$background != "0",], aes(x = activity, fill = background, alpha = 0.4)) + 
+ggplot(cDNA_df[cDNA_df$background != "0",], aes(x = activity, fill = background, alpha = 0.4)) + 
   geom_density() + xlab("normalized reporter activity: cDNA/pDNA") + 
   labs(title = "reporter activity distribution - backgrounds") +
   scale_fill_manual(values = colors2) +
@@ -207,128 +201,27 @@ ggplot(bc_df_cDNA[bc_df_cDNA$background != "0",], aes(x = activity, fill = backg
 ```
 
 
-## Correlation between technical replicates
+
+
+## Heat map - condition vs. TF
 ```{r}
-# Overall correlation between technical replicates
+## Prepare dataframe
+# Caculate mean TF activity per condition
+cDNA_df$tf_activity <- ave(cDNA_df$activity, cDNA_df$condition, cDNA_df$TF, FUN = function(x) mean(x))
 
-## Combine replicates in 8 different columns
-bc_df_cDNA$reporter_id <- paste(bc_df_cDNA$TF, bc_df_cDNA$spacing, bc_df_cDNA$distance, bc_df_cDNA$promoter,
-                                bc_df_cDNA$background, sep = "_")
-bc_df_rep <- bc_df_cDNA[bc_df_cDNA$hPGK == "No" & bc_df_cDNA$native_enhancer == "No" &
-                          bc_df_cDNA$rand_promoter == "No",] %>% 
-  select(bc.number, activity, condition, reporter_id)
-rep1 <- bc_df_rep[bc_df_rep$bc.number == 1,] %>% select(-bc.number)
-rep2 <- bc_df_rep[bc_df_rep$bc.number == 2,] %>% select(-bc.number)
-rep3 <- bc_df_rep[bc_df_rep$bc.number == 3,] %>% select(-bc.number)
-rep4 <- bc_df_rep[bc_df_rep$bc.number == 4,] %>% select(-bc.number)
-rep5 <- bc_df_rep[bc_df_rep$bc.number == 5,] %>% select(-bc.number)
-rep6 <- bc_df_rep[bc_df_rep$bc.number == 6,] %>% select(-bc.number)
-rep7 <- bc_df_rep[bc_df_rep$bc.number == 7,] %>% select(-bc.number)
-rep8 <- bc_df_rep[bc_df_rep$bc.number == 8,] %>% select(-bc.number)
+tf_activity_heatmap <- cDNA_df[cDNA_df$neg_ctrls == "No" & cDNA_df$hPGK == "No" &
+                               cDNA_df$native_enhancer == "No" & cDNA_df$rand_promoter == "No",] %>% 
+  select(TF, condition, tf_activity) %>% unique()
+tf_activity_heatmap <- dcast(tf_activity_heatmap, TF ~ condition, value.var="tf_activity")
+tf_activity_heatmap <- tf_activity_heatmap %>% 
+  remove_rownames %>% column_to_rownames(var="TF")
+# Keeping the scale in the pheatmap function
+myBreaks1 <- seq(0,5,0.05)
 
-setnames(rep1, "activity", "bc1")
-setnames(rep2, "activity", "bc2")
-setnames(rep3, "activity", "bc3")
-setnames(rep4, "activity", "bc4")
-setnames(rep5, "activity", "bc5")
-setnames(rep6, "activity", "bc6")
-setnames(rep7, "activity", "bc7")
-setnames(rep8, "activity", "bc8")
-
-bc_df_rep <- Reduce(function(x, y) merge(x, y, all=TRUE), list(rep1, rep2, rep3,
-                                                            rep4, rep5, rep6, rep7, rep8))
-
-bc_df_rep[is.na(bc_df_rep)] <- 0
-#bc_df_rep <- na.omit(bc_df_rep)
-
-
-# Correlation matrix plot
-n <- sample(1:nrow(bc_df_rep), 5000)
-boundaries <- seq(from = 0.7, by = 0.05, length.out = 4)
-plt <- ggpairs(bc_df_rep %>% select(bc1, bc2, bc3, bc4, bc5, bc6, bc7, bc8),
-               upper = list(continuous = corColor),
-               lower = list(continuous = function(data, mapping, ...) {
-                   ggally_points(data = data[n, ], mapping = mapping, alpha = 0.1, size = 0.5) +
-                   geom_abline(slope = 1, lty = "dashed", col = "red") +
-                   theme_bw()}),
-               diag = list(continuous = function(data, mapping, ...) {
-                   ggally_densityDiag(data = data, mapping = mapping, alpha = 0.3, fill = "red") +
-                   theme_bw()})) +
-  ggtitle("Correlation Between Technial Replicates") +
-  theme(text = element_text(size = 20))+
-  xlab("Reporter activity") +
-  ylab("Reporter activity") + 
-  theme_bw()
-
-print(plt)
-```
-
-
-## Take means of technical replicates: summarize activities across barcodes by considering a weighed average
-```{r}
-
-```
-
-
-
-
-
-
-
-## Data quality plots - correlation between replicates
-```{r}
-# Correlation plots of the replicates
-## Combine replicates of normalized data in 3 different columns
-bc_df_rep <- bc_df[-grep("pDNA", bc_df$condition),] %>% select(rep, bc_counts, barcode, condition)
-bc_df_rep$condition <- gsub("(.*?)_r[1-3]$", "\\1", bc_df_rep$condition)
-rep1 <- bc_df_rep[bc_df_rep$rep == 1,]
-rep2 <- bc_df_rep[bc_df_rep$rep == 2,]
-rep3 <- bc_df_rep[bc_df_rep$rep == 3,]
-rep1 <- rep1 %>% select(-rep)
-rep2 <- rep2 %>% select(-rep)
-rep3 <- rep3 %>% select(-rep)
-
-names(rep1) <- c("rep1", "barcode", "condition")
-names(rep2) <- c("rep2", "barcode", "condition")
-names(rep3) <- c("rep3", "barcode", "condition")
-
-
-bc_df_rep <- merge(rep1, rep2, all = TRUE)
-bc_df_rep <- merge(bc_df_rep, rep3, all = TRUE)
-bc_df_rep[is.na(bc_df_rep)] <- 0
-
-
-# Correlation matrix plot
-n <- sample(1:nrow(bc_df_rep), 5000)
-boundaries <- seq(from = 0.7, by = 0.05, length.out = 4)
-plt <- ggpairs(bc_df_rep %>% select(rep1, rep2, rep3),
-               upper = list(continuous = corColor),
-               lower = list(continuous = function(data, mapping, ...) {
-                   ggally_points(data = data[n, ], mapping = mapping, alpha = 0.1, size = 0.5) +
-                   geom_abline(slope = 1, lty = "dashed", col = "red") +
-                   theme_bw()}),
-               diag = list(continuous = function(data, mapping, ...) {
-                   ggally_densityDiag(data = data, mapping = mapping, alpha = 0.3, fill = "red") +
-                   theme_bw()})) +
-  ggtitle("Correlation Between Replicates") +
-  theme(text = element_text(size = 20))+
-  xlab("Normalized bc counts") +
-  ylab("Normalized bc counts") + 
-  theme_bw()
-
-print(plt)
-```
-
-
-
-## Summarize replicates: summmarize activity values between biological replicates by their geometric mean
-```{r}
-
-```
-
-
-## Visualisation
-```{r}
+# pheatmap function: logratio heatmap of each individual drug vs. barcode - 10uM drugs added
+pheatmap(as.matrix(tf_activity_heatmap),
+         color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdBu")))(100),
+         breaks = myBreaks1)
 ```
 
 # Results
