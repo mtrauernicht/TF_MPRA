@@ -74,7 +74,7 @@ corColor <- function(data, mapping, color = I("black"), sizeRange = c(1, 3), ...
 
   x   <- eval_data_col(data, mapping$x)
   y   <- eval_data_col(data, mapping$y)
-  r   <- cor(x, y)
+  r   <- cor(x, y, "pairwise.complete.obs")
   rt  <- format(r, digits = 3)
   tt  <- as.character(rt)
   cex <- max(sizeRange)
@@ -136,100 +136,99 @@ barcodes <- bc_annotation$barcode
 
 # Analysis
 
-
 ## Compare bartender with starcode
 ```{r cluster_compare, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
-# # Import starcode data
-# starcode_files = list.files('/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/results_e3_s1/',
-#                        full.names=T, patter='*_barcode_counts.tsv')
-# starcode_list <- lapply(starcode_files, fread, header = FALSE)
-# names(starcode_list)<- gsub('.*//(.*?)_[CGAT]{8}.*_barcode_counts.tsv', 
-#                                     '\\1', 
-#                                     starcode_files)
-# 
-# # Generate long dfs
-# 
-# for (i in 1:22) {
-#   if (i == 1) {
-#   starcode_df <- data.frame(starcode_list[i])
-#   starcode_df[3] <- names(starcode_list[i])
-#   names(starcode_df) <- c("barcode", "count", "name")
-#   starcode_df <- reshape2::dcast(starcode_df, barcode ~ name, value.var = "count")
-#   }
-#   else {
-#   starcode_df_i <- data.frame(starcode_list[i])
-#   starcode_df_i[3] <- names(starcode_list[i])
-#   names(starcode_df_i) <- c("barcode", "count", "name")
-#   starcode_df_i <- reshape2::dcast(starcode_df_i, barcode ~ name, value.var = "count")
-#   starcode_df <- merge(starcode_df, starcode_df_i, all = T)
-#   }
-# }
-# 
-# 
-# 
-# 
-# 
-# ## Convert lists to data frames and reshape
-# for (i in 1:22) {
-#   if (i == 1) {
-#   bartender_df <- data.frame(bc_list[i])
-#   bartender_df <- bartender_df[-1,]
-#   names(bartender_df) <- c("barcode", "count", "cluster")
-#   bartender_df$count <- as.numeric(bartender_df$count)
-#   bartender_df$bc_counts <- ave(bartender_df$count, bartender_df$cluster, FUN = function(x) sum(x))
-#   bartender_df <- bartender_df %>% group_by(cluster) %>% top_n(1, count)
-#   bartender_df$name <- names(bc_list[i])
-#   bartender_df <- bartender_df[,c(-2,-3)]
-#   bartender_df <- reshape2::dcast(bartender_df, barcode ~ name, value.var = "bc_counts")
-#   }
-#   else {
-#   bartender_df_i <- data.frame(bc_list[i])
-#   bartender_df_i <- bartender_df_i[-1,]
-#   names(bartender_df_i) <- c("barcode", "count", "cluster")
-#   bartender_df_i$count <- as.numeric(bartender_df_i$count)
-#   bartender_df_i$bc_counts <- ave(bartender_df_i$count, bartender_df_i$cluster, FUN = function(x) sum(x))
-#   bartender_df_i <- bartender_df_i %>% group_by(cluster) %>% top_n(1, count)
-#   bartender_df_i$name <- names(bc_list[i])
-#   bartender_df_i <- bartender_df_i[,c(-2,-3)]
-#   bartender_df_i <- reshape2::dcast(bartender_df_i, barcode ~ name, value.var = "bc_counts")
-#   bartender_df <- merge(bartender_df, bartender_df_i, all = T)
-#   }
-# }
-# 
-# 
-# bc_annotation$seq <- paste(bc_annotation$Primer1_seq, bc_annotation$motif1, bc_annotation$Space1,
-#                                 bc_annotation$motif2,bc_annotation$Space2, bc_annotation$motif3, 
-#                                 bc_annotation$Space3, bc_annotation$motif4, bc_annotation$Distance_seq, 
-#                                 bc_annotation$Promoter_sequence, bc_annotation$S1_primer,
-#                                 bc_annotation$barcode, bc_annotation$Primer2_seq, sep = "")
-# bc_annotation <- bc_annotation %>% select(TF, Spacing, Distance, Barcode, Promoter, Background, 
-#                                           barcode, seq)
-# starcode_df <- merge(starcode_df, bc_annotation, all = T)
-# bartender_df <- merge(bartender_df, bc_annotation, all = T)
-# starcode_df <- starcode_df[!is.na(starcode_df$seq),] %>% select(-TF, -Spacing, -Distance, -Barcode,
-#                                                                 -Promoter, -Background, -seq)
-# bartender_df <- bartender_df[!is.na(bartender_df$seq),]%>% select(-TF, -Spacing, -Distance, -Barcode,
-#                                                                 -Promoter, -Background, -seq)
-# 
-# starcode_long <- melt(starcode_df, id.vars = "barcode", 
-#               variable.name = "condition", value.name = "starcode_counts")
-# 
-# bartender_long <- melt(bartender_df, id.vars = "barcode", 
-#               variable.name = "condition", value.name = "bartender_counts")
-# 
-# comparison_long <- merge(starcode_long, bartender_long, all = T)
-# 
-# comparison_long[is.na(comparison_long)] <- 0
-# 
-# sp <- ggscatter(comparison_long, x = "starcode_counts", y = "bartender_counts",
-#    add = "reg.line", 
-#    add.params = list(color = "blue", fill = "lightgray"), title = "barcode counts starcode vs. bartender",
-#    conf.int = TRUE, ylab = "barcode counts bartender", xlab = "barcode counts starcode")
-# sp + stat_cor(method = "pearson", label.x = 3, label.y = 6000) + geom_abline(linetype = "dashed")
+# Generate long dfs
+for (i in 1:22) {
+  if (i == 1) {
+  bc_df <- data.frame(bc_list[i])
+  bc_df[3] <- names(bc_list[i])
+  names(bc_df) <- c("barcode", "count", "name")
+  bc_df <- reshape2::dcast(bc_df, barcode ~ name, value.var = "count")
+  }
+  else {
+  bc_df_i <- data.frame(bc_list[i])
+  bc_df_i[3] <- names(bc_list[i])
+  names(bc_df_i) <- c("barcode", "count", "name")
+  bc_df_i <- reshape2::dcast(bc_df_i, barcode ~ name, value.var = "count")
+  bc_df <- merge(bc_df, bc_df_i, all = T)
+  }
+}
 
+
+# Import starcode data
+bartender_files = list.files('/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/bartender/',
+                       full.names=T, patter='*_cluster_d3_barcode.csv')
+bartender_list <- lapply(bartender_files, fread, header = FALSE)
+names(bartender_list)<- gsub('.*//(.*?)_[CGAT]{8}.*_cluster_d3_barcode.csv',
+                                    '\\1',
+                                    bartender_files)
+
+
+## Convert lists to data frames and reshape
+for (i in 1:22) {
+  if (i == 1) {
+  bartender_df <- data.frame(bartender_list[i])
+  bartender_df <- bartender_df[-1,]
+  names(bartender_df) <- c("barcode", "count", "cluster")
+  bartender_df$count <- as.numeric(bartender_df$count)
+  bartender_df$bc_counts <- ave(bartender_df$count, bartender_df$cluster, FUN = function(x) sum(x))
+  bartender_df <- bartender_df %>% group_by(cluster) %>% top_n(1, count)
+  bartender_df$name <- names(bartender_list[i])
+  bartender_df <- bartender_df[,c(-2,-3)]
+  bartender_df <- reshape2::dcast(bartender_df, barcode ~ name, value.var = "bc_counts")
+  }
+  else {
+  bartender_df_i <- data.frame(bartender_list[i])
+  bartender_df_i <- bartender_df_i[-1,]
+  names(bartender_df_i) <- c("barcode", "count", "cluster")
+  bartender_df_i$count <- as.numeric(bartender_df_i$count)
+  bartender_df_i$bc_counts <- ave(bartender_df_i$count, bartender_df_i$cluster, FUN = function(x) sum(x))
+  bartender_df_i <- bartender_df_i %>% group_by(cluster) %>% top_n(1, count)
+  bartender_df_i$name <- names(bartender_list[i])
+  bartender_df_i <- bartender_df_i[,c(-2,-3)]
+  bartender_df_i <- reshape2::dcast(bartender_df_i, barcode ~ name, value.var = "bc_counts")
+  bartender_df <- merge(bartender_df, bartender_df_i, all = T)
+  }
+}
+
+
+bc_annotation$seq <- paste(bc_annotation$Primer1_seq, bc_annotation$motif1, bc_annotation$Space1,
+                                bc_annotation$motif2,bc_annotation$Space2, bc_annotation$motif3,
+                                bc_annotation$Space3, bc_annotation$motif4, bc_annotation$Distance_seq,
+                                bc_annotation$Promoter_sequence, bc_annotation$S1_primer,
+                                bc_annotation$barcode, bc_annotation$Primer2_seq, sep = "")
+bc_annotation <- bc_annotation %>% select(TF, Spacing, Distance, Barcode, Promoter, Background,
+                                          barcode, seq)
+bc_df <- merge(bc_df, bc_annotation, all = T)
+bartender_df <- merge(bartender_df, bc_annotation, all = T)
+bc_df <- bc_df[!is.na(bc_df$seq),] %>% select(-TF, -Spacing, -Distance, -Barcode,
+                                                                -Promoter, -Background, -seq)
+bartender_df <- bartender_df[!is.na(bartender_df$seq),]%>% select(-TF, -Spacing, -Distance, -Barcode,
+                                                                -Promoter, -Background, -seq)
+
+bc_df_long <- melt(bc_df, id.vars = "barcode",
+              variable.name = "condition", value.name = "starcode_counts")
+
+bartender_long <- melt(bartender_df, id.vars = "barcode",
+              variable.name = "condition", value.name = "bartender_counts")
+
+comparison_long <- merge(bc_df_long, bartender_long, all = T)
+
+comparison_long[is.na(comparison_long)] <- 0
+
+sp <- ggscatter(comparison_long, x = "starcode_counts", y = "bartender_counts",
+   add = "reg.line",
+   add.params = list(color = "blue", fill = "lightgray"), title = "barcode counts starcode vs. bartender",
+   conf.int = TRUE, ylab = "barcode counts bartender", xlab = "barcode counts starcode")
+sp + stat_cor(method = "pearson", label.x = 3, label.y = 40000) + geom_abline(linetype = "dashed")
 ```
 
-
+# Conlusion barcode clustering:
+- optimal starcode settings: levenshtein distance of 1
+- optimal bartender settings: hamming distance of 2
+- starcode and bartender perform equally well - starcode a bit better
+- next time design barcodes requiring levenshtein distance of 3
 
 
 ## Add barcode annotation to barcode counts & extract first bc read count information
@@ -274,20 +273,10 @@ for (i in 1:22) {
 
 # Match TF reporter to barcode
 ## Match barcode sequences from sequencing with barcodes from oligo design
-bc_annotation$seq <- paste(bc_annotation$Primer1_seq, bc_annotation$motif1, bc_annotation$Space1,
-                                bc_annotation$motif2,bc_annotation$Space2, bc_annotation$motif3,
-                                bc_annotation$Space3, bc_annotation$motif4, bc_annotation$Distance_seq,
-                                bc_annotation$Promoter_sequence, bc_annotation$S1_primer,
-                                bc_annotation$barcode, bc_annotation$Primer2_seq, sep = "")
-bc_annotation <- bc_annotation %>% select(TF, Spacing, Distance, Barcode, Promoter, Background,
-                                          barcode, seq)
 bc_df <- merge(bc_df, bc_annotation, all = T)
 bc_df$TF[bc_df$TF == "ctrl"] <- as_factor("hPGK")
 
 ## Include TF reporter length (correlation with pDNA counts?)
-
-
-
 bc_df$length <- nchar(bc_df$seq)
 
 
@@ -387,190 +376,197 @@ pie(slices, labels = lbls, col = c("#6F7D95","#B2BFBF"))
 
 ## We still have a lot of unmatched barcodes - Match unmatched barcodes to designed barcodes
 ```{r barcode match, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
-## Where could these unmatched, highly active barcodes come from?
-# Calculate levenshtein distance from barcodes in design to sequenced non-matched barcodes - ilter non-matched barcodes to only include active ones
-bc_nomatch <- bc_df_nomatch$barcode[bc_df_nomatch$bc_sum > 50]
-bc_match <- bc_annotation$barcode
-
-# For each barcode in the deisgn, calculate the levenshtein distance to each non-matched barcode
-n <- 0
-for (i in 1:17580) {
-  if (i == 1) {
-    l <- data.frame(levenshtein.distance(bc_match[i], bc_nomatch))
-  }
-  else {
-    l[i] <- levenshtein.distance(bc_match[i], bc_nomatch)
-    
-    # Keep track of the progress
-    n <- n + length(i)
-    percent <- (n / 17580)*100
-    progress <- paste("progress:", percent, "%")
-    if (percent %% 10 == 0) {
-    print(progress)
-    }
-  }
-
-}
-names(l) <- bc_match
-
-# Only keep sequences with levenshtein distance of 1
-lev <- l
-lev <- lev[rowSums(lev == 1) == 1,colSums(lev == 1) >= 1]
-
-
-# Match barcodes with levenshtein distance of 1
-index <- data.frame(which(lev==1, arr.ind=TRUE))
-index <- tibble::rownames_to_column(index)
-for (i in 1:nrow(index)) {
-  index$colname[i] <- colnames(lev)[index$col[i]]
-}
-index <- index %>% select(rowname, colname)
-names(index) <- c("non_match_barcode", "match_barcode")
-
-
-# Calculate correlation of each non-matched barcode to the two matched barcodes -> choose highest correlation bc
-# Correlation between matched and unmatched barcode counts
-match_bc_df <- bc_df[bc_df$barcode %in% index$match_barcode,c(1:23)]
-match_bc_df <- melt(match_bc_df, id.vars = c("barcode"), variable.name = "condition", value.name = "bc_counts")
-names(match_bc_df) <- c("match_barcode", "condition", "match_counts")
-match_bc_df <- merge(match_bc_df, index, all = T)
-match_bc_df <- match_bc_df %>% select(-non_match_barcode)
-
-non_match_bc_df <- bc_df[bc_df$barcode %in% index$`non_match_barcode`,c(1:23)]
-setnames(non_match_bc_df, old = "barcode", new = "non_match_barcode")
-non_match_bc_df <- merge(non_match_bc_df, index, all = T)
-non_match_bc_df <- non_match_bc_df %>% group_by(match_barcode) %>% mutate(rep = seq_len( n() ) )
-non_match_bc_df <- melt(non_match_bc_df, id.vars = c("non_match_barcode", "rep", "match_barcode"), variable.name = "condition", value.name = "bc_counts")
-cor_bc_reads <- merge(match_bc_df, non_match_bc_df, all = T)
-cor_bc_reads[is.na(cor_bc_reads)] <- 0
-
-# This method is not sensitive for data with very little counts - remove those
-cor_bc_reads$bc_counts <- as.numeric(cor_bc_reads$bc_counts)
-cor_bc_reads$match_counts <- as.numeric(cor_bc_reads$match_counts)
-cor_bc_reads$sum_counts <- ave(cor_bc_reads$bc_counts, cor_bc_reads$rep, cor_bc_reads$match_barcode,
-                               FUN = function(x) sum(x))
-cor_bc_reads <- cor_bc_reads[cor_bc_reads$sum_counts > 1000,]
-
-cor_bc_reads$copies <- ave(cor_bc_reads$rep, cor_bc_reads$match_barcode,
-                               FUN = function(x) length(unique(x)))
-
-cor_bc_reads <- unique(cor_bc_reads)
-
-# For each barcode compute correlation of matched vs. unmatched rep 1-4
-n <- 0
-
-for (i in unique(cor_bc_reads$non_match_barcode)) {
-    cor_bc_reads$cor[cor_bc_reads$non_match_barcode == i] <-
-      cor(cor_bc_reads$match_counts[cor_bc_reads$non_match_barcode == i],
-          cor_bc_reads$bc_counts[cor_bc_reads$non_match_barcode == i])
-    
-    n <- n + length(i)
-    percent <- (n / length(unique(cor_bc_reads$non_match_barcode)))*100
-    progress <- paste("progress:", percent, "%")
-    if (percent %% 10 == 0) {
-    print(progress)
-  }
-}
-
-
-# Filter out those with a weak correlation - this automatically keeps the correct ones with many counts
-cor_bc_reads[is.na(cor_bc_reads)] <- 0
-cor_bc_reads_low <- cor_bc_reads[cor_bc_reads$cor <= 0.75,]
-cor_bc_reads <- cor_bc_reads[cor_bc_reads$cor > 0.75,]
-cor_bc_reads <- cor_bc_reads %>% select(-condition, -match_counts, -bc_counts)
-cor_bc_reads <- unique(cor_bc_reads)
-
-
-
-# Correlation between matched and unmatched barcode counts
-index_3 <- cor_bc_reads
-match_bc_df <- bc_df[bc_df$barcode %in% index_3$match_barcode,c(1:23)]
-match_bc_df <- melt(match_bc_df, id.vars = c("barcode"), variable.name = "condition", value.name = "bc_counts")
-names(match_bc_df) <- c("match_barcode", "condition", "match_counts")
-match_bc_df <- merge(match_bc_df, index_3, all = T)
-
-non_match_bc_df <- bc_df[bc_df$barcode %in% index_3$non_match_barcode,c(1:23)]
-non_match_bc_df <- melt(non_match_bc_df, id.vars = c("barcode"), variable.name = "condition", value.name = "bc_counts")
-names(non_match_bc_df) <- c("non_match_barcode", "condition", "non_match_counts")
-non_match_bc_df <- merge(non_match_bc_df, index_3, all = T)
-non_match_bc_df <- non_match_bc_df %>% select(-`non_match_barcode`)
-cor_bc_reads <- merge(match_bc_df, non_match_bc_df, all = T)
-cor_bc_reads[is.na(cor_bc_reads)] <- 0
-
-sp <- ggscatter(cor_bc_reads, x = "match_counts", y = "non_match_counts",
-   add = "reg.line", 
-   add.params = list(color = "blue", fill = "lightgray"), title = "correlation matched vs. unmatched barcodes",
-   conf.int = TRUE, ylab = "bc counts unmatched", xlab = "bc counts matched")
-sp + stat_cor(method = "pearson", label.x = 3, label.y = 6000) + geom_abline(linetype = "dashed")
-
-
-
-cor_bc_reads <- cor_bc_reads %>% select(match_barcode, non_match_barcode) %>% unique()
-
-
-# Change barcodes in bc_df to matched barcodes
-n <- 0
-
-bc_nomatch_low <- bc_df_nomatch$barcode[bc_df_nomatch$bc_sum <= 100]
-bc_df <- subset(bc_df, !(bc_df$barcode %in% bc_nomatch_low))
-
-for (i in unique(bc_df$barcode)) {
-  if (i %in% cor_bc_reads$non_match_barcode) {
-    k <- which(grepl(i, cor_bc_reads$non_match_barcode))
-    bc_df$barcode[bc_df$barcode == i] <- cor_bc_reads$match_barcode[k]
-    
-    n <- n + length(i)
-    percent <- (n / length(unique(bc_df$barcode))*100)
-    progress <- paste("progress:", percent, "%")
-    if (percent %% 10 == 0) {
-    print(progress)
-    }
-  }
-}
-
-# Sum up identical barcodes
-bc_df[,2:23][is.na(bc_df[,2:23])] <- 0
-bc_df <- merge(bc_df, bc_annotation, by = "barcode", all = T)
-bc_df <- bc_df %>% select(-TF.x, -Spacing.x, -Distance.x, -Barcode.x, -Promoter.x, -Background.x, -seq.x)
-setnames(bc_df,
-         old = c("TF.y", "Spacing.y", "Distance.y", "Barcode.y", "Promoter.y", "Background.y", "seq.y" ), 
-         new = c("TF", "spacing", "distance", "bc-number", "promoter", "background", "seq"))
-bc_df$length <- nchar(bc_df$seq)
-
-bc_df <- ddply(bc_df,~barcode + length + TF + spacing + distance + `bc-number` + promoter + 
-                   background + seq, 
-                 summarise, `2i_neg_LIF_r1` = sum(`2i_neg_LIF_r1`), 
-            `2i_neg_LIF_r2` = sum(`2i_neg_LIF_r2`),
-            `2i_neg_LIF_r3` = sum(`2i_neg_LIF_r3`),
-            `2i_pos_LIF_r1` = sum(`2i_pos_LIF_r1`),
-            `2i_pos_LIF_r2` = sum(`2i_pos_LIF_r2`),
-            `2i_pos_LIF_r3` = sum(`2i_pos_LIF_r3`),
-            `LIF_pos_CH_r2` = sum(`LIF_pos_CH_r2`),
-            `LIF_pos_CH_r3` = sum(`LIF_pos_CH_r3`),
-            `LIF_pos_PD_r1` = sum(`LIF_pos_PD_r1`),
-            `LIF_pos_PD_r2` = sum(`LIF_pos_PD_r2`),
-            `LIF_pos_PD_r3` = sum(`LIF_pos_PD_r3`),
-            `N2B27_r1` = sum(`N2B27_r1`),
-            `N2B27_r2` = sum(`N2B27_r2`),
-            `N2B27_r3` = sum(`N2B27_r3`),
-            `NPC_r1` = sum(`NPC_r1`),
-            `NPC_r2` = sum(`NPC_r2`),
-            `NPC_r3` = sum(`NPC_r3`),
-            `pDNA_1` = sum(`pDNA_1`),
-            `pDNA_2` = sum(`pDNA_2`),
-            `vitA_r1` = sum(`vitA_r1`),
-            `vitA_r2` = sum(`vitA_r2`),
-            `vitA_r3` = sum(`vitA_r3`))
+# # Where could these unmatched, highly active barcodes come from?
+# # Calculate levenshtein distance from barcodes in design to sequenced non-matched barcodes - ilter non-matched barcodes to only include active ones
+# bc_nomatch <- bc_df_nomatch$barcode[bc_df_nomatch$bc_sum > 50]
+# bc_match <- bc_annotation$barcode
+# 
+# # For each barcode in the deisgn, calculate the levenshtein distance to each non-matched barcode
+# n <- 0
+# for (i in 1:17580) {
+#   if (i == 1) {
+#     l <- data.frame(levenshtein.distance(bc_match[i], bc_nomatch))
+#   }
+#   else {
+#     l[i] <- levenshtein.distance(bc_match[i], bc_nomatch)
+# 
+#     # Keep track of the progress
+#     n <- n + length(i)
+#     percent <- (n / 17580)*100
+#     progress <- paste("progress:", percent, "%")
+#     if (percent %% 10 == 0) {
+#     print(progress)
+#     }
+#   }
+# 
+# }
+# names(l) <- bc_match
+# 
+# # Only keep sequences with levenshtein distance of 1
+# lev <- l
+# lev <- lev[rowSums(lev == 1) == 1,colSums(lev == 1) >= 1]
+# 
+# 
+# # Match barcodes with levenshtein distance of 1
+# index <- data.frame(which(lev==1, arr.ind=TRUE))
+# index <- tibble::rownames_to_column(index)
+# for (i in 1:nrow(index)) {
+#   index$colname[i] <- colnames(lev)[index$col[i]]
+# }
+# index <- index %>% select(rowname, colname)
+# names(index) <- c("non_match_barcode", "match_barcode")
+# 
+# 
+# # Calculate correlation of each non-matched barcode to the two matched barcodes -> choose highest correlation bc
+# # Correlation between matched and unmatched barcode counts
+# match_bc_df <- bc_df[bc_df$barcode %in% index$match_barcode,c(1:23)]
+# match_bc_df <- melt(match_bc_df, id.vars = c("barcode"), variable.name = "condition", value.name = "bc_counts")
+# names(match_bc_df) <- c("match_barcode", "condition", "match_counts")
+# match_bc_df <- merge(match_bc_df, index, all = T)
+# match_bc_df <- match_bc_df %>% select(-non_match_barcode)
+# 
+# non_match_bc_df <- bc_df[bc_df$barcode %in% index$`non_match_barcode`,c(1:23)]
+# setnames(non_match_bc_df, old = "barcode", new = "non_match_barcode")
+# non_match_bc_df <- merge(non_match_bc_df, index, all = T)
+# non_match_bc_df <- non_match_bc_df %>% group_by(match_barcode) %>% mutate(rep = seq_len( n() ) )
+# non_match_bc_df <- melt(non_match_bc_df, id.vars = c("non_match_barcode", "rep", "match_barcode"), variable.name = "condition", value.name = "bc_counts")
+# cor_bc_reads <- merge(match_bc_df, non_match_bc_df, all = T)
+# cor_bc_reads[is.na(cor_bc_reads)] <- 0
+# 
+# # This method is not sensitive for data with very little counts - remove those
+# cor_bc_reads$bc_counts <- as.numeric(cor_bc_reads$bc_counts)
+# cor_bc_reads$match_counts <- as.numeric(cor_bc_reads$match_counts)
+# cor_bc_reads$sum_counts <- ave(cor_bc_reads$bc_counts, cor_bc_reads$rep, cor_bc_reads$match_barcode,
+#                                FUN = function(x) sum(x))
+# cor_bc_reads <- cor_bc_reads[cor_bc_reads$sum_counts > 1000,]
+# 
+# cor_bc_reads$copies <- ave(cor_bc_reads$rep, cor_bc_reads$match_barcode,
+#                                FUN = function(x) length(unique(x)))
+# 
+# cor_bc_reads <- unique(cor_bc_reads)
+# 
+# # For each barcode compute correlation of matched vs. unmatched rep 1-4
+# n <- 0
+# 
+# for (i in unique(cor_bc_reads$non_match_barcode)) {
+#     cor_bc_reads$cor[cor_bc_reads$non_match_barcode == i] <-
+#       cor(cor_bc_reads$match_counts[cor_bc_reads$non_match_barcode == i],
+#           cor_bc_reads$bc_counts[cor_bc_reads$non_match_barcode == i])
+# 
+#     n <- n + length(i)
+#     percent <- (n / length(unique(cor_bc_reads$non_match_barcode)))*100
+#     progress <- paste("progress:", percent, "%")
+#     if (percent %% 10 == 0) {
+#     print(progress)
+#   }
+# }
+# 
+# 
+# # Filter out those with a weak correlation - this automatically keeps the correct ones with many counts
+# cor_bc_reads[is.na(cor_bc_reads)] <- 0
+# cor_bc_reads_low <- cor_bc_reads[cor_bc_reads$cor <= 0.75,]
+# cor_bc_reads <- cor_bc_reads[cor_bc_reads$cor > 0.75,]
+# cor_bc_reads <- cor_bc_reads %>% select(-condition, -match_counts, -bc_counts)
+# cor_bc_reads <- unique(cor_bc_reads)
+# 
+# 
+# 
+# # Correlation between matched and unmatched barcode counts
+# index_3 <- cor_bc_reads
+# match_bc_df <- bc_df[bc_df$barcode %in% index_3$match_barcode,c(1:23)]
+# match_bc_df <- melt(match_bc_df, id.vars = c("barcode"), variable.name = "condition", value.name = "bc_counts")
+# names(match_bc_df) <- c("match_barcode", "condition", "match_counts")
+# match_bc_df <- merge(match_bc_df, index_3, all = T)
+# 
+# non_match_bc_df <- bc_df[bc_df$barcode %in% index_3$non_match_barcode,c(1:23)]
+# non_match_bc_df <- melt(non_match_bc_df, id.vars = c("barcode"), variable.name = "condition", value.name = "bc_counts")
+# names(non_match_bc_df) <- c("non_match_barcode", "condition", "non_match_counts")
+# non_match_bc_df <- merge(non_match_bc_df, index_3, all = T)
+# non_match_bc_df <- non_match_bc_df %>% select(-`non_match_barcode`)
+# cor_bc_reads <- merge(match_bc_df, non_match_bc_df, all = T)
+# cor_bc_reads[is.na(cor_bc_reads)] <- 0
+# 
+# sp <- ggscatter(cor_bc_reads, x = "match_counts", y = "non_match_counts",
+#    add = "reg.line",
+#    add.params = list(color = "blue", fill = "lightgray"), title = "correlation matched vs. unmatched barcodes",
+#    conf.int = TRUE, ylab = "bc counts unmatched", xlab = "bc counts matched")
+# sp + stat_cor(method = "pearson", label.x = 3, label.y = 6000) + geom_abline(linetype = "dashed")
+# 
+# 
+# 
+# cor_bc_reads <- cor_bc_reads %>% select(match_barcode, non_match_barcode) %>% unique()
+# 
+# 
+# # Change barcodes in bc_df to matched barcodes
+# n <- 0
+# 
+# bc_nomatch_low <- bc_df_nomatch$barcode[bc_df_nomatch$bc_sum <= 100]
+# bc_df <- subset(bc_df, !(bc_df$barcode %in% bc_nomatch_low))
+# 
+# for (i in unique(bc_df$barcode)) {
+#   if (i %in% cor_bc_reads$non_match_barcode) {
+#     k <- which(grepl(i, cor_bc_reads$non_match_barcode))
+#     bc_df$barcode[bc_df$barcode == i] <- cor_bc_reads$match_barcode[k]
+# 
+#     n <- n + length(i)
+#     percent <- (n / length(unique(bc_df$barcode))*100)
+#     progress <- paste("progress:", percent, "%")
+#     if (percent %% 10 == 0) {
+#     print(progress)
+#     }
+#   }
+# }
+# 
+# # Sum up identical barcodes
+# bc_df[,2:23][is.na(bc_df[,2:23])] <- 0
+# bc_df <- merge(bc_df, bc_annotation, by = "barcode", all = T)
+# bc_df <- bc_df %>% select(-TF.x, -Spacing.x, -Distance.x, -Barcode.x, -Promoter.x, -Background.x, -seq.x)
+# setnames(bc_df,
+#          old = c("TF.y", "Spacing.y", "Distance.y", "Barcode.y", "Promoter.y", "Background.y", "seq.y" ),
+#          new = c("TF", "spacing", "distance", "bc-number", "promoter", "background", "seq"))
+# bc_df$length <- nchar(bc_df$seq)
+# 
+# bc_df <- ddply(bc_df,~barcode + length + TF + spacing + distance + `bc-number` + promoter +
+#                    background + seq,
+#                  summarise, `2i_neg_LIF_r1` = sum(`2i_neg_LIF_r1`),
+#             `2i_neg_LIF_r2` = sum(`2i_neg_LIF_r2`),
+#             `2i_neg_LIF_r3` = sum(`2i_neg_LIF_r3`),
+#             `2i_pos_LIF_r1` = sum(`2i_pos_LIF_r1`),
+#             `2i_pos_LIF_r2` = sum(`2i_pos_LIF_r2`),
+#             `2i_pos_LIF_r3` = sum(`2i_pos_LIF_r3`),
+#             `LIF_pos_CH_r2` = sum(`LIF_pos_CH_r2`),
+#             `LIF_pos_CH_r3` = sum(`LIF_pos_CH_r3`),
+#             `LIF_pos_PD_r1` = sum(`LIF_pos_PD_r1`),
+#             `LIF_pos_PD_r2` = sum(`LIF_pos_PD_r2`),
+#             `LIF_pos_PD_r3` = sum(`LIF_pos_PD_r3`),
+#             `N2B27_r1` = sum(`N2B27_r1`),
+#             `N2B27_r2` = sum(`N2B27_r2`),
+#             `N2B27_r3` = sum(`N2B27_r3`),
+#             `NPC_r1` = sum(`NPC_r1`),
+#             `NPC_r2` = sum(`NPC_r2`),
+#             `NPC_r3` = sum(`NPC_r3`),
+#             `pDNA_1` = sum(`pDNA_1`),
+#             `pDNA_2` = sum(`pDNA_2`),
+#             `vitA_r1` = sum(`vitA_r1`),
+#             `vitA_r2` = sum(`vitA_r2`),
+#             `vitA_r3` = sum(`vitA_r3`))
+# 
+# # As the levenshtein step needs a lot of time, I will run it once and then export and import it again
+# filename <- SetFileName("_bc_df_levenshtein", "mt")
+# setwd("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/results/")
+# write.csv(bc_df, file = paste(filename,".csv", sep = ""), row.names = F)
 ```
 
 
 ## Check again how many bc reads per experiment we have
 ```{r read count 2, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 ## Make a graph to show the previously calculated reads per condition
+bc_df <- read.csv("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/results/mt20200504_bc_df_levenshtein.csv", header = T)
 bc_df_match <- bc_df[!is.na(bc_df$seq),]
 experimental_reads_2 <- data.frame(colSums(bc_df_match[,c(-1:-9)])) %>% 
   tibble::rownames_to_column()
 names(experimental_reads_2) <- c("experiment", "reads_2")
+experimental_reads_2$experiment <- gsub("^X", "", experimental_reads_2$experiment)
 experimental_reads_2 <- merge(experimental_reads, experimental_reads_2, all = T)
 experimental_reads_2$dif <- experimental_reads_2$reads_2 - experimental_reads$reads
 experimental_reads_2$mean <- mean(experimental_reads_2$dif)
@@ -587,6 +583,7 @@ p + geom_line(aes(y = mean, group = mean), linetype = "dashed")
 experimental_reads_mean_2 <- data.frame(colMeans(bc_df_match[,c(-1:-9)])) %>% 
   tibble::rownames_to_column()
 names(experimental_reads_mean_2) <- c("experiment", "reads_2")
+experimental_reads_mean_2$experiment <- gsub("^X", "", experimental_reads_mean_2$experiment)
 experimental_reads_mean_2 <- merge(experimental_reads_mean, experimental_reads_mean_2, all = T)
 experimental_reads_mean_2$dif <- experimental_reads_mean_2$reads_2 - experimental_reads_mean_2$reads
 experimental_reads_mean_2$mean <- mean(experimental_reads_mean_2$dif)
@@ -606,7 +603,7 @@ p + geom_line(aes(y = mean, group = mean), linetype = "dashed")
 ## Check again how many unmatched barcodes are left
 ```{r pie 2, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Get plots for filtered fraction
-bc_df_long <- melt(bc_df, id.vars = c("barcode","TF", "spacing", "distance", "bc-number", 
+bc_df_long <- melt(bc_df, id.vars = c("barcode","TF", "spacing", "distance", "bc.number", 
                                  "promoter", "background", "seq", "length"), 
               variable.name = "condition", value.name = "bc_counts")
 bc_df_long$bc_counts[is.na(bc_df_long$bc_counts)] <- 0
@@ -677,12 +674,17 @@ sp <- ggscatter(pDNA, x = "pDNA_1", y = "pDNA_2",
    xlim = c(0, 6000), ylim = c(0,6000))
 sp + stat_cor(method = "pearson", label.x = 3, label.y = 6000) + geom_abline(linetype = "dashed")
 
-## How many barcodes do I loose through pDNA filtering?
+
+
+# pDNA density
 bc_df$pDNA <- rowMeans(bc_df %>% select(pDNA_1, pDNA_2))
 pDNA <- bc_df %>% select(barcode, pDNA)
 
-pDNA_0 <- nrow(pDNA[pDNA$pDNA <= 6,])
-pDNA_1 <- nrow(pDNA[pDNA$pDNA > 6,])
+
+
+## How many barcodes do I loose through pDNA filtering?
+pDNA_0 <- nrow(pDNA[pDNA$pDNA < 20,])
+pDNA_1 <- nrow(pDNA[pDNA$pDNA >= 20,])
 total_counts <- pDNA_0 + pDNA_1
 percentage <- c(pDNA_1/total_counts, pDNA_0/total_counts)
 
@@ -690,22 +692,20 @@ percentage <- c(pDNA_1/total_counts, pDNA_0/total_counts)
 
 # Simple Pie Chart
 slices <- c(pDNA_1, pDNA_0)
-lbls <- c("#pDNA barcode reads > 0", "#pDNA barcode reads = 0")
-lbls <- paste(lbls, "= ", round(percentage*100,2), "%", sep = "")
+lbls <- c("#pDNA barcode reads >= 20", "#pDNA barcode reads <20")
+lbls <- paste(lbls, ": ", round(percentage*100,2), "%", sep = "")
 pie(slices, labels = lbls, col = c("#6F7D95","#B2BFBF"))
-
-# 13.3% of the TF reporters is not in the library - this is not optimal
 
 
 ## How many cDNA reads do I loose through pDNA filtering?
-cDNA <- bc_df[bc_df$pDNA <= 6,]
-cDNA <- cDNA %>% select(-length, -TF, -spacing, -distance, -`bc-number`, -promoter, -background, -seq,
+cDNA <- bc_df[bc_df$pDNA < 20,]
+cDNA <- cDNA %>% select(-length, -TF, -spacing, -distance, -`bc.number`, -promoter, -background, -seq,
                         -pDNA_1, -pDNA_2)
 cDNA <- melt(cDNA, id.vars = c("barcode"), variable.name = "condition", value.name = "bc_counts")
 cDNA <- sum(cDNA$bc_counts)
 
-cDNA_1 <- bc_df[bc_df$pDNA > 6,]
-cDNA_1 <- cDNA_1 %>% select(-length, -TF, -spacing, -distance, -`bc-number`, -promoter, -background, -seq,
+cDNA_1 <- bc_df[bc_df$pDNA >= 20,]
+cDNA_1 <- cDNA_1 %>% select(-length, -TF, -spacing, -distance, -`bc.number`, -promoter, -background, -seq,
                         -pDNA_1, -pDNA_2)
 cDNA_1 <- melt(cDNA_1, id.vars = c("barcode"), variable.name = "condition", value.name = "bc_counts")
 cDNA_1 <- sum(cDNA_1$bc_counts)
@@ -720,11 +720,19 @@ lbls <- c("#cDNA reads with associated pDNA barcodes", "#cDNA reads lost through
 lbls <- paste(lbls, ": ", round(percentage*100,2), "%", sep = "")
 pie(slices, labels = lbls, col = c("#6F7D95","#B2BFBF"))
 
-# pDNA density
+
+
+
 ## Read distribution plot
 ggplot(data = pDNA, aes(x = pDNA)) + 
   geom_density() + xlab("barcode counts") + labs(title = "pDNA barcode count distribution") +
   theme_classic()
+
+ggplot(data = pDNA, aes(x = pDNA)) + 
+  geom_density() + xlab("barcode counts") + labs(title = "pDNA barcode count distribution") +
+  xlim(0,100) + theme_classic()
+
+
 
 # Which samples are not represented in pDNA?
 ## Check if there's a specific TF
@@ -752,10 +760,10 @@ ggplot(data = pDNA_TF, aes(x = reorder(TF, -fraction), y = fraction)) +
 # Are there any samples from which I don'y have any barcode?
 ## Make a #barcode coverage per sample density plot
 pDNA_bc <- bc_df %>% select(pDNA_1, pDNA_2, barcode, length, TF, spacing,
-                            distance, `bc-number`, promoter, background)
+                            distance, `bc.number`, promoter, background)
 pDNA_bc$pDNA <- rowMeans(pDNA_bc %>% select(pDNA_1, pDNA_2))
 pDNA_bc$id <- paste(pDNA_bc$TF, pDNA_bc$spacing, pDNA_bc$distance, pDNA_bc$promoter, pDNA_bc$background)
-pDNA_bc <- pDNA_bc %>% select(id, pDNA, `bc-number`)
+pDNA_bc <- pDNA_bc %>% select(id, pDNA, `bc.number`)
 for (i in unique(pDNA_bc$id)) {
   pDNA_count <- pDNA_bc[pDNA_bc$id == i,]
   pDNA_bc$nonzerocount[pDNA_bc$id == i] <- length(pDNA_count$id[pDNA_count$pDNA != 0])
@@ -769,9 +777,8 @@ ggplot(data = pDNA_bc, aes(x = reorder(nonzerocount, -nonzerocount), y = length(
   theme_classic()
 
 
-
 # Use long data to see pDNA count vs TF reporter length distribution
-bc_df_long <- melt(bc_df, id.vars = c("barcode","TF", "spacing", "distance", "bc-number", 
+bc_df_long <- melt(bc_df, id.vars = c("barcode","TF", "spacing", "distance", "bc.number", 
                                  "promoter", "background", "seq", "length"), 
               variable.name = "condition", value.name = "bc_counts")
 
@@ -784,19 +791,29 @@ ggplot(data = bc_df_long[grep("pDNA", bc_df_long$condition),], aes(x = length_bi
   geom_quasirandom() + xlab("TF reporter length") + labs(title = "Barcode counts vs. TF reporter length") + 
   theme_classic()
 
+
 ## Check if 0 pDNA counts happens in some length bins more often
 pDNA <- bc_df_long[grep("pDNA", bc_df_long$condition),]
-pDNA_0 <- pDNA[pDNA$bc_counts == 0,]
+pDNA_0 <- pDNA[pDNA$bc_counts < 20,]
 
 ggplot(data = pDNA, aes(x = length)) + 
   geom_density(fill ="#AAACB0", alpha = 0.5) + geom_density(data = pDNA_0, fill ="#BFEDC1", alpha = 0.5) +
-  xlab("TF reporter length") + labs(title = "Length distribution of TF reporters", subtitle = "green: 0 pDNA counts, grey: all pDNA counts", fill= "hoi") + 
+  xlab("TF reporter length") + labs(title = "Length distribution of TF reporters", subtitle = "green: >20 pDNA counts, grey: >= 20 pDNA counts") + 
   theme_classic()
 
+
 # Remove all barcodes that did not appear in pDNA data
-bc_df_2 <- bc_df
 bc_df[is.na(bc_df)] <- 0
-bc_df <- bc_df[bc_df$pDNA > 6,]
+bc_df <- bc_df[bc_df$pDNA >= 20,]
+
+# Data distribution after filtering
+pDNA <- bc_df %>% select(pDNA)
+ggplot(data = pDNA, aes(x = pDNA)) + 
+  geom_density() + xlab("barcode counts") + labs(title = "pDNA barcode count distribution") +
+  theme_classic()
+ggplot(data = pDNA, aes(x = pDNA)) + 
+  geom_density() + xlab("barcode counts") + labs(title = "pDNA barcode count distribution") +
+  xlim(0,1000) + theme_classic()
 ```
 
 
@@ -804,7 +821,7 @@ bc_df <- bc_df[bc_df$pDNA > 6,]
 ## Restructure df
 ```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Wide to long 
-bc_df <- melt(bc_df, id.vars = c("barcode","TF", "spacing", "distance", "bc-number", 
+bc_df <- melt(bc_df, id.vars = c("barcode","TF", "spacing", "distance", "bc.number", 
                                  "promoter", "background", "seq", "length"), 
               variable.name = "condition", value.name = "bc_counts")
 bc_df <- bc_df[bc_df$condition != "pDNA",]
@@ -860,7 +877,7 @@ for (i in unique(bc_df$condition)) {
     
     # Keep track of the progress
     n <- n + length(i)
-    percent <- n / length(unique(bc_df$barcode))*100
+    percent <- (n / length(unique(bc_df$barcode)))*100
     progress <- paste("progress:", percent, "%")
     if (percent %% 10 == 0) {
     print(progress)
@@ -897,21 +914,28 @@ bc_df$rand_promoter[grep("Random", bc_df$promoter)] <- "Yes"
 ```{r correlation_techn_replicates, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Overall correlation between technical replicates
 bc_df_cDNA <- bc_df[-grep("pDNA", bc_df$condition),]
+pDNA <- bc_df[grep("pDNA", bc_df$condition),] %>% 
+  select(barcode, bc_counts, activity) %>% unique() %>%
+  setnames(c("bc_counts", "activity"), c("pDNA_counts", "pDNA_activity")) %>%
+  mutate(pDNA_counts = ave(pDNA_counts, barcode, FUN = function(x) mean(x)),
+         pDNA_activity = ave(pDNA_activity, barcode, FUN = function(x) mean(x))) %>%
+  unique()
+bc_df_cDNA <- merge(pDNA, bc_df_cDNA, all = T)
 
 ## Combine replicates in 8 different columns
 bc_df_cDNA$reporter_id <- paste(bc_df_cDNA$TF, bc_df_cDNA$spacing, bc_df_cDNA$distance, bc_df_cDNA$promoter,
                                 bc_df_cDNA$background, sep = "_")
 bc_df_rep <- bc_df_cDNA[bc_df_cDNA$hPGK == "No" & bc_df_cDNA$native_enhancer == "No" &
                           bc_df_cDNA$rand_promoter == "No",] %>% 
-  select(`bc-number`, activity, condition, reporter_id)
-rep1 <- bc_df_rep[bc_df_rep$`bc-number` == 1,] %>% select(-`bc-number`)
-rep2 <- bc_df_rep[bc_df_rep$`bc-number` == 2,] %>% select(-`bc-number`)
-rep3 <- bc_df_rep[bc_df_rep$`bc-number` == 3,] %>% select(-`bc-number`)
-rep4 <- bc_df_rep[bc_df_rep$`bc-number` == 4,] %>% select(-`bc-number`)
-rep5 <- bc_df_rep[bc_df_rep$`bc-number` == 5,] %>% select(-`bc-number`)
-rep6 <- bc_df_rep[bc_df_rep$`bc-number` == 6,] %>% select(-`bc-number`)
-rep7 <- bc_df_rep[bc_df_rep$`bc-number` == 7,] %>% select(-`bc-number`)
-rep8 <- bc_df_rep[bc_df_rep$`bc-number` == 8,] %>% select(-`bc-number`)
+  select(`bc.number`, activity, condition, reporter_id)
+rep1 <- bc_df_rep[bc_df_rep$`bc.number` == 1,] %>% select(-`bc.number`)
+rep2 <- bc_df_rep[bc_df_rep$`bc.number` == 2,] %>% select(-`bc.number`)
+rep3 <- bc_df_rep[bc_df_rep$`bc.number` == 3,] %>% select(-`bc.number`)
+rep4 <- bc_df_rep[bc_df_rep$`bc.number` == 4,] %>% select(-`bc.number`)
+rep5 <- bc_df_rep[bc_df_rep$`bc.number` == 5,] %>% select(-`bc.number`)
+rep6 <- bc_df_rep[bc_df_rep$`bc.number` == 6,] %>% select(-`bc.number`)
+rep7 <- bc_df_rep[bc_df_rep$`bc.number` == 7,] %>% select(-`bc.number`)
+rep8 <- bc_df_rep[bc_df_rep$`bc.number` == 8,] %>% select(-`bc.number`)
 
 setnames(rep1, "activity", "bc1")
 setnames(rep2, "activity", "bc2")
@@ -924,9 +948,6 @@ setnames(rep8, "activity", "bc8")
 
 bc_df_rep <- Reduce(function(x, y) merge(x, y, all=TRUE), list(rep1, rep2, rep3,
                                                             rep4, rep5, rep6, rep7, rep8))
-
-#bc_df_rep[is.na(bc_df_rep)] <- 0
-bc_df_rep <- na.omit(bc_df_rep)
 
 
 # Correlation matrix plot
@@ -979,15 +1000,15 @@ bc_df_cDNA_filt <- bc_df_cDNA[bc_df_cDNA$low_outlier > -0.5 & bc_df_cDNA$high_ou
 ## Combine replicates in 8 different columns
 bc_df_rep <- bc_df_cDNA_filt[bc_df_cDNA_filt$hPGK == "No" & bc_df_cDNA_filt$native_enhancer == "No" &
                           bc_df_cDNA_filt$rand_promoter == "No",] %>% 
-  select(`bc-number`, activity, condition, reporter_id)
-rep1 <- bc_df_rep[bc_df_rep$`bc-number` == 1,] %>% select(-`bc-number`)
-rep2 <- bc_df_rep[bc_df_rep$`bc-number` == 2,] %>% select(-`bc-number`)
-rep3 <- bc_df_rep[bc_df_rep$`bc-number` == 3,] %>% select(-`bc-number`)
-rep4 <- bc_df_rep[bc_df_rep$`bc-number` == 4,] %>% select(-`bc-number`)
-rep5 <- bc_df_rep[bc_df_rep$`bc-number` == 5,] %>% select(-`bc-number`)
-rep6 <- bc_df_rep[bc_df_rep$`bc-number` == 6,] %>% select(-`bc-number`)
-rep7 <- bc_df_rep[bc_df_rep$`bc-number` == 7,] %>% select(-`bc-number`)
-rep8 <- bc_df_rep[bc_df_rep$`bc-number` == 8,] %>% select(-`bc-number`)
+  select(`bc.number`, activity, condition, reporter_id)
+rep1 <- bc_df_rep[bc_df_rep$`bc.number` == 1,] %>% select(-`bc.number`)
+rep2 <- bc_df_rep[bc_df_rep$`bc.number` == 2,] %>% select(-`bc.number`)
+rep3 <- bc_df_rep[bc_df_rep$`bc.number` == 3,] %>% select(-`bc.number`)
+rep4 <- bc_df_rep[bc_df_rep$`bc.number` == 4,] %>% select(-`bc.number`)
+rep5 <- bc_df_rep[bc_df_rep$`bc.number` == 5,] %>% select(-`bc.number`)
+rep6 <- bc_df_rep[bc_df_rep$`bc.number` == 6,] %>% select(-`bc.number`)
+rep7 <- bc_df_rep[bc_df_rep$`bc.number` == 7,] %>% select(-`bc.number`)
+rep8 <- bc_df_rep[bc_df_rep$`bc.number` == 8,] %>% select(-`bc.number`)
 
 setnames(rep1, "activity", "bc1")
 setnames(rep2, "activity", "bc2")
@@ -1001,12 +1022,12 @@ setnames(rep8, "activity", "bc8")
 bc_df_rep <- merge(rep1, rep2, all = T)
 bc_df_rep <- merge(bc_df_rep, rep3, all = T)
 bc_df_rep <- merge(bc_df_rep, rep4, all = T)
-bc_df_rep <- na.omit(bc_df_rep)
+bc_df_rep <- bc_df_rep[rowSums(is.na(bc_df_rep)) != ncol(bc_df_rep), ]
 bc_df_rep <- merge(bc_df_rep, rep5, all = T)
 bc_df_rep <- merge(bc_df_rep, rep6, all = T)
 bc_df_rep <- merge(bc_df_rep, rep7, all = T)
 bc_df_rep <- merge(bc_df_rep, rep8, all = T)
-bc_df_rep <- na.omit(bc_df_rep)
+bc_df_rep <- bc_df_rep[rowSums(is.na(bc_df_rep)) != ncol(bc_df_rep), ]
 
 
 # Correlation matrix plot
@@ -1049,34 +1070,34 @@ names(rep1) <- c("rep1", "reporter", "condition")
 names(rep2) <- c("rep2", "reporter", "condition")
 names(rep3) <- c("rep3", "reporter", "condition")
 
-
 bc_df_rep <- merge(rep1, rep2, all = TRUE)
 bc_df_rep <- merge(bc_df_rep, rep3, all = TRUE)
-bc_df_rep <- na.omit(bc_df_rep)
 
-#bc_df_rep[is.na(bc_df_rep)] <- 0
+sp1 <- ggscatter(bc_df_rep, x = "rep1", y = "rep2",
+   add = "reg.line",
+   add.params = list(color = "blue", fill = "lightgray"), title = "rep1 vs rep2",
+   conf.int = TRUE, ylab = "rep2", xlab = "rep1") + 
+  stat_cor(method = "pearson", label.x = 3, label.y = 25) + 
+  geom_abline(linetype = "dashed")
+
+sp2 <- ggscatter(bc_df_rep, x = "rep1", y = "rep3",
+   add = "reg.line",
+   add.params = list(color = "blue", fill = "lightgray"), title = "rep1 vs rep3",
+   conf.int = TRUE, ylab = "rep3", xlab = "rep1") + 
+  stat_cor(method = "pearson", label.x = 3, label.y = 25) + 
+  geom_abline(linetype = "dashed")
+
+sp3 <- ggscatter(bc_df_rep, x = "rep3", y = "rep2",
+   add = "reg.line",
+   add.params = list(color = "blue", fill = "lightgray"), title = "rep3 vs rep2",
+   conf.int = TRUE, ylab = "rep2", xlab = "rep3") + 
+  stat_cor(method = "pearson", label.x = 3, label.y = 25) + 
+  geom_abline(linetype = "dashed")
 
 
-# Correlation matrix plot
-n <- sample(1:nrow(bc_df_rep), 5000)
-boundaries <- seq(from = 0.7, by = 0.1, length.out = 4)
-plt <- ggpairs(bc_df_rep %>% select(rep1, rep2, rep3),
-               upper = list(continuous = corColor),
-               lower = list(continuous = function(data, mapping, ...) {
-                   ggally_points(data = data[n, ], mapping = mapping, alpha = 0.1, size = 0.5) +
-                   geom_abline(slope = 1, lty = "dashed", col = "red") +
-                   theme_bw()}),
-               diag = list(continuous = function(data, mapping, ...) {
-                   ggally_densityDiag(data = data, mapping = mapping, alpha = 0.3, 
-                                      fill = "red") +
-                   theme_bw()})) +
-  ggtitle("Correlation Between Replicates") +
-  theme(text = element_text(size = 20))+
-  xlab("Reporter activity") +
-  ylab("Reporter activity") + 
-  theme_light()
-
-print(plt)
+#Grid three plots to one panel
+sp.plot <- arrangeGrob(sp1,sp2,sp3, nrow = 3)
+grid.arrange(sp.plot)
 ```
 
 
@@ -1092,9 +1113,15 @@ bc_df_cDNA_filt$reporter_activity_sd <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA
 
 ## Exporting data
 ```{r data export, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
-bc_df_cDNA_filt <- bc_df_cDNA_filt %>% select(-upper_activity, -lower_activity, -high_outlier,
-                                              -low_outlier,)
-setnames(bc_df_cDNA_filt, old = c("mean_activity", "sd_activity"), new = c("replicate_activity", "replicate_activity_sd"))
+# Polish export dataframe
+bc_df_cDNA_filt <- bc_df_cDNA_filt %>% 
+  select(-upper_activity, -lower_activity, 
+         -high_outlier, -low_outlier,) %>% 
+  setnames(old = c("mean_activity", "sd_activity"), 
+           new = c("replicate_activity", "replicate_activity_sd")) %>% 
+  mutate(log_activity = log2(activity),
+         log_reporter_activity = log2(reporter_activity))
+bc_df_cDNA_filt$condition <- gsub("^X", "", bc_df_cDNA_filt$condition)
 
 
 # Export bc_df for cDNA analysis
