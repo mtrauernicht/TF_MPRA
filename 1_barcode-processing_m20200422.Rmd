@@ -683,8 +683,8 @@ pDNA <- bc_df %>% select(barcode, pDNA)
 
 
 ## How many barcodes do I loose through pDNA filtering?
-pDNA_0 <- nrow(pDNA[pDNA$pDNA < 20,])
-pDNA_1 <- nrow(pDNA[pDNA$pDNA >= 20,])
+pDNA_0 <- nrow(pDNA[pDNA$pDNA < 150,])
+pDNA_1 <- nrow(pDNA[pDNA$pDNA >= 150,])
 total_counts <- pDNA_0 + pDNA_1
 percentage <- c(pDNA_1/total_counts, pDNA_0/total_counts)
 
@@ -698,13 +698,13 @@ pie(slices, labels = lbls, col = c("#6F7D95","#B2BFBF"))
 
 
 ## How many cDNA reads do I loose through pDNA filtering?
-cDNA <- bc_df[bc_df$pDNA < 20,]
+cDNA <- bc_df[bc_df$pDNA < 150,]
 cDNA <- cDNA %>% select(-length, -TF, -spacing, -distance, -`bc.number`, -promoter, -background, -seq,
                         -pDNA_1, -pDNA_2)
 cDNA <- melt(cDNA, id.vars = c("barcode"), variable.name = "condition", value.name = "bc_counts")
 cDNA <- sum(cDNA$bc_counts)
 
-cDNA_1 <- bc_df[bc_df$pDNA >= 20,]
+cDNA_1 <- bc_df[bc_df$pDNA >= 150,]
 cDNA_1 <- cDNA_1 %>% select(-length, -TF, -spacing, -distance, -`bc.number`, -promoter, -background, -seq,
                         -pDNA_1, -pDNA_2)
 cDNA_1 <- melt(cDNA_1, id.vars = c("barcode"), variable.name = "condition", value.name = "bc_counts")
@@ -792,9 +792,9 @@ ggplot(data = bc_df_long[grep("pDNA", bc_df_long$condition),], aes(x = length_bi
   theme_classic()
 
 
-## Check if 0 pDNA counts happens in some length bins more often
+## Check if low pDNA counts happens in some length bins more often
 pDNA <- bc_df_long[grep("pDNA", bc_df_long$condition),]
-pDNA_0 <- pDNA[pDNA$bc_counts < 20,]
+pDNA_0 <- pDNA[pDNA$bc_counts < 150,]
 
 ggplot(data = pDNA, aes(x = length)) + 
   geom_density(fill ="#AAACB0", alpha = 0.5) + geom_density(data = pDNA_0, fill ="#BFEDC1", alpha = 0.5) +
@@ -804,7 +804,7 @@ ggplot(data = pDNA, aes(x = length)) +
 
 # Remove all barcodes that did not appear in pDNA data
 bc_df[is.na(bc_df)] <- 0
-bc_df <- bc_df[bc_df$pDNA >= 20,]
+bc_df <- bc_df[bc_df$pDNA >= 150,]
 
 # Data distribution after filtering
 pDNA <- bc_df %>% select(pDNA)
@@ -879,7 +879,7 @@ for (i in unique(bc_df$condition)) {
     n <- n + length(i)
     percent <- (n / length(unique(bc_df$barcode)))*100
     progress <- paste("progress:", percent, "%")
-    if (percent %% 10 == 0) {
+    if (percent %% 1 == 0) {
     print(progress)
   }
 }
@@ -915,10 +915,9 @@ bc_df$rand_promoter[grep("Random", bc_df$promoter)] <- "Yes"
 # Overall correlation between technical replicates
 bc_df_cDNA <- bc_df[-grep("pDNA", bc_df$condition),]
 pDNA <- bc_df[grep("pDNA", bc_df$condition),] %>% 
-  select(barcode, bc_counts, activity) %>% unique() %>%
-  setnames(c("bc_counts", "activity"), c("pDNA_counts", "pDNA_activity")) %>%
-  mutate(pDNA_counts = ave(pDNA_counts, barcode, FUN = function(x) mean(x)),
-         pDNA_activity = ave(pDNA_activity, barcode, FUN = function(x) mean(x))) %>%
+  select(barcode, bc_counts_rpm) %>% unique() %>%
+  setnames("bc_counts_rpm", "pDNA_counts_rpm") %>%
+  mutate(pDNA_counts_rpm = ave(pDNA_counts_rpm, barcode, FUN = function(x) mean(x))) %>%
   unique()
 bc_df_cDNA <- merge(pDNA, bc_df_cDNA, all = T)
 
