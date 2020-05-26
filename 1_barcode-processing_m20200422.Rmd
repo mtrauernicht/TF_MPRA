@@ -54,6 +54,8 @@ library(ggbeeswarm)
 library(haven)
 library(readr)
 library(parallel)
+library(RColorBrewer)
+library(gridExtra)
 ```
 
 ### Custom functions
@@ -94,7 +96,7 @@ corColor <- function(data, mapping, color = I("black"), sizeRange = c(1, 3), ...
 
   if (r <= boundaries[1]) {
     corCol <- corColors[1]
-  } else if (r <= boundaries[3]) {
+  } else if (r <= boundaries[2]) {
     corCol <- corColors[2]
   } else if (r < boundaries[3]) {
     corCol <- corColors[3]
@@ -349,28 +351,96 @@ ggplot(data = bc_df_match, aes(x = mean_coverage)) +
   theme_classic()
 
 
+
 ## How many barcodes are unmatched?
 n_match <- nrow(bc_df_match)
 n_nomatch <- nrow(bc_df_nomatch)
 
-# Simple Pie Chart
-slices <- c(n_match, n_nomatch)
-lbls <- c("matched barcodes:", "unmatched barcodes:")
-lbls <- paste(lbls, ":", slices)
-pie(slices, labels = lbls, col = c("#6F7D95","#B2BFBF"))
+# Create donut chart
+data <- data.frame(
+  lbls=c("matched:", "unmatched:"),
+  count=c(n_match, n_nomatch)
+)
+ 
+# Compute percentages
+data$fraction <- data$count / sum(data$count)
+data$percentage <- data$fraction * 100
+
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+# Compute the bottom of each rectangle
+data$ymin <- c(0, head(data$ymax, n=-1))
+
+# Compute label position
+data$labelPosition <- (data$ymax + data$ymin) / 2
+
+# Compute a good label
+data$label <- paste0(data$lbls, "\n", round(data$percentage), "%")
+
+# Make the plot
+ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
+  geom_rect() +
+  geom_text(x=2, aes(y=labelPosition, label=label, color=lbls), size=5) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#1B998B", "#2D3047")) +
+  scale_color_manual(values = c("#1B998B", "#2D3047")) +
+  labs(title = "percentage of barcodes matched") +
+  coord_polar(theta="y") +
+  xlim(c(0, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+
+
+
 
 ## How many reads are unmatched?
 n_match_reads <- sum(bc_df_match$bc_sum)
 bc_df_nomatch$bc_sum[is.na(bc_df_nomatch$bc_sum)] <- 0
 n_nomatch_reads <- sum(bc_df_nomatch$bc_sum)
-total_counts <- n_match_reads + n_nomatch_reads
 
-slices <- c(n_match_reads, n_nomatch_reads)
-percentage <- c(n_match_reads/total_counts, n_nomatch_reads/total_counts)
+# Create donut chart
+data <- data.frame(
+  lbls=c("matched:", "unmatched:"),
+  count=c(n_match_reads, n_nomatch_reads)
+)
+ 
+# Compute percentages
+data$fraction <- data$count / sum(data$count)
+data$percentage <- data$fraction * 100
 
-lbls <- c("barcode reads in design", "unmatched barcodes counts")
-lbls <- paste(lbls, ": ", round(percentage*100,2), "%", sep = "")
-pie(slices, labels = lbls, col = c("#6F7D95","#B2BFBF"))
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+# Compute the bottom of each rectangle
+data$ymin <- c(0, head(data$ymax, n=-1))
+
+# Compute label position
+data$labelPosition <- (data$ymax + data$ymin) / 2
+
+# Compute a good label
+data$label <- paste0(data$lbls, "\n", round(data$percentage), "%")
+
+# Make the plot
+ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
+  geom_rect() +
+  geom_text(x=2, aes(y=labelPosition, label=label, color=lbls), size=5) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#1B998B", "#2D3047")) +
+  scale_color_manual(values = c("#1B998B", "#2D3047")) +
+  labs(title = "percentage of barcode reads matched") +
+  coord_polar(theta="y") +
+  xlim(c(0, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
 ```
 
 
@@ -556,7 +626,8 @@ pie(slices, labels = lbls, col = c("#6F7D95","#B2BFBF"))
 # setwd("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/results/")
 # write.csv(bc_df, file = paste(filename,".csv", sep = ""), row.names = F)
 ```
-
+### Conclusion barcode clustering:
+- I manually added barcodes with high correlation and levenshtein distance of 1 to 1 barcode to get more reads
 
 ## Check again how many bc reads per experiment we have
 ```{r read count 2, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
@@ -636,23 +707,89 @@ ggplot(data = bc_df_match, aes(x = mean_coverage)) +
 n_match <- nrow(bc_df_match)
 n_nomatch <- nrow(bc_df_nomatch)
 
-# Simple Pie Chart
-slices <- c(n_match, n_nomatch)
-lbls <- c("barcodes in design = match", "barcodes not in design = no match")
-lbls <- paste(lbls, ":", slices)
-pie(slices, labels = lbls, col = c("#6F7D95","#B2BFBF"))
+# Create donut chart
+data <- data.frame(
+  lbls=c("matched:", "unmatched:"),
+  count=c(n_match, n_nomatch)
+)
+ 
+# Compute percentages
+data$fraction <- data$count / sum(data$count)
+data$percentage <- data$fraction * 100
+
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+# Compute the bottom of each rectangle
+data$ymin <- c(0, head(data$ymax, n=-1))
+
+# Compute label position
+data$labelPosition <- (data$ymax + data$ymin) / 2
+
+# Compute a good label
+data$label <- paste0(data$lbls, "\n", round(data$percentage), "%")
+
+# Make the plot
+ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
+  geom_rect() +
+  geom_text(x=2, aes(y=labelPosition, label=label, color=lbls), size=5) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#1B998B", "#2D3047")) +
+  scale_color_manual(values = c("#1B998B", "#2D3047")) +
+  labs(title = "percentage of barcodes matched") +
+  coord_polar(theta="y") +
+  xlim(c(0, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+
+
 
 ## How many reads do I loose through match filtering?
 n_match_reads <- sum(bc_df_match$bc_sum)
 n_nomatch_reads <- sum(bc_df_nomatch$bc_sum)
-total_counts <- n_match_reads + n_nomatch_reads
 
-slices <- c(n_match_reads, n_nomatch_reads)
-percentage <- c(n_match_reads/total_counts, n_nomatch_reads/total_counts)
+# Create donut chart
+data <- data.frame(
+  lbls=c("matched:", "unmatched:"),
+  count=c(n_match_reads, n_nomatch_reads)
+)
+ 
+# Compute percentages
+data$fraction <- data$count / sum(data$count)
+data$percentage <- data$fraction * 100
 
-lbls <- c("reads from barcodes in design", "reads from barcodes not in design")
-lbls <- paste(lbls, ": ", round(percentage*100,2), "%", sep = "")
-pie(slices, labels = lbls, col = c("#6F7D95","#B2BFBF"))
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+# Compute the bottom of each rectangle
+data$ymin <- c(0, head(data$ymax, n=-1))
+
+# Compute label position
+data$labelPosition <- (data$ymax + data$ymin) / 2
+
+# Compute a good label
+data$label <- paste0(data$lbls, "\n", round(data$percentage), "%")
+
+# Make the plot
+ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
+  geom_rect() +
+  geom_text(x=2, aes(y=labelPosition, label=label, color=lbls), size=5) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#1B998B", "#2D3047")) +
+  scale_color_manual(values = c("#1B998B", "#2D3047")) +
+  labs(title = "percentage of barcodes matched") +
+  coord_polar(theta="y") +
+  xlim(c(0, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
 
 
 # Remove unmatched barcodes (as they only have a few reads)
@@ -683,54 +820,117 @@ pDNA <- bc_df %>% select(barcode, pDNA)
 
 
 ## How many barcodes do I loose through pDNA filtering?
-pDNA_0 <- nrow(pDNA[pDNA$pDNA < 150,])
-pDNA_1 <- nrow(pDNA[pDNA$pDNA >= 150,])
-total_counts <- pDNA_0 + pDNA_1
-percentage <- c(pDNA_1/total_counts, pDNA_0/total_counts)
+pDNA_0 <- nrow(pDNA[pDNA$pDNA < 100,])
+pDNA_1 <- nrow(pDNA[pDNA$pDNA >= 100,])
 
 
 
-# Simple Pie Chart
-slices <- c(pDNA_1, pDNA_0)
-lbls <- c("#pDNA barcode reads >= 20", "#pDNA barcode reads <20")
-lbls <- paste(lbls, ": ", round(percentage*100,2), "%", sep = "")
-pie(slices, labels = lbls, col = c("#6F7D95","#B2BFBF"))
+# Create donut chart
+data <- data.frame(
+  lbls=c("kept", "lost"),
+  count=c(pDNA_1, pDNA_0)
+)
+ 
+# Compute percentages
+data$fraction <- data$count / sum(data$count)
+data$percentage <- data$fraction * 100
+
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+# Compute the bottom of each rectangle
+data$ymin <- c(0, head(data$ymax, n=-1))
+
+# Compute label position
+data$labelPosition <- (data$ymax + data$ymin) / 2
+
+# Compute a good label
+data$label <- paste0(data$lbls, "\n", round(data$percentage), "%")
+
+# Make the plot
+ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
+  geom_rect() +
+  geom_text(x=2, aes(y=labelPosition, label=label, color=lbls), size=5) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#1B998B", "#2D3047")) +
+  scale_color_manual(values = c("#1B998B", "#2D3047")) +
+  labs(title = "pDNA reads lost through filtering") +
+  coord_polar(theta="y") +
+  xlim(c(0, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+
+
+
+
 
 
 ## How many cDNA reads do I loose through pDNA filtering?
-cDNA <- bc_df[bc_df$pDNA < 150,]
+cDNA <- bc_df[bc_df$pDNA < 100,]
 cDNA <- cDNA %>% select(-length, -TF, -spacing, -distance, -`bc.number`, -promoter, -background, -seq,
                         -pDNA_1, -pDNA_2)
 cDNA <- melt(cDNA, id.vars = c("barcode"), variable.name = "condition", value.name = "bc_counts")
 cDNA <- sum(cDNA$bc_counts)
 
-cDNA_1 <- bc_df[bc_df$pDNA >= 150,]
+cDNA_1 <- bc_df[bc_df$pDNA >= 100,]
 cDNA_1 <- cDNA_1 %>% select(-length, -TF, -spacing, -distance, -`bc.number`, -promoter, -background, -seq,
                         -pDNA_1, -pDNA_2)
 cDNA_1 <- melt(cDNA_1, id.vars = c("barcode"), variable.name = "condition", value.name = "bc_counts")
 cDNA_1 <- sum(cDNA_1$bc_counts)
-total_counts <- cDNA + cDNA_1
-
-percentage <- c(cDNA_1/total_counts, cDNA/total_counts)
 
 
-# Simple Pie Chart
-slices <- c(cDNA_1, cDNA)
-lbls <- c("#cDNA reads with associated pDNA barcodes", "#cDNA reads lost through pDNA filtering")
-lbls <- paste(lbls, ": ", round(percentage*100,2), "%", sep = "")
-pie(slices, labels = lbls, col = c("#6F7D95","#B2BFBF"))
+# Create donut chart
+data <- data.frame(
+  lbls=c("kept", "lost"),
+  count=c(cDNA_1, cDNA)
+)
+ 
+# Compute percentages
+data$fraction <- data$count / sum(data$count)
+data$percentage <- data$fraction * 100
 
 
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
 
 
-## Read distribution plot
-ggplot(data = pDNA, aes(x = pDNA)) + 
-  geom_density() + xlab("barcode counts") + labs(title = "pDNA barcode count distribution") +
-  theme_classic()
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
 
-ggplot(data = pDNA, aes(x = pDNA)) + 
-  geom_density() + xlab("barcode counts") + labs(title = "pDNA barcode count distribution") +
-  xlim(0,100) + theme_classic()
+# Compute the bottom of each rectangle
+data$ymin <- c(0, head(data$ymax, n=-1))
+
+# Compute label position
+data$labelPosition <- (data$ymax + data$ymin) / 2
+
+# Compute a good label
+data$label <- paste0(data$lbls, "\n", round(data$percentage), "%")
+
+# Make the plot
+ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
+  geom_rect() +
+  geom_text(x=2, aes(y=labelPosition, label=label, color=lbls), size=5) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#1B998B", "#2D3047")) +
+  scale_color_manual(values = c("#1B998B", "#2D3047")) +
+  labs(title = "pDNA reads lost through filtering") +
+  coord_polar(theta="y") +
+  xlim(c(0, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+
+
+ggplot(data = pDNA, aes(x = "pDNA counts per barcode", y = pDNA)) + 
+  geom_quasirandom(color = "#2D3047") + 
+  labs(title = "pDNA barcode count distribution") +
+  theme_classic() + geom_hline(yintercept = 100, linetype = "dashed", color = "#1B998B", size = 1.5) +
+  theme(axis.text.x = element_text(size = 12), 
+          axis.text.y = element_text(size = 12)) +
+  ylab("") + xlab("") +
+  theme(text = element_text(size = 12))
 
 
 
@@ -744,7 +944,7 @@ names(TF_count) <- c("TF", "TF_count")
 pDNA <- merge(pDNA, TF_count, all = T)
 for (i in unique(pDNA$TF)) {
   pDNA_count <- pDNA[pDNA$TF == i,]
-  pDNA$nonzerocount[pDNA$TF == i] <- length(pDNA_count$TF[pDNA_count$pDNA == 0])
+  pDNA$nonzerocount[pDNA$TF == i] <- length(pDNA_count$TF[pDNA_count$pDNA < 100])
 }
 pDNA$fraction <- pDNA$nonzerocount / pDNA$TF_count
 pDNA_TF <- pDNA %>% select(TF, fraction) %>% unique()
@@ -766,16 +966,55 @@ pDNA_bc$id <- paste(pDNA_bc$TF, pDNA_bc$spacing, pDNA_bc$distance, pDNA_bc$promo
 pDNA_bc <- pDNA_bc %>% select(id, pDNA, `bc.number`)
 for (i in unique(pDNA_bc$id)) {
   pDNA_count <- pDNA_bc[pDNA_bc$id == i,]
-  pDNA_bc$nonzerocount[pDNA_bc$id == i] <- length(pDNA_count$id[pDNA_count$pDNA != 0])
+  pDNA_bc$nonzerocount[pDNA_bc$id == i] <- length(pDNA_count$id[pDNA_count$pDNA >= 100])
 }
 pDNA_bc <- pDNA_bc %>% select(id, nonzerocount) %>% unique()
 pDNA_bc <- pDNA_bc[-grep("hPGK", pDNA_bc$id),]
 
-ggplot(data = pDNA_bc, aes(x = reorder(nonzerocount, -nonzerocount), y = length(nonzerocount)/2195)) + 
-  geom_bar(stat = "identity") + xlab("number of unique barcodes per TF reporter") + ylab("occurences") + 
-  labs(title = "Number of technical replicates of TF reporters") + 
-  theme_classic()
+data <- data.frame(
+  lbls=c("8", "7", "6", "5", "4", "3", "2", "1", "0"),
+  count=c(nrow(pDNA_bc[pDNA_bc$nonzerocount == 8,]),
+          nrow(pDNA_bc[pDNA_bc$nonzerocount == 7,]),
+          nrow(pDNA_bc[pDNA_bc$nonzerocount == 6,]),
+          nrow(pDNA_bc[pDNA_bc$nonzerocount == 5,]),
+          nrow(pDNA_bc[pDNA_bc$nonzerocount == 4,]),
+          nrow(pDNA_bc[pDNA_bc$nonzerocount == 3,]),
+          nrow(pDNA_bc[pDNA_bc$nonzerocount == 2,]),
+          nrow(pDNA_bc[pDNA_bc$nonzerocount == 1,]),
+          nrow(pDNA_bc[pDNA_bc$nonzerocount == 0,]))
+)
 
+# Compute percentages
+data$fraction <- data$count / sum(data$count)
+data$percentage <- data$fraction * 100
+
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+# Compute the bottom of each rectangle
+data$ymin <- c(0, head(data$ymax, n=-1))
+
+# Compute label position
+data$labelPosition <- (data$ymax + data$ymin) / 2
+
+# Compute a good label
+data$label <- paste0(data$lbls, "\n", round(data$percentage), "%")
+
+# Make the plot
+ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
+  geom_rect() +
+  geom_text(x=2, aes(y=labelPosition, label=label), size=4) + # x here controls label position (inner / outer)
+  scale_fill_brewer(palette = "Blues") +
+  labs(title = "barcodes per reporter") +
+  coord_polar(theta="y") +
+  xlim(c(0, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
 
 # Use long data to see pDNA count vs TF reporter length distribution
 bc_df_long <- melt(bc_df, id.vars = c("barcode","TF", "spacing", "distance", "bc.number", 
@@ -788,23 +1027,29 @@ bc_df_long$length_bin <- cut(bc_df_long$length, breaks = lengths)
 
 ## Read distribution vs. TF reporter length
 ggplot(data = bc_df_long[grep("pDNA", bc_df_long$condition),], aes(x = length_bin, y = `bc_counts`)) + 
-  geom_quasirandom() + xlab("TF reporter length") + labs(title = "Barcode counts vs. TF reporter length") + 
-  theme_classic()
+  geom_quasirandom(color = "#2D3047") + xlab("TF reporter length") + 
+  labs(title = "Barcode counts vs. TF reporter length") + 
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12), 
+          axis.text.y = element_text(size = 12)) +
+  ylab("Barcode counts") + 
+  geom_hline(yintercept = 100, linetype = "dashed", color = "#1B998B", size = 1) +
+  theme(text = element_text(size = 12))
 
 
 ## Check if low pDNA counts happens in some length bins more often
 pDNA <- bc_df_long[grep("pDNA", bc_df_long$condition),]
-pDNA_0 <- pDNA[pDNA$bc_counts < 150,]
+pDNA_0 <- pDNA[pDNA$bc_counts < 100,]
 
 ggplot(data = pDNA, aes(x = length)) + 
   geom_density(fill ="#AAACB0", alpha = 0.5) + geom_density(data = pDNA_0, fill ="#BFEDC1", alpha = 0.5) +
-  xlab("TF reporter length") + labs(title = "Length distribution of TF reporters", subtitle = "green: >20 pDNA counts, grey: >= 20 pDNA counts") + 
+  xlab("TF reporter length") + labs(title = "Length distribution of TF reporters", subtitle = "green: >100 pDNA counts, grey: >= 100 pDNA counts") + 
   theme_classic()
 
 
 # Remove all barcodes that did not appear in pDNA data
 bc_df[is.na(bc_df)] <- 0
-bc_df <- bc_df[bc_df$pDNA >= 150,]
+bc_df <- bc_df[bc_df$pDNA >= 100,]
 
 # Data distribution after filtering
 pDNA <- bc_df %>% select(pDNA)
@@ -841,7 +1086,7 @@ p <- ggplot(data = bc_df_mean, aes(y = mean_counts, x = reorder(condition, -mean
   geom_bar(stat = "identity") + xlab("Experimental condition") + ylab("Mean read counts TF reporter") +
   labs(title = "Mean barcode coverage per condition", 
        subtitle = paste("Mean coverage: ", round(bc_df_mean$total_mean,2), "x", sep = "")) + 
-  theme_classic() + theme(axis.text.x = element_text(angle = 90, hjust = 1.0, vjust = 0))
+  theme_classic() + theme(axis.text.x = element_text(angle = 90, hjust = 1.0, vjust = 0)) 
 
 
 p + geom_line(aes(y = total_mean, group = total_mean), linetype = "dashed")
@@ -849,7 +1094,13 @@ p + geom_line(aes(y = total_mean, group = total_mean), linetype = "dashed")
 
 
 
-## Normalization barcode counts using pDNA data
+
+
+
+
+## Normalization of barcode counts in two steps:
+1. Divide barcode counts through sequencing depth - I assume that sequencing depth is not skewed by differential reporter activity
+2. Divide cDNA barcode counts through pDNA barcode counts to get activity
 ```{r normalization, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Normalize data using pDNA data
 
@@ -877,7 +1128,7 @@ for (i in unique(bc_df$condition)) {
     
     # Keep track of the progress
     n <- n + length(i)
-    percent <- (n / length(unique(bc_df$barcode)))*100
+    percent <- round((n / length(unique(bc_df$barcode)))*100,2)
     progress <- paste("progress:", percent, "%")
     if (percent %% 1 == 0) {
     print(progress)
@@ -888,94 +1139,19 @@ bc_df$activity[is.na(bc_df$activity)] <- 0
 ```
 
 
-## Annotate controls
-```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
-# Annotate the mutated motif of each TF
-bc_df$neg_ctrls <- "No"
-bc_df$neg_ctrls[grep("neg", bc_df$TF)] <- "Yes"
-
-# Annotate hPGK postive control
-bc_df$hPGK <- "No"
-bc_df$hPGK[grep("hPGK", bc_df$TF)] <- "Yes"
-
-# Annotate enhancer controls
-bc_df$native_enhancer <- "No"
-bc_df$native_enhancer[grep("klf2", bc_df$TF)] <- "Yes"
-
-# Annotate random promoter control
-bc_df$rand_promoter <- "No"
-bc_df$rand_promoter[grep("Random", bc_df$promoter)] <- "Yes"
-```
 
 
 
 
-## Correlation between technical replicates
-```{r correlation_techn_replicates, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
-# Overall correlation between technical replicates
-bc_df_cDNA <- bc_df[-grep("pDNA", bc_df$condition),]
-pDNA <- bc_df[grep("pDNA", bc_df$condition),] %>% 
-  select(barcode, bc_counts_rpm) %>% unique() %>%
-  setnames("bc_counts_rpm", "pDNA_counts_rpm") %>%
-  mutate(pDNA_counts_rpm = ave(pDNA_counts_rpm, barcode, FUN = function(x) mean(x))) %>%
-  unique()
-bc_df_cDNA <- merge(pDNA, bc_df_cDNA, all = T)
 
-## Combine replicates in 8 different columns
-bc_df_cDNA$reporter_id <- paste(bc_df_cDNA$TF, bc_df_cDNA$spacing, bc_df_cDNA$distance, bc_df_cDNA$promoter,
-                                bc_df_cDNA$background, sep = "_")
-bc_df_rep <- bc_df_cDNA[bc_df_cDNA$hPGK == "No" & bc_df_cDNA$native_enhancer == "No" &
-                          bc_df_cDNA$rand_promoter == "No",] %>% 
-  select(`bc.number`, activity, condition, reporter_id)
-rep1 <- bc_df_rep[bc_df_rep$`bc.number` == 1,] %>% select(-`bc.number`)
-rep2 <- bc_df_rep[bc_df_rep$`bc.number` == 2,] %>% select(-`bc.number`)
-rep3 <- bc_df_rep[bc_df_rep$`bc.number` == 3,] %>% select(-`bc.number`)
-rep4 <- bc_df_rep[bc_df_rep$`bc.number` == 4,] %>% select(-`bc.number`)
-rep5 <- bc_df_rep[bc_df_rep$`bc.number` == 5,] %>% select(-`bc.number`)
-rep6 <- bc_df_rep[bc_df_rep$`bc.number` == 6,] %>% select(-`bc.number`)
-rep7 <- bc_df_rep[bc_df_rep$`bc.number` == 7,] %>% select(-`bc.number`)
-rep8 <- bc_df_rep[bc_df_rep$`bc.number` == 8,] %>% select(-`bc.number`)
-
-setnames(rep1, "activity", "bc1")
-setnames(rep2, "activity", "bc2")
-setnames(rep3, "activity", "bc3")
-setnames(rep4, "activity", "bc4")
-setnames(rep5, "activity", "bc5")
-setnames(rep6, "activity", "bc6")
-setnames(rep7, "activity", "bc7")
-setnames(rep8, "activity", "bc8")
-
-bc_df_rep <- Reduce(function(x, y) merge(x, y, all=TRUE), list(rep1, rep2, rep3,
-                                                            rep4, rep5, rep6, rep7, rep8))
-
-
-# Correlation matrix plot
-n <- sample(1:nrow(bc_df_rep), 5000)
-boundaries <- seq(from = 0.7, by = 0.05, length.out = 4)
-plt <- ggpairs(bc_df_rep %>% select(bc1, bc2, bc3, bc4, bc5, bc6, bc7, bc8),
-               upper = list(continuous = corColor),
-               lower = list(continuous = function(data, mapping, ...) {
-                   ggally_points(data = data[n, ], mapping = mapping, alpha = 0.1, size = 0.5) +
-                   geom_abline(slope = 1, lty = "dashed", col = "red") +
-                   theme_bw()}),
-               diag = list(continuous = function(data, mapping, ...) {
-                   ggally_densityDiag(data = data, mapping = mapping, alpha = 0.3, fill = "red") +
-                   theme_bw()})) +
-  ggtitle("Correlation Between Technial Replicates") +
-  theme(text = element_text(size = 20))+
-  xlab("Reporter activity") +
-  ylab("Reporter activity") + 
-  theme_light()
-
-print(plt)
-```
-
-
-
-## Calculate mean ratio
+## Calculate mean activity - filter out outlier barcodes 
 ```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # First identify and remove outlier barcodes - this removes the noise created by faulty barcode clustering etc. 
 ## Calculate mean and SD for each reporter
+bc_df_cDNA <- bc_df[-grep("pDNA", bc_df$condition),]
+bc_df_cDNA$reporter_id <- paste(bc_df_cDNA$TF, bc_df_cDNA$spacing, 
+                                bc_df_cDNA$distance, bc_df_cDNA$promoter,
+                                bc_df_cDNA$background, sep = "_")
 bc_df_cDNA$mean_activity <- ave(bc_df_cDNA$activity, bc_df_cDNA$reporter_id, 
                                 bc_df_cDNA$condition, FUN =
                                   function(x) mean(x))
@@ -990,8 +1166,43 @@ bc_df_cDNA$lower_activity <- bc_df_cDNA$mean_activity - (2 * bc_df_cDNA$sd_activ
 bc_df_cDNA$low_outlier <- bc_df_cDNA$activity - bc_df_cDNA$lower_activity
 bc_df_cDNA$high_outlier <- bc_df_cDNA$upper_activity - bc_df_cDNA$activity
 
+## Choose arbitrary cutoff to get rid of most extreme outliers
 bc_df_cDNA_filt <- bc_df_cDNA[bc_df_cDNA$low_outlier > -0.5 & bc_df_cDNA$high_outlier > -2,]
+
+## Recalculate mean and sd
+bc_df_cDNA_filt$mean_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id, 
+                                bc_df_cDNA_filt$condition, FUN =
+                                  function(x) mean(x))
+bc_df_cDNA_filt$sd_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id, 
+                              bc_df_cDNA_filt$condition,  FUN =
+                                  function(x) sd(x))
 ```
+
+
+
+
+## Annotate controls
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# Annotate the mutated motif of each TF
+bc_df_cDNA_filt$neg_ctrls <- "No"
+bc_df_cDNA_filt$neg_ctrls[grep("neg", bc_df_cDNA_filt$TF)] <- "Yes"
+
+# Annotate hPGK postive control
+bc_df_cDNA_filt$hPGK <- "No"
+bc_df_cDNA_filt$hPGK[grep("hPGK", bc_df_cDNA_filt$TF)] <- "Yes"
+
+# Annotate enhancer controls
+bc_df_cDNA_filt$native_enhancer <- "No"
+bc_df_cDNA_filt$native_enhancer[grep("klf2", bc_df_cDNA_filt$TF)] <- "Yes"
+
+# Annotate random promoter control
+bc_df_cDNA_filt$rand_promoter <- "No"
+bc_df_cDNA_filt$rand_promoter[grep("Random", bc_df_cDNA_filt$promoter)] <- "Yes"
+
+bc_df_cDNA_filt <- bc_df_cDNA_filt[!is.na(bc_df_cDNA_filt$condition),] 
+```
+
+
 
 
 ## Recalculate correlations
@@ -1019,11 +1230,13 @@ setnames(rep7, "activity", "bc7")
 setnames(rep8, "activity", "bc8")
 
 bc_df_rep <- merge(rep1, rep2, all = T)
+bc_df_rep <- bc_df_rep[rowSums(is.na(bc_df_rep)) != ncol(bc_df_rep), ]
 bc_df_rep <- merge(bc_df_rep, rep3, all = T)
 bc_df_rep <- merge(bc_df_rep, rep4, all = T)
 bc_df_rep <- bc_df_rep[rowSums(is.na(bc_df_rep)) != ncol(bc_df_rep), ]
 bc_df_rep <- merge(bc_df_rep, rep5, all = T)
 bc_df_rep <- merge(bc_df_rep, rep6, all = T)
+bc_df_rep <- bc_df_rep[rowSums(is.na(bc_df_rep)) != ncol(bc_df_rep), ]
 bc_df_rep <- merge(bc_df_rep, rep7, all = T)
 bc_df_rep <- merge(bc_df_rep, rep8, all = T)
 bc_df_rep <- bc_df_rep[rowSums(is.na(bc_df_rep)) != ncol(bc_df_rep), ]
@@ -1031,7 +1244,7 @@ bc_df_rep <- bc_df_rep[rowSums(is.na(bc_df_rep)) != ncol(bc_df_rep), ]
 
 # Correlation matrix plot
 n <- sample(1:nrow(bc_df_rep), 5000)
-boundaries <- seq(from = 0.7, by = 0.05, length.out = 4)
+boundaries <- seq(from = 0.8, by = 0.05, length.out = 4)
 plt <- ggpairs(bc_df_rep %>% select(bc1, bc2, bc3, bc4, bc5, bc6, bc7, bc8),
                upper = list(continuous = corColor),
                lower = list(continuous = function(data, mapping, ...) {
@@ -1042,7 +1255,7 @@ plt <- ggpairs(bc_df_rep %>% select(bc1, bc2, bc3, bc4, bc5, bc6, bc7, bc8),
                    ggally_densityDiag(data = data, mapping = mapping, alpha = 0.3, fill = "red") +
                    theme_bw()})) +
   ggtitle("Correlation Between Technial Replicates") +
-  theme(text = element_text(size = 20))+
+  theme(text = element_text(size = 20)) +
   xlab("Reporter activity") +
   ylab("Reporter activity") + 
   theme_light()
@@ -1076,21 +1289,21 @@ sp1 <- ggscatter(bc_df_rep, x = "rep1", y = "rep2",
    add = "reg.line",
    add.params = list(color = "blue", fill = "lightgray"), title = "rep1 vs rep2",
    conf.int = TRUE, ylab = "rep2", xlab = "rep1") + 
-  stat_cor(method = "pearson", label.x = 3, label.y = 25) + 
+  stat_cor(method = "pearson", label.x = 1, label.y = 25) + 
   geom_abline(linetype = "dashed")
 
 sp2 <- ggscatter(bc_df_rep, x = "rep1", y = "rep3",
    add = "reg.line",
    add.params = list(color = "blue", fill = "lightgray"), title = "rep1 vs rep3",
    conf.int = TRUE, ylab = "rep3", xlab = "rep1") + 
-  stat_cor(method = "pearson", label.x = 3, label.y = 25) + 
+  stat_cor(method = "pearson", label.x = 1, label.y = 25) + 
   geom_abline(linetype = "dashed")
 
 sp3 <- ggscatter(bc_df_rep, x = "rep3", y = "rep2",
    add = "reg.line",
    add.params = list(color = "blue", fill = "lightgray"), title = "rep3 vs rep2",
    conf.int = TRUE, ylab = "rep2", xlab = "rep3") + 
-  stat_cor(method = "pearson", label.x = 3, label.y = 25) + 
+  stat_cor(method = "pearson", label.x = 1, label.y = 25) + 
   geom_abline(linetype = "dashed")
 
 
