@@ -48,6 +48,8 @@ library(pheatmap)
 library(ggpubr)
 library(ggbeeswarm)
 library(ggforce)
+library(viridis)
+library(plyr)
 ```
 
 ### Custom functions
@@ -61,47 +63,6 @@ SetFileName <- function(filename, initials) {
   filename
 }
 
-# From Fede:
-# ggpairs custom functions
-corColor <- function(data, mapping, color = I("black"), sizeRange = c(1, 3), ...) {
-
-  x   <- eval_data_col(data, mapping$x)
-  y   <- eval_data_col(data, mapping$y)
-  r   <- cor(x, y)
-  rt  <- format(r, digits = 3)
-  tt  <- as.character(rt)
-  cex <- max(sizeRange)
-
-  # helper function to calculate a useable size
-  percent_of_range <- function(percent, range) {
-    percent * diff(range) + min(range, na.rm = TRUE)
-  }
-
-  # plot correlation coefficient
-  p <- ggally_text(label = tt, mapping = aes(), xP = 0.5, yP = 0.5,
-                   size = I(percent_of_range(cex * abs(r), sizeRange)), color = color, ...) +
-    theme(panel.grid.minor=element_blank(),
-          panel.grid.major=element_blank())
-
-  corColors <- RColorBrewer::brewer.pal(n = 7, name = "RdYlBu")[2:6]
-
-  if (r <= boundaries[1]) {
-    corCol <- corColors[1]
-  } else if (r <= boundaries[3]) {
-    corCol <- corColors[2]
-  } else if (r < boundaries[3]) {
-    corCol <- corColors[3]
-  } else if (r < boundaries[4]) {
-    corCol <- corColors[4]
-  } else {
-    corCol <- corColors[5]
-  }
-
-  p <- p +
-    theme(panel.background = element_rect(fill = corCol))
-
-  return(p)
-}
 
 cbind.fill <- function(...){
     nm <- list(...) 
@@ -116,7 +77,7 @@ cbind.fill <- function(...){
 ## Data import
 ```{r}
 # Import processed bc counts from the preprocessing step
-cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/results/mt20200512_reporter_activity_filt.csv", header = T)
+cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/results/mt20200525_reporter_activity_filt.csv", header = T)
 cDNA_df$background <- as.character(cDNA_df$background)
 cDNA_df <- na.omit(cDNA_df)
 ```
@@ -129,83 +90,91 @@ cDNA_df <- na.omit(cDNA_df)
 colors <- c("#1B998B", "#2D3047", "#FF9B71")
 
 ## reporter activity distribution for each experiment individually
-ggplot(data = cDNA_df, aes(x = activity)) + 
-  geom_density(fill = "#3D9F83") + xlab("normalized reporter activity: cDNA/pDNA") + 
+ggplot(data = cDNA_df, aes(x = log_activity)) + 
+  geom_density(fill = "#3D9F83") + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution") +
-  xlim(0,2) + theme_classic() + facet_wrap(vars(condition))
+  xlim(-5,5) + theme_classic() + facet_wrap(vars(condition))
+
+fill <- c("2i_neg_LIF" = "#CACDD3", 
+            "2i_pos_LIF" = "#CACDD3",
+            "LIF_pos_CH" = "#CACDD3",
+            "LIF_pos_PD" = "#CACDD3",
+            "N2B27" = "#CACDD3",
+            "NPC" = "#1B998B",
+            "vitA" = "#CACDD3"
+            )
+
+ggplot(data = cDNA_df, aes(x = log_activity, fill = condition, alpha = 0.1)) + 
+  geom_density() + xlab("log2(cDNA/pDNA)") + 
+  labs(title = "reporter activity distribution") +
+  scale_fill_manual(values = fill)+
+  xlim(0,5) + theme_classic()
 
 ## reporter activity distribution for each experiment individually
-ggplot(data = cDNA_df, aes(x = activity, color = condition)) + 
-  stat_ecdf() + xlab("normalized reporter activity: cDNA/pDNA") + 
+ggplot(data = cDNA_df, aes(x = log_activity, color = condition)) + 
+  stat_ecdf() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution") + ylab("fraction") +
-  xlim(0,5) + theme_classic()
+  xlim(-5,5) + theme_classic()
 
 
 ## reporter activity distribution - highlight negative motif controls
-ggplot(cDNA_df[cDNA_df$hPGK == "No",], aes(x = activity, fill = neg_ctrls, alpha = 0.4)) + 
-  geom_density() + xlab("normalized reporter activity: cDNA/pDNA") + 
+ggplot(cDNA_df[cDNA_df$hPGK == "No",], aes(x = log_activity, fill = neg_ctrls, alpha = 0.4)) + 
+  geom_density() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - negative ctrls") +
   scale_fill_manual(values = colors) +
-  xlim(0,5) + theme_classic()
+  xlim(-5,5) + theme_classic()
 
 
 ## reporter activity distribution - highlight positive hPGK control
-ggplot(cDNA_df, aes(x = activity, fill = hPGK, alpha = 0.4)) + 
-  geom_density() + xlab("normalized reporter activity: cDNA/pDNA") + 
+ggplot(cDNA_df, aes(x = log_activity, fill = hPGK, alpha = 0.4)) + 
+  geom_density() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - hPGK") +
   scale_fill_manual(values = colors) +
-  xlim(0,5) + theme_classic()
+  xlim(-5,5) + theme_classic()
 
 ## reporter activity distribution - highlight Miguels enhancer control
-ggplot(cDNA_df, aes(x = activity, fill = native_enhancer, alpha = 0.4)) + 
-  geom_density() + xlab("normalized reporter activity: cDNA/pDNA") + 
+ggplot(cDNA_df, aes(x = log_activity, fill = native_enhancer, alpha = 0.4)) + 
+  geom_density() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - native enhancers") +
   scale_fill_manual(values = colors) +
   xlim(0,5) + theme_classic()+ facet_wrap(vars(condition))
 
-## reporter activity distribution - highlight Miguels enhancer control
-ggplot(cDNA_df, aes(x = activity, fill = native_enhancer, alpha = 0.4)) + 
-  geom_density() + xlab("normalized reporter activity: cDNA/pDNA") + 
-  labs(title = "reporter activity distribution - native enhancers") +
-  scale_fill_manual(values = colors) +
-  xlim(10,20) + theme_classic()+ facet_wrap(vars(condition))
-
 
 ## reporter activity distribution - highlight different promoters
-ggplot(cDNA_df, aes(x = activity, fill = promoter, alpha = 0.4)) + 
-  geom_density() + xlab("normalized reporter activity: cDNA/pDNA") + 
+ggplot(cDNA_df, aes(x = log_activity, fill = promoter, alpha = 0.4)) + 
+  geom_density() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - promoters") +
   scale_fill_brewer("Dark2") +
-  xlim(0,5) + theme_classic()
+  xlim(-5,5) + theme_classic()
 
 ## reporter activity distribution - highlight random promoters
-ggplot(cDNA_df, aes(x = activity, fill = rand_promoter, alpha = 0.4)) + 
-  geom_density() + xlab("normalized reporter activity: cDNA/pDNA") + 
+ggplot(cDNA_df, aes(x = log_activity, fill = rand_promoter, alpha = 0.4)) + 
+  geom_density() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - random promoter") +
   scale_fill_manual(values = colors) +
-  xlim(0,5) + theme_classic()
+  xlim(-5,5) + theme_classic()
 
 ## reporter activity distribution - highlight different distances
 ggplot(cDNA_df[cDNA_df$distance != "",], 
-       aes(x = activity, fill = distance, alpha = 0.4)) + 
-  geom_density() + xlab("normalized reporter activity: cDNA/pDNA") + 
+       aes(x = log_activity, fill = distance, alpha = 0.4)) + 
+  geom_density() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - distances") +
   scale_fill_manual(values = colors) +
-  xlim(0,5) + theme_classic()
+  xlim(-5,5) + theme_classic()
 
 ## reporter activity distribution - highlight different spacings
-ggplot(cDNA_df[cDNA_df$spacing != "",], aes(x = activity, fill = spacing, alpha = 0.4)) + 
-  geom_density() + xlab("normalized reporter activity: cDNA/pDNA") + 
+ggplot(cDNA_df[cDNA_df$spacing != "",], aes(x = log_activity, fill = spacing, alpha = 0.4)) + 
+  geom_density() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - spacings") +
   scale_fill_manual(values = colors) +
-  xlim(0,5) + theme_classic()
+  xlim(-5,5) + theme_classic()
 
 ## reporter activity distribution - highlight different backgrounds
-ggplot(cDNA_df[cDNA_df$background != "0",], aes(x = activity, fill = background, alpha = 0.4)) + 
-  geom_density() + xlab("normalized reporter activity: cDNA/pDNA") + 
+ggplot(cDNA_df[cDNA_df$background != "0",], aes(x = log_activity, fill = background, alpha = 0.4)) + 
+  geom_density() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - backgrounds") +
   scale_fill_manual(values = colors) +
-  xlim(0,5) + theme_classic()
+  xlim(-5,5) + theme_classic()
 
 ## normalized bc-counts for each TF - comparing to original pDNA counts
 ggplot(cDNA_df[cDNA_df$native_enhancer == "No" &
@@ -215,7 +184,7 @@ ggplot(cDNA_df[cDNA_df$native_enhancer == "No" &
   geom_density(aes(x = bc_counts_rpm, fill = "#1B998B", alpha = 0.4)) + 
   geom_density(aes(x = pDNA_counts_rpm, fill = "#2D3047", alpha = 0.4)) + 
   xlab("bc-counts per million") + 
-  labs(title = "bc-count distribution cDNA vs. pDNA") +
+  labs(title = "bc-count distribution cDNA (green) vs. pDNA (blue)") +
   scale_fill_manual(values = colors) +
   xlim(0,200) + theme_classic() +
   facet_wrap(~TF)
@@ -239,13 +208,13 @@ sp <- ggscatter(cDNA_df[cDNA_df$native_enhancer == "No" &
                     cDNA_df$neg_ctrls  == "No" &
                     cDNA_df$hPGK == "No" &
                     cDNA_df$rand_promoter == "No",],
-          size = 0.1, color = "#2D3047", alpha = 0.1,
-          y = "activity", x = "pDNA_counts_rpm",
-          title = "reporter pDNA counts vs reporter activity",
-          ylab = "reporter activity",
+          size = 0.1, color = "condition", alpha = 0.1,
+          y = "log_activity", x = "pDNA_counts_rpm",
+          title = "reporter pDNA counts vs log2 reporter activity",
+          ylab = "log2 reporter activity",
           xlab = "pDNA counts per million",
           facet.by = "TF")
-sp + xlim(0,200) + ylim(0,20)
+sp + xlim(0,200) + ylim(-5,5) + scale_color_manual(values = fill)
 
 ## let's zoom into a model TF with high noise at low pDNA: Gbx2
 sp <- ggscatter(cDNA_df[cDNA_df$TF == "Gbx2" &
@@ -253,13 +222,12 @@ sp <- ggscatter(cDNA_df[cDNA_df$TF == "Gbx2" &
                     cDNA_df$hPGK == "No" &
                     cDNA_df$rand_promoter == "No",],
           size = 0.1, color = "#2D3047",
-          y = "activity", x = "pDNA_counts_rpm",
-          title = "Gbx2: reporter pDNA counts vs reporter activity",
-          ylab = "reporter activity",
+          y = "log_activity", x = "pDNA_counts_rpm",
+          title = "Gbx2: reporter pDNA counts vs log2 reporter activity",
+          ylab = "log2 reporter activity",
           xlab = "pDNA counts per million",
           facet.by = "condition")
-sp + xlim(0,200) + ylim(0,20)
-## Conclusion: This really seems to be noise - Do I need to take care of this?
+sp + xlim(0,200) + ylim(-5,5)
 
 ## let's zoom Stat3 because it's nice
 sp <- ggscatter(cDNA_df[cDNA_df$TF == "Stat3" &
@@ -267,12 +235,12 @@ sp <- ggscatter(cDNA_df[cDNA_df$TF == "Stat3" &
                     cDNA_df$hPGK == "No" &
                     cDNA_df$rand_promoter == "No",],
           size = 0.1, color = "#2D3047",
-          y = "activity", x = "pDNA_counts_rpm",
-          title = "Gbx2: reporter pDNA counts vs reporter activity",
-          ylab = "reporter activity",
+          y = "log_activity", x = "pDNA_counts_rpm",
+          title = "Stat3: reporter pDNA counts vs log2 reporter activity",
+          ylab = "log2 reporter activity",
           xlab = "pDNA counts per million",
           facet.by = "condition")
-sp + xlim(0,200) + ylim(0,20)
+sp + xlim(0,200) + ylim(-5,5)
 ```
 
 
@@ -282,7 +250,7 @@ sp + xlim(0,200) + ylim(0,20)
 ```{r tf_activity_heatmap, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 ## Prepare dataframe
 # Caculate mean TF activity per condition
-cDNA_df$tf_activity <- ave(cDNA_df$reporter_activity, cDNA_df$condition, cDNA_df$TF, FUN = function(x) mean(x))
+cDNA_df$tf_activity <- ave(cDNA_df$log_reporter_activity, cDNA_df$condition, cDNA_df$TF, FUN = function(x) mean(x))
 
 tf_activity_heatmap <- cDNA_df[cDNA_df$neg_ctrls == "No" & cDNA_df$hPGK == "No" &
                                cDNA_df$native_enhancer == "No" & cDNA_df$rand_promoter == "No",] %>% 
@@ -291,7 +259,7 @@ tf_activity_heatmap <- dcast(tf_activity_heatmap, TF ~ condition, value.var="tf_
 tf_activity_heatmap <- tf_activity_heatmap %>% 
   remove_rownames %>% column_to_rownames(var="TF")
 # Keeping the scale in the pheatmap function
-myBreaks1 <- seq(0,5,0.05)
+myBreaks1 <- seq(-2,2,0.04)
 
 # pheatmap function
 pheatmap(as.matrix(tf_activity_heatmap),
@@ -299,6 +267,7 @@ pheatmap(as.matrix(tf_activity_heatmap),
          breaks = myBreaks1, border_color = "#565656", 
          cellwidth = 30, cellheight = 10)
 ```
+
 
 
 
@@ -814,167 +783,6 @@ for(i in 1:4){
 
 
 
-## Log-linear expression modelling to explain variance - all data
-```{r log-linear-model, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
-# Fit model using lm to predict expression from the independent contribution of design parameters
-## Parameters: Spacing, distance, background, promoter, WT vs. mutated
-
-### Start with all TFs at the same time
-cDNA_df_TF <- cDNA_df[cDNA_df$native_enhancer == "No" &
-                        cDNA_df$hPGK == "No" & 
-                        cDNA_df$rand_promoter == "No",] %>% 
-  mutate(log_reporter_activity = ave(log_reporter_activity, reporter, condition, FUN = function(x) mean(x))) %>%
-  select(log_reporter_activity, TF, condition, promoter, spacing, distance, background) %>%
-  unique()
-
-### Calculate expression variance
-exp_variance <- lm(log_reporter_activity ~ TF + condition + promoter + spacing + distance + background , cDNA_df_TF)
-cDNA_df_TF$activity_predicted <- exp_variance$fitted.values
-
-exp_variance <- anova(exp_variance) %>% rownames_to_column("feature") %>%
-  setnames("Sum Sq", "sum_sq") %>%
-  select(feature, sum_sq) %>%
-  mutate(sum = sum(sum_sq)) %>%
-  mutate(rel_sum_sq = (sum_sq/sum)*100)
-
-ggplot(exp_variance, 
-       aes(x = reorder(feature, -rel_sum_sq), y = rel_sum_sq)) +
-  geom_bar(stat = "identity") + 
-  ylab("Variance explained (%)") + xlab("") + 
-  labs(title = "Linear variance modelling", 
-       subtitle = "Expression variance predicted by features") +
-  theme_bw() +
-  theme(text = element_text(size = 12)) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
-        axis.text.y = element_text(size = 10)) 
-
-sp <- ggscatter(cDNA_df_TF, x = "log_reporter_activity", y = "activity_predicted",
-   add = "reg.line", 
-   add.params = list(color = "blue", fill = "lightgray"),
-   conf.int = TRUE, ylab = "Predicted log2-activity", xlab = "Average log2-activity",
-   title = "Correlation between predicted and actual reporter activities")
-sp + stat_cor(method = "pearson", label.x = 1.5, label.y = -2.4) + geom_abline(linetype = "dashed")
-```
-
-
-
-
-
-## Log-linear expression modelling to explain variance - model for each TF
-```{r log-linear-model-2, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
-# For each TF separately
-cDNA_df_TF <- cDNA_df[cDNA_df$native_enhancer == "No" &
-                        cDNA_df$hPGK == "No" & 
-                        cDNA_df$rand_promoter == "No",] %>% 
-  mutate(log_reporter_activity = ave(log_reporter_activity, reporter, condition, FUN = function(x) mean(x))) %>%
-  select(log_reporter_activity, TF, neg_ctrls, condition, promoter, spacing, distance, background) %>%
-  unique() %>%
-  mutate(TF = gsub("_neg$", "", TF)) %>%
-  setnames("neg_ctrls", "mutated")
-cDNA_df_TF <- cDNA_df_TF[-grep("Random", cDNA_df_TF$TF),]
-
-
-# Calculate feature importance of expression variance, predicted activity, and weights of the model
-## Prepare dfs
-exp_variance <- data.frame(c("mutated", "condition", "promoter", 
-                             "spacing", "distance", "background", "Residuals"))
-prediction <- data.frame(1:504)
-weight <- data.frame(c("(Intercept)", "mutatedYes", "condition2i_pos_LIF", 
-                  "conditionLIF_pos_CH", "conditionLIF_pos_PD", "conditionN2B27", 
-                  "conditionNPC", "conditionvitA", "promotermCMV", "promoterminP", 
-                  "spacing5bp", "distance21bp", "background2", "background3"))
-names(prediction) <- "id"
-names(exp_variance) <- "feature"
-names(weight) <- "feature"
-
-cDNA_df_TF$row <- rownames(cDNA_df_TF)
-
-## Calculate log-linear model parameters using lm 
-for (i in unique(cDNA_df_TF$TF)) {
-  x <- lm(log_reporter_activity ~ mutated + condition + 
-                       promoter + spacing + distance + background, 
-                     cDNA_df_TF[cDNA_df_TF$TF == i,])
-  y <- data.frame(x$fitted.values) %>% rownames_to_column()
-  names(y) <- c("row", i)
-  y$id <- 1:nrow(y)
-  prediction <- merge(prediction,y, all = T)
-  
-  w <- data.frame(x$coefficients) %>% rownames_to_column()
-  names(w) <- c("feature", i)
-  weight <- merge(weight,w, all = T)
-  
-  x <- anova(x) %>% rownames_to_column("feature") %>%
-    setnames("Sum Sq", "sum_sq") %>%
-    select(feature, sum_sq) %>%
-    mutate(sum = sum(sum_sq)) %>%
-    mutate(rel_sum_sq = (sum_sq/sum)*100) %>%
-    setnames("rel_sum_sq", i)
-  x <- x[,c(1,4)]
-  
-  exp_variance <- merge(exp_variance, x)
-}
-
-
-## Fine-tune dfs
-exp_variance <- melt(exp_variance, variable.name = "TF")
-exp_variance$group <- "no residual"
-exp_variance$group[grep("Residual", exp_variance$feature)] <- "residual"
-prediction <- prediction %>% select(-id) %>% melt(variable.name = "TF") %>% na.omit() %>%
-  select(-TF) %>% setnames("value", "activity_predicted")
-cDNA_df_TF <- merge(cDNA_df_TF, prediction)
-weight <- weight %>% filter(feature != "(Intercept)")
-weight <- melt(weight, variable.name = "TF")
-categorie <- c("mutated", "condition", "promoter", 
-               "spacing", "distance", "background")
-weight$features <- gsub(paste(categorie, collapse="|"), "",weight$feature)
-feature <- weight$features
-weight$condition <- gsub(paste(feature, collapse="|"), "", weight$feature)
-weight <- weight %>% select(-feature)
-
-## Plot expression variance feature importance
-ggplot(exp_variance, 
-       aes(x = reorder(feature, -value), y = value, fill = group)) +
-  scale_fill_manual(values = c("#1B998B", "#2D3047")) +
-  geom_bar(stat = "identity") + 
-  ylab("Variance explained (%)") + xlab("") + 
-  labs(title = "Linear variance modelling", 
-       subtitle = "Expression variance predicted by features") +
-  theme_bw() +
-  theme(text = element_text(size = 12)) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 10), 
-        axis.text.y = element_text(size = 10)) +
-  facet_wrap(~TF)
-
-## Plot correlation of predicted activity and measured activity
-sp <- ggscatter(cDNA_df_TF, x = "log_reporter_activity", y = "activity_predicted",
-   add = "reg.line", 
-   add.params = list(color = "blue", fill = "lightgray"),
-   conf.int = TRUE, ylab = "Predicted log2-activity", xlab = "Average log2-activity",
-   title = "Correlation between predicted and actual reporter activities") +
-  facet_wrap(~TF) + theme_bw()
-sp + stat_cor(method = "pearson", label.x = -3, label.y = 3.7) + geom_abline(linetype = "dashed")
-
-## Plot weights of parameters in model - this helps to understand the model 
-ggplot(weight, 
-       aes(x = reorder(feature, -value), y = value, fill = condition)) +
-  scale_fill_manual(values = c("#1B998B", "#2D3047", "#FF9B71", "#ECDD7B", "#C2B2B4", "#A54657")) +
-  geom_bar(stat = "identity") + 
-  ylab("Variance explained (%)") + xlab("") + 
-  labs(title = "Linear variance modelling", 
-       subtitle = "Expression variance predicted by features") +
-  theme_bw() +
-  theme(text = element_text(size = 12)) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 10), 
-        axis.text.y = element_text(size = 10)) +
-  facet_wrap(~TF)
-```
-
-
-
-
-
-
-
 
 
 
@@ -983,9 +791,8 @@ ggplot(weight,
 ### For each TF separately - only the non-mutated 
 cDNA_df_TF <- cDNA_df[cDNA_df$native_enhancer == "No" &
                         cDNA_df$hPGK == "No" & 
-                        cDNA_df$rand_promoter == "No" &
                         cDNA_df$neg_ctrls == "No",] %>% 
-  mutate(log_reporter_activity = ave(log_reporter_activity, reporter, condition, FUN = function(x) mean(x))) %>%
+  mutate(log_reporter_activity = ave(log_reporter_activity, reporter_id, condition, FUN = function(x) mean(x))) %>%
   select(log_reporter_activity, TF, condition, promoter, spacing, distance, background) %>%
   unique()
 
@@ -998,17 +805,22 @@ names(exp_variance) <- "feature"
 weight <- data.frame(c("(Intercept)", "condition2i_pos_LIF", 
                   "conditionLIF_pos_CH", "conditionLIF_pos_PD", "conditionN2B27", 
                   "conditionNPC", "conditionvitA", "promotermCMV", "promoterminP", 
-                  "spacing5bp", "distance21bp", "background2", "background3"))
+                  "promoterRandom",
+                  "spacing10bp", "distance21bp", "background2", "background3"))
 names(weight) <- "feature"
 
 
 cDNA_df_TF$row <- rownames(cDNA_df_TF)
+
+
 
 for (i in unique(cDNA_df_TF$TF)) {
   x <- lm(log_reporter_activity ~ condition + 
                        promoter + spacing + distance + background, 
                      cDNA_df_TF[cDNA_df_TF$TF == i,])
   y <- data.frame(x$fitted.values) %>% rownames_to_column()
+  par(mfrow=c(2,2))
+  plot(x, main = i)
   names(y) <- c("row", i)
   y$id <- 1:nrow(y)
   prediction <- merge(prediction,y, all = T)
@@ -1073,7 +885,255 @@ sp + stat_cor(method = "pearson", label.x = -3, label.y = 3.7) + geom_abline(lin
 ## Plot weights of parameters in model - this helps to understand the model 
 level_order <- c("2i_pos_LIF", "LIF_pos_CH", 
                  "LIF_pos_PD", "vitA", "N2B27", 
-                 "NPC", "mCMV", "minP", 
+                 "NPC", "mCMV", "minP", "Random",
+                 "2", "3", "10bp", "21bp")
+
+
+ggplot(weight, 
+       aes(x = factor(feature, level = level_order), y = value, fill = condition)) +
+  scale_fill_manual(values = c("#1B998B", "#2D3047", "#FF9B71", "#ECDD7B", "#C2B2B4", "#A54657")) +
+  geom_bar(stat = "identity") + 
+  ylab("Variance explained (%)") + xlab("") + 
+  labs(title = "Linear variance modelling", 
+       subtitle = "Expression variance predicted by features") +
+  theme_bw() +
+  theme(text = element_text(size = 12)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 10), 
+        axis.text.y = element_text(size = 10)) +
+  facet_wrap(~TF)
+
+
+
+## Final overview - model fit for each TF
+# Feature importance overview for each TF in a single plot (bar-chart including mean activities per feature)
+
+# Model parameters
+exp_variance$value[exp_variance$feature == "Residuals"] <- 100 - exp_variance$value[exp_variance$feature == "Residuals"]
+exp_variance$feature <- revalue(exp_variance$feature, c("Residuals"="total variance explained"))
+
+# Include expression data
+cDNA_df_sel <- cDNA_df[cDNA_df$native_enhancer == "No" &
+                        cDNA_df$hPGK == "No" & 
+                        cDNA_df$neg_ctrls == "No",] %>% 
+  select(TF, condition, promoter, spacing, 
+                                  distance, background, reporter_activity) %>% unique()
+activity_condition <- cDNA_df_sel %>% 
+  mutate(activity = ave(reporter_activity, TF, condition, FUN = function(x) mean(x))) %>%
+  select(TF, condition, activity) %>%
+  setnames("condition", "condition") %>%
+  unique() %>% 
+  mutate(sum = ave(activity, TF, FUN = function(x) sum(x)),
+         activity = activity / sum,
+         group = "condition") %>% 
+  select(-sum)
+activity_promoter <- cDNA_df_sel %>% 
+  mutate(activity = ave(reporter_activity, TF, promoter, FUN = function(x) mean(x))) %>%
+  select(TF, promoter, activity) %>%
+  setnames("promoter", "condition") %>%
+  unique() %>% 
+  mutate(sum = ave(activity, TF, FUN = function(x) sum(x)),
+         activity = activity / sum,
+         group = "promoter")%>% 
+  select(-sum)
+activity_spacing <- cDNA_df_sel %>% 
+  mutate(activity = ave(reporter_activity, TF, spacing, FUN = function(x) mean(x))) %>%
+  select(TF, spacing, activity) %>%
+  setnames("spacing", "condition") %>%
+  unique() %>% 
+  mutate(sum = ave(activity, TF, FUN = function(x) sum(x)),
+         activity = activity / sum,
+         group = "spacing")%>% 
+  select(-sum)
+activity_distance <- cDNA_df_sel %>% 
+  mutate(activity = ave(reporter_activity, TF, distance, FUN = function(x) mean(x))) %>%
+  select(TF, distance, activity) %>%
+  setnames("distance", "condition") %>%
+  unique() %>% 
+  mutate(sum = ave(activity, TF, FUN = function(x) sum(x)),
+         activity = activity / sum,
+         group = "distance")%>% 
+  select(-sum)
+activity_background <- cDNA_df_sel %>% 
+  mutate(activity = ave(reporter_activity, TF, background, FUN = function(x) mean(x))) %>%
+  select(TF, background, activity) %>%
+  setnames("background", "condition") %>%
+  unique() %>% 
+  mutate(sum = ave(activity, TF, FUN = function(x) sum(x)),
+         activity = activity / sum,
+         group = "background")%>% 
+  select(-sum)
+
+
+exp_variance <- exp_variance %>% 
+  select(-group) %>%
+  dcast(TF ~ feature, value.var = "value") %>%
+  setnames(c("background", "condition", "distance", "promoter", "spacing"), c("background_total", "condition_total", "distance_total", "promoter_total", "spacing_total"))
+
+activity_condition <- merge(activity_condition, exp_variance %>% select(TF, condition_total))
+activity_condition$activity <- activity_condition$activity * activity_condition$condition_total
+activity_condition <- activity_condition %>% select(-condition_total)
+
+activity_promoter <- merge(activity_promoter, exp_variance %>% select(TF, promoter_total))
+activity_promoter$activity <- activity_promoter$activity * activity_promoter$promoter_total
+activity_promoter <- activity_promoter %>% select(-promoter_total)
+
+activity_spacing <- merge(activity_spacing, exp_variance %>% select(TF, spacing_total))
+activity_spacing$activity <- activity_spacing$activity * activity_spacing$spacing_total
+activity_spacing <- activity_spacing %>% select(-spacing_total)
+
+
+activity_distance <- merge(activity_distance, exp_variance %>% select(TF, distance_total))
+activity_distance$activity <- activity_distance$activity * activity_distance$distance_total
+activity_distance <- activity_distance %>% select(-distance_total)
+
+activity_background <- merge(activity_background, exp_variance %>% select(TF, background_total))
+activity_background$activity <- activity_background$activity * activity_background$background_total
+activity_background <- activity_background %>% select(-background_total)
+
+total_variance <- exp_variance %>% select(TF, `total variance explained`) %>%
+  mutate(condition = "all",
+         group = "total") %>%
+  setnames("total variance explained", "activity")
+
+
+x <- rbind(activity_condition,
+           activity_promoter, activity_spacing,
+           activity_distance, activity_background, total_variance)
+
+
+colors <- c("2i_neg_LIF" = "#2D3047", 
+            "2i_pos_LIF" = "#56596C",
+            "LIF_pos_CH" = "#808291",
+            "LIF_pos_PD" = "#A9ABB5",
+            "N2B27" = "#BABCC4",
+            "NPC" = "#CACDD3",
+            "vitA" = "#DBDDE1",
+            
+            "hBGm" = "#2D3047",
+            "mCMV" = "#56596C",
+            "minP" = "#808291",
+            "Random" = "#A9ABB5",
+            
+            "10bp" = "#2D3047",
+            "5bp" = "#56596C",
+            
+            "21bp" = "#56596C",
+            
+            "2" = "#2D3047",
+            "1" = "#56596C",
+            "3" = "#808291",
+            
+            "all" = "#1B998B"
+            )
+
+ggplot(x, aes(fill=condition, y=activity, x=reorder(group, activity))) +
+  geom_bar(position="stack", stat="identity") +
+  coord_flip() +
+  scale_fill_manual(values = colors) +
+  #scale_fill_viridis(discrete = T) +
+  ylab("Variance explained (%)") + xlab("") + 
+  labs(title = "Linear variance modelling", 
+       subtitle = "Expression variance predicted by features") +
+  theme_bw() +
+  theme(text = element_text(size = 12)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12), 
+        axis.text.y = element_text(size = 10)) +
+  facet_wrap(~TF)
+```
+
+
+
+
+## Log-linear expression modelling to explain variance - model for each TF - only WT - without condition
+```{r log-linear-model-4, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+### For each TF separately - only the non-mutated 
+cDNA_df_TF <- cDNA_df[cDNA_df$native_enhancer == "No" &
+                        cDNA_df$hPGK == "No" & 
+                        cDNA_df$rand_promoter == "No" &
+                        cDNA_df$neg_ctrls == "No",] %>% 
+  mutate(log_reporter_activity = ave(log_reporter_activity, reporter_id, FUN = function(x) mean(x))) %>%
+  select(log_reporter_activity, TF, promoter, spacing, distance, background) %>%
+  unique()
+
+### Calculate expression variance
+exp_variance <- data.frame(c("promoter", "spacing", "distance", "background", "Residuals"))
+prediction <- data.frame(1:504)
+names(prediction) <- "id"
+names(exp_variance) <- "feature"
+weight <- data.frame(c("(Intercept)", "promotermCMV", "promoterminP", 
+                  "spacing5bp", "distance21bp", "background2", "background3"))
+names(weight) <- "feature"
+
+
+cDNA_df_TF$row <- rownames(cDNA_df_TF)
+
+for (i in unique(cDNA_df_TF$TF)) {
+  x <- lm(log_reporter_activity ~ promoter + spacing + distance + background, 
+                     cDNA_df_TF[cDNA_df_TF$TF == i,])
+  y <- data.frame(x$fitted.values) %>% rownames_to_column()
+  names(y) <- c("row", i)
+  y$id <- 1:nrow(y)
+  prediction <- merge(prediction,y, all = T)
+  
+  w <- data.frame(x$coefficients) %>% rownames_to_column()
+  names(w) <- c("feature", i)
+  weight <- merge(weight,w, all = T)
+  
+  x <- anova(x) %>% rownames_to_column("feature") %>%
+    setnames("Sum Sq", "sum_sq") %>%
+    select(feature, sum_sq) %>%
+    mutate(sum = sum(sum_sq)) %>%
+    mutate(rel_sum_sq = (sum_sq/sum)*100) %>%
+    setnames("rel_sum_sq", i)
+  x <- x[,c(1,4)]
+  
+  exp_variance <- merge(exp_variance, x)
+}
+
+
+## Fine-tune dfs
+exp_variance <- melt(exp_variance, variable.name = "TF")
+exp_variance$group <- "no residual"
+exp_variance$group[grep("Residual", exp_variance$feature)] <- "residual"
+prediction <- prediction %>% select(-id) %>% melt(variable.name = "TF") %>% na.omit() %>%
+  select(-TF) %>% setnames("value", "activity_predicted")
+cDNA_df_TF <- merge(cDNA_df_TF, prediction)
+weight <- weight %>% filter(feature != "(Intercept)")
+weight <- melt(weight, variable.name = "TF")
+categorie <- c("mutated", "condition", "promoter", 
+               "spacing", "distance", "background")
+weight$features <- gsub(paste(categorie, collapse="|"), "",weight$feature)
+feature <- weight$features
+weight$condition <- gsub(paste(feature, collapse="|"), "", weight$feature)
+weight <- weight %>% select(-feature)
+
+
+# Model parameters
+ggplot(exp_variance, 
+       aes(x = reorder(feature, -value), y = value, fill = group)) +
+  scale_fill_manual(values = c("#1B998B", "#2D3047")) +
+  geom_bar(stat = "identity") + 
+  ylab("Variance explained (%)") + xlab("") + 
+  labs(title = "Linear variance modelling", 
+       subtitle = "Expression variance predicted by features") +
+  theme_bw() +
+  theme(text = element_text(size = 12)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12), 
+        axis.text.y = element_text(size = 10)) +
+  facet_wrap(~TF)
+
+# Model prediction accuracy
+sp <- ggscatter(cDNA_df_TF, x = "log_reporter_activity", y = "activity_predicted",
+   add = "reg.line", 
+   add.params = list(color = "blue", fill = "lightgray"),
+   conf.int = TRUE, ylab = "Predicted log2-activity", xlab = "Average log2-activity",
+   title = "Correlation between predicted and actual reporter activities") +
+  facet_wrap(~TF) + theme_bw()
+sp + stat_cor(method = "pearson", label.x = -3, label.y = 3.7) + geom_abline(linetype = "dashed")
+
+
+## Plot weights of parameters in model - this helps to understand the model 
+level_order <- c("mCMV", "minP", 
                  "2", "3", "5bp", "21bp")
 
 
@@ -1093,7 +1153,119 @@ ggplot(weight,
 
 
 ## Final overview - model fit for each TF
-# Feature importance overview for each TF in a single plot (bar/pie)
+# Feature importance overview for each TF in a single plot (bar-chart including mean activities per feature)
+
+# Model parameters
+exp_variance$value[exp_variance$feature == "Residuals"] <- 100 - exp_variance$value[exp_variance$feature == "Residuals"]
+exp_variance$feature <- revalue(exp_variance$feature, c("Residuals"="total variance explained"))
+
+# Include expression data
+cDNA_df_sel <- cDNA_df[cDNA_df$native_enhancer == "No" &
+                        cDNA_df$hPGK == "No" & 
+                        cDNA_df$neg_ctrls == "No",] %>% 
+  select(TF,  promoter, spacing, 
+                                  distance, background, reporter_activity) %>% unique()
+
+activity_promoter <- cDNA_df_sel %>% 
+  mutate(activity = ave(reporter_activity, TF, promoter, FUN = function(x) mean(x))) %>%
+  select(TF, promoter, activity) %>%
+  setnames("promoter", "condition") %>%
+  unique() %>% 
+  mutate(sum = ave(activity, TF, FUN = function(x) sum(x)),
+         activity = activity / sum,
+         group = "promoter")%>% 
+  select(-sum)
+activity_spacing <- cDNA_df_sel %>% 
+  mutate(activity = ave(reporter_activity, TF, spacing, FUN = function(x) mean(x))) %>%
+  select(TF, spacing, activity) %>%
+  setnames("spacing", "condition") %>%
+  unique() %>% 
+  mutate(sum = ave(activity, TF, FUN = function(x) sum(x)),
+         activity = activity / sum,
+         group = "spacing")%>% 
+  select(-sum)
+activity_distance <- cDNA_df_sel %>% 
+  mutate(activity = ave(reporter_activity, TF, distance, FUN = function(x) mean(x))) %>%
+  select(TF, distance, activity) %>%
+  setnames("distance", "condition") %>%
+  unique() %>% 
+  mutate(sum = ave(activity, TF, FUN = function(x) sum(x)),
+         activity = activity / sum,
+         group = "distance")%>% 
+  select(-sum)
+activity_background <- cDNA_df_sel %>% 
+  mutate(activity = ave(reporter_activity, TF, background, FUN = function(x) mean(x))) %>%
+  select(TF, background, activity) %>%
+  setnames("background", "condition") %>%
+  unique() %>% 
+  mutate(sum = ave(activity, TF, FUN = function(x) sum(x)),
+         activity = activity / sum,
+         group = "background")%>% 
+  select(-sum)
+
+
+exp_variance <- exp_variance %>% 
+  select(-group) %>%
+  dcast(TF ~ feature, value.var = "value") %>%
+  setnames(c("background", "distance", "promoter", "spacing"), c("background_total", "distance_total", "promoter_total", "spacing_total"))
+
+activity_promoter <- merge(activity_promoter, exp_variance %>% select(TF, promoter_total))
+activity_promoter$activity <- activity_promoter$activity * activity_promoter$promoter_total
+activity_promoter <- activity_promoter %>% select(-promoter_total)
+
+activity_spacing <- merge(activity_spacing, exp_variance %>% select(TF, spacing_total))
+activity_spacing$activity <- activity_spacing$activity * activity_spacing$spacing_total
+activity_spacing <- activity_spacing %>% select(-spacing_total)
+
+
+activity_distance <- merge(activity_distance, exp_variance %>% select(TF, distance_total))
+activity_distance$activity <- activity_distance$activity * activity_distance$distance_total
+activity_distance <- activity_distance %>% select(-distance_total)
+
+activity_background <- merge(activity_background, exp_variance %>% select(TF, background_total))
+activity_background$activity <- activity_background$activity * activity_background$background_total
+activity_background <- activity_background %>% select(-background_total)
+
+total_variance <- exp_variance %>% select(TF, `total variance explained`) %>%
+  mutate(condition = "all",
+         group = "total") %>%
+  setnames("total variance explained", "activity")
+
+
+x <- rbind(activity_promoter, activity_spacing,
+           activity_distance, activity_background, total_variance)
+
+
+colors <- c("hBGm" = "#2D3047",
+            "mCMV" = "#56596C",
+            "minP" = "#808291",
+            "Random" = "#A9ABB5",
+            
+            "10bp" = "#2D3047",
+            "5bp" = "#56596C",
+            
+            "21bp" = "#56596C",
+            
+            "2" = "#2D3047",
+            "1" = "#56596C",
+            "3" = "#808291",
+            
+            "all" = "#1B998B"
+            )
+
+ggplot(x, aes(fill=condition, y=activity, x=reorder(group, activity))) +
+  geom_bar(position="stack", stat="identity") +
+  coord_flip() +
+  scale_fill_manual(values = colors) +
+  #scale_fill_viridis(discrete = T) +
+  ylab("Variance explained (%)") + xlab("") + 
+  labs(title = "Linear variance modelling", 
+       subtitle = "Expression variance predicted by features") +
+  theme_bw() +
+  theme(text = element_text(size = 12)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12), 
+        axis.text.y = element_text(size = 10)) +
+  facet_wrap(~TF)
 ```
 
 
@@ -1103,13 +1275,54 @@ ggplot(weight,
 
 
 
-# Results
-```{r}
+
+## Correlation between 2i TF activity and 2i expression levels
+```{r log-linear-model-5, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+## Incorporate RNA-seq data of mESCs in 2i+LIF
+load('/DATA/usr/m.martinez.ara/GitLab/gurten/gurten/data/fc181121_epsure_tadec_rnaseq_expr_joshi.RData')
+
+# remove Serum data and calculate mean expression
+tib_fpkm_joshi$twoi <- (tib_fpkm_joshi$twoi_1 + tib_fpkm_joshi$twoi_2)/2
+tib_fpkm_joshi <- tib_fpkm_joshi %>% select(symbol, twoi) %>%
+  filter(symbol %in% c("NFE2L2", "KLF4", "NFYA", "SP1", "SMAD4", "ZFX", "IRF3", "CREB1", "ELK1", 
+                    "ZFP42", "OTX1", "GLI1", "NFKB1", "GBX2", "TFCP2L1", "TCF7", "RARA", 
+                    "STAT3", "RBPJ", "TRP53", "ESRRB", "NEUROG2", "PAX6", "NR3C1", "IRX3",
+                    "HOMEZ"))
+
+names <- data.frame(c("NFE2L2", "KLF4", "NFYA", "SP1", "SMAD4", "ZFX", "IRF3", "CREB1", "ELK1", 
+                    "ZFP42", "OTX1", "GLI1", "NFKB1", "GBX2", "TFCP2L1", "TCF7", "RARA", 
+                    "STAT3", "RBPJ", "TRP53", "ESRRB", "NEUROG2", "PAX6", "NR3C1", "IRX3",
+                    "HOMEZ"),
+           c("Nfe2l2", "Klf4", "Nfya", "Sp1", "Smad4", "Zfx", "Irf3", "Creb1", "Elk1", 
+                    "Zfp42", "Otx1", "Gli1", "Nfkb1", "Gbx2", "Tcfcp2l1", "Tcf7l2", "Rara", 
+                    "Stat3", "Rbpj", "Trp53", "Esrrb", "Neurog2", "Pax6", "Nr3c1(GR)", "Irx3",
+                    "Homez"))
+names(names) <- c("symbol", "TF")
+tib_fpkm_joshi <- merge(tib_fpkm_joshi, names) %>%
+  select(-symbol)
+cDNA_df <- merge(cDNA_df, tib_fpkm_joshi, all = T)
+
+
+### For each TF separately - only the non-mutated 
+cDNA_df_TF <- cDNA_df[cDNA_df$native_enhancer == "No" &
+                        cDNA_df$hPGK == "No" & 
+                        cDNA_df$rand_promoter == "No" &
+                        cDNA_df$neg_ctrls == "No" & cDNA_df$condition == "2i_pos_LIF",] %>% 
+  select(tf_activity, TF, twoi) %>%
+  unique() %>% na.omit()
+
+
+# Model prediction accuracy
+sp <- ggscatter(cDNA_df_TF, x = "tf_activity", y = "twoi",
+   add = "reg.line", 
+   add.params = list(color = "blue", fill = "lightgray"),
+   conf.int = TRUE, ylab = "TF expression in 2i (FPKM)", xlab = "Measured TF activity in 2i",
+   title = "Correlation between predicted and actual reporter activities") + theme_bw()
+sp + stat_cor(method = "pearson", label.x = -3, label.y = 3.7) + geom_abline(linetype = "dashed")
+
 ```
 
-# Conclusions
-```{r}
-```
+
 
 ## Exporting potential data. 
 ```{r}
