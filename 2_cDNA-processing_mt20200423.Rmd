@@ -77,9 +77,10 @@ cbind.fill <- function(...){
 ## Data import
 ```{r}
 # Import processed bc counts from the preprocessing step
-cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/results/mt20200525_reporter_activity_filt.csv", header = T)
+cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/results/mt20200527_reporter_activity_filt.csv", header = T)
 cDNA_df$background <- as.character(cDNA_df$background)
 cDNA_df <- na.omit(cDNA_df)
+cDNA_df$TF <- revalue(cDNA_df$TF, c("Tcfcp2l1" = "Tfcp2l1", "Tcfcp2l1_neg" = "Tfcp2l1_neg"))
 ```
 
 # Analysis
@@ -106,7 +107,7 @@ fill <- c("2i_neg_LIF" = "#CACDD3",
 
 ggplot(data = cDNA_df, aes(x = log_activity, fill = condition, alpha = 0.1)) + 
   geom_density() + xlab("log2(cDNA/pDNA)") + 
-  labs(title = "reporter activity distribution") +
+  labs(title = "reporter activity distribution: NPC vs. mESCs") +
   scale_fill_manual(values = fill)+
   xlim(0,5) + theme_classic()
 
@@ -208,7 +209,7 @@ sp <- ggscatter(cDNA_df[cDNA_df$native_enhancer == "No" &
                     cDNA_df$neg_ctrls  == "No" &
                     cDNA_df$hPGK == "No" &
                     cDNA_df$rand_promoter == "No",],
-          size = 0.1, color = "condition", alpha = 0.1,
+          size = 0.75, color = "condition", alpha = 0.1,
           y = "log_activity", x = "pDNA_counts_rpm",
           title = "reporter pDNA counts vs log2 reporter activity",
           ylab = "log2 reporter activity",
@@ -246,29 +247,48 @@ sp + xlim(0,200) + ylim(-5,5)
 
 
 
-## Heat map - condition vs. TF
+## Heat map - display mean log2-activity for each TF in each condition
 ```{r tf_activity_heatmap, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 ## Prepare dataframe
 # Caculate mean TF activity per condition
 cDNA_df$tf_activity <- ave(cDNA_df$log_reporter_activity, cDNA_df$condition, cDNA_df$TF, FUN = function(x) mean(x))
-
+cDNA_df$group  <- "Other"
+neural <- c("Gli1", "Homez", "Irx3", "Neurog2", "Otx1", "Pax6", "Rbpj")
+cDNA_df$group[grep(paste(neural, collapse = "|"), cDNA_df$TF)] <- "Neural induction"
+ES <- c("Esrrb", "Gbx2", "Klf4", "Smad4", "Stat3", "Tfcp2l1", "Zfp42", "Zfx")
+cDNA_df$group[grep(paste(ES, collapse = "|"), cDNA_df$TF)] <- "Stemness"
+  
 tf_activity_heatmap <- cDNA_df[cDNA_df$neg_ctrls == "No" & cDNA_df$hPGK == "No" &
                                cDNA_df$native_enhancer == "No" & cDNA_df$rand_promoter == "No",] %>% 
   select(TF, condition, tf_activity) %>% unique()
 tf_activity_heatmap <- dcast(tf_activity_heatmap, TF ~ condition, value.var="tf_activity")
-tf_activity_heatmap <- tf_activity_heatmap %>% 
+group <- cDNA_df %>% select(TF, group) %>% unique()
+tf_activity_heatmap <- merge(tf_activity_heatmap, group)
+
+# Manually annotate heatmaps
+annotation_row <- data.frame("TF" = tf_activity_heatmap$TF, 
+                             "group" = tf_activity_heatmap$group) %>%
   remove_rownames %>% column_to_rownames(var="TF")
+
+annotation_colors = list(
+    group = c(Other ="#1B998B", `Neural induction` = "#2D3047", Stemness = "#FF9B71"))
+
+tf_activity_heatmap <- tf_activity_heatmap %>% 
+  remove_rownames %>% column_to_rownames(var="TF") %>% 
+  select(-group)
 # Keeping the scale in the pheatmap function
 myBreaks1 <- seq(-2,2,0.04)
+
 
 # pheatmap function
 pheatmap(as.matrix(tf_activity_heatmap),
          color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdBu")))(100),
          breaks = myBreaks1, border_color = "#565656", 
-         cellwidth = 30, cellheight = 10)
+         cellwidth = 30, cellheight = 10,
+         annotation_row = annotation_row, 
+         annotation_colors = annotation_colors)
 ```
-
-
+## Only ~10 of the 26 TFs in the library show promising activity at the first glimpse
 
 
 
@@ -298,7 +318,7 @@ tf_activity_heatmap$TF <- gsub("_neg$", "", tf_activity_heatmap$TF)
 tf_activity_heatmap <- tf_activity_heatmap %>% 
   remove_rownames %>% column_to_rownames(var="reporter")
 # Keeping the scale in the pheatmap function
-myBreaks1 <- seq(-3,3,0.06)
+myBreaks1 <- seq(-2,2,0.04)
 
 # pheatmap function
 for(i in unique(tf_activity_heatmap$TF)){
@@ -327,7 +347,7 @@ tf_activity_heatmap$TF <- gsub("(^.*?)_[0-9]{1,2}bp.*", "\\1", tf_activity_heatm
 tf_activity_heatmap <- tf_activity_heatmap %>% 
   remove_rownames %>% column_to_rownames(var="reporter")
 # Keeping the scale in the pheatmap function
-myBreaks1 <- seq(-3,3,0.06)
+myBreaks1 <- seq(-2,2,0.04)
 
 # pheatmap function
 for(i in unique(tf_activity_heatmap$TF)){
@@ -341,7 +361,7 @@ for(i in unique(tf_activity_heatmap$TF)){
 
 
 
-## Compute activity changes relative to controls
+## Compute activity changes relative to their negative controls
 ```{r, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 ## TF activity relative to negative controls 
 cDNA_df_ctrl <- cDNA_df[cDNA_df$native_enhancer == "No" &
@@ -409,27 +429,14 @@ for(i in unique(tf_activity_heatmap$TF)){
          breaks = myBreaks1, border_color = "#565656", 
          cellwidth = 30, cellheight = 10)
 }
-
 ```
+### All of these heatmaps conclude that there we have informative reporters for ~10 TFs, and that the TF reporter design matters for some but not all TFs 
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-## SuperPlot of TF activity per condition
+## SuperPlot of TF activity per condition - this way we can plot not only the mean, but the complete data distribution across technical and biological replicates
 ```{r SuperPlot, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Plot for each tf-activity per condition per biological replicate the techical replicate distribution and means
 ## Compute relevant mean and sd values
@@ -475,7 +482,8 @@ activity_mean_5 <- activity_mean[activity_mean$promoter == "minP" &
 
 ## Generate SuperPlot
 ### Selection 1 - All TFs
-ggplot(cDNA_df[cDNA_df$promoter == "minP" & 
+for (i in 1:4) {
+  p <- ggplot(cDNA_df[cDNA_df$promoter == "minP" & 
                         cDNA_df$neg_ctrls == "No" &
                         cDNA_df$native_enhancer == "No",], 
               aes(x=condition, y=activity, color=factor(rep))) + 
@@ -489,14 +497,16 @@ ggplot(cDNA_df[cDNA_df$promoter == "minP" &
                        comparisons = list(c(1:2)), 
                    method="t.test", paired=TRUE) + 
     labs(title = "TF activity distribution per condition", 
-         subtitle = "Total data distribution") +
-    facet_wrap(~TF) +
+         subtitle = paste("Page", i)) +
+    facet_wrap_paginate(~TF, ncol = 3, nrow = 3, page = i) +
     theme_bw() +
     ylim(0,6) +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
           axis.text.y = element_text(size = 10)) +
     ylab("TF reporter activity") + xlab("") + 
     theme(text = element_text(size = 12))
+  print(p)
+}
 
 
 
@@ -514,8 +524,8 @@ ggplot(cDNA_df[cDNA_df$promoter == "hPGK" &
     stat_compare_means(data=activity_mean_2, 
                        comparisons = list(c(1:2)), 
                    method="t.test", paired=TRUE) + 
-    labs(title = "TF activity distribution per condition", 
-         subtitle = "Total data distribution") +
+    labs(title = "hPGK controls: activity distribution per condition", 
+         subtitle = p) +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
           axis.text.y = element_text(size = 10)) +
@@ -525,7 +535,8 @@ ggplot(cDNA_df[cDNA_df$promoter == "hPGK" &
 
 
 ### Selection 3 - Native enhancers
-ggplot(cDNA_df[cDNA_df$promoter == "minP" & 
+for (i in 1:5) {
+  p <- ggplot(cDNA_df[cDNA_df$promoter == "minP" & 
                         cDNA_df$native_enhancer == "Yes",], 
               aes(x=condition, y=activity, color=factor(rep))) + 
     scale_color_manual(values = c("#1B998B", "#2D3047", "#FF9B71")) +
@@ -537,47 +548,23 @@ ggplot(cDNA_df[cDNA_df$promoter == "minP" &
     stat_compare_means(data=activity_mean_3, 
                        comparisons = list(c(1:2)), 
                    method="t.test", paired=TRUE) + 
-    labs(title = "TF activity distribution per condition", 
-         subtitle = "Total data distribution") +
-    facet_wrap(~TF) +
+    labs(title = "Miguels native enhancer chunks per condition", 
+         subtitle = paste("Page", i)) +
+    facet_wrap_paginate(~TF, ncol = 3, nrow = 3, page = i) +
     ylim(0,6) +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
           axis.text.y = element_text(size = 10)) +
     ylab("TF reporter activity") + xlab("") + 
     theme(text = element_text(size = 12))
-
-
-
-
-### Selection 4 - Random promoter
-ggplot(cDNA_df[cDNA_df$promoter == "Random" & 
-                        cDNA_df$neg_ctrls == "No" & 
-                        cDNA_df$native_enhancer == "No",], 
-              aes(x=condition, y=activity, color=factor(rep))) + 
-    scale_color_manual(values = c("#1B998B", "#2D3047", "#FF9B71")) +
-    geom_quasirandom(aes(alpha = 0.9), dodge.width = 0.4) +
-    geom_errorbar(data = activity_mean_4, 
-                  aes(ymin = lower, 
-                      ymax = upper), colour = "black") + 
-    geom_quasirandom(data = activity_mean_4, aes(alpha = 1), size=4) + 
-    stat_compare_means(data=activity_mean_4, 
-                       comparisons = list(c(1:2)), 
-                   method="t.test", paired=TRUE) + 
-    labs(title = "TF activity distribution per condition - Random promoter", 
-         subtitle = "Total data distribution") +
-    facet_wrap(~TF) +
-    theme_bw() +
-    ylim(0,6) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
-          axis.text.y = element_text(size = 10)) +
-    ylab("TF reporter activity") + xlab("") + 
-    theme(text = element_text(size = 12))
+  print(p)
+}
 
 
 
 ### Selection 5 - All TF-negative controls
-ggplot(cDNA_df[cDNA_df$promoter == "minP" & 
+for (i in 1:3) {
+  p <- ggplot(cDNA_df[cDNA_df$promoter == "minP" & 
                         cDNA_df$neg_ctrls == "Yes" &
                         cDNA_df$native_enhancer == "No",], 
               aes(x=condition, y=activity, color=factor(rep))) + 
@@ -591,14 +578,16 @@ ggplot(cDNA_df[cDNA_df$promoter == "minP" &
                        comparisons = list(c(1:2)), 
                    method="t.test", paired=TRUE) + 
     labs(title = "TF activity distribution per condition - only negative controls", 
-         subtitle = "Total data distribution") +
-    facet_wrap(~TF) +
+         subtitle = paste("Page", i)) +
+    facet_wrap_paginate(~TF, ncol = 3, nrow = 3, page = i) +
     theme_bw() +
     ylim(0,6) +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
           axis.text.y = element_text(size = 10)) +
     ylab("TF reporter activity") + xlab("") + 
     theme(text = element_text(size = 12))
+  print(p)
+}
 ```
 
 
@@ -631,7 +620,8 @@ activity_mean <- activity_mean[activity_mean$neg_ctrls == "No" &
 
 ## Generate SuperPlot
 ### Selection 1 - All Designs separately
-ggplot(cDNA_df[cDNA_df$TF == "Trp53" & 
+for (i in 1:4) {
+  p <- ggplot(cDNA_df[cDNA_df$TF == "Trp53" & 
                         cDNA_df$neg_ctrls == "No" &
                         cDNA_df$native_enhancer == "No",], 
               aes(x=condition, y=activity, color=factor(rep))) + 
@@ -644,15 +634,17 @@ ggplot(cDNA_df[cDNA_df$TF == "Trp53" &
     stat_compare_means(data=activity_mean[activity_mean$TF == "Trp53",], 
                        comparisons = list(c(1:2)), 
                    method="t.test", paired=TRUE) + 
-    labs(title = "TF activity distribution per condition", 
-         subtitle = "Total data distribution") +
-    facet_wrap(~reporter_id) +
+    labs(title = "Trp53 activity distribution per design and condition", 
+         subtitle = paste("Page", i)) +
+    facet_wrap_paginate(~reporter_id, ncol = 3, nrow = 3, page = i) +
     theme_bw() +
     ylim(0,16) +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
           axis.text.y = element_text(size = 10)) +
     ylab("TF reporter activity") + xlab("") + 
     theme(text = element_text(size = 12))
+  print(p)
+}
 
 
 ## Subdivide in different designs 
@@ -668,15 +660,15 @@ cDNA_df2 <- cDNA_df2[cDNA_df2$neg_ctrls == "No" &
 
 
 
-for(i in 1:4){
+for(i in 1:8){
   p <- ggplot(cDNA_df2, 
         aes(x=condition, y=activity, color=space_dist)) + 
       scale_color_manual(values = c("#1B998B", "#2D3047", "#FF9B71", "#ECDD7B")) +
       geom_quasirandom(dodge.width = 0.9) +
       geom_boxplot(position = position_dodge(0.9), aes(alpha = 0.5)) + 
-      labs(title = "TF activity distribution per condition", 
-           subtitle = "Total data distribution") +
-      facet_wrap_paginate(~TF, nrow = 3, ncol = 3, page = i) +
+      labs(title = "Comparing spacings: TF activity distribution per condition", 
+           subtitle = paste("Page", i)) +
+      facet_wrap_paginate(~TF, nrow = 2, ncol = 2, page = i) +
       theme_bw() +
       ylim(0,6) +
       theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
@@ -700,15 +692,15 @@ cDNA_df2 <- cDNA_df2[cDNA_df2$neg_ctrls == "No" &
 
 
 
-for(i in 1:4){
+for(i in 1:8){
   p <- ggplot(cDNA_df2, 
         aes(x=condition, y=activity, color=background)) + 
       scale_color_manual(values = c("#1B998B", "#2D3047", "#FF9B71", "#ECDD7B")) +
       geom_quasirandom(dodge.width = 0.9) +
       geom_boxplot(position = position_dodge(0.9), aes(alpha = 0.5)) + 
-      labs(title = "TF activity distribution per condition", 
-           subtitle = "Total data distribution") +
-      facet_wrap_paginate(~TF, nrow = 3, ncol = 3, page = i) +
+      labs(title = "Comparing backgrounds: TF activity distribution per condition", 
+           subtitle = paste("Page", i)) +
+      facet_wrap_paginate(~TF, nrow = 2, ncol = 2, page = i) +
       theme_bw() +
       ylim(0,6) +
       theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
@@ -730,15 +722,15 @@ cDNA_df2 <- cDNA_df2[cDNA_df2$neg_ctrls == "No" &
 
 
 
-for(i in 1:4){
+for(i in 1:8){
   p <- ggplot(cDNA_df2, 
         aes(x=condition, y=activity, color=promoter)) + 
       scale_color_manual(values = c("#1B998B", "#2D3047", "#FF9B71", "#ECDD7B")) +
       geom_quasirandom(dodge.width = 0.9) +
       geom_boxplot(position = position_dodge(0.9), aes(alpha = 0.5)) + 
-      labs(title = "TF activity distribution per condition", 
-           subtitle = "Total data distribution") +
-      facet_wrap_paginate(~TF, nrow = 3, ncol = 3, page = i) +
+      labs(title = "Comparing promoters: TF activity distribution per condition", 
+           subtitle = paste("Page", i)) +
+      facet_wrap_paginate(~TF, nrow = 2, ncol = 2, page = i) +
       theme_bw() +
       ylim(0,6) +
       theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
@@ -760,15 +752,15 @@ cDNA_df2 <- cDNA_df2[cDNA_df2$neg_ctrls == "No" &
 
 
 
-for(i in 1:4){
+for(i in 1:10){
   p <- ggplot(cDNA_df2, 
         aes(x=condition, y=activity, color=promoter)) + 
       scale_color_manual(values = c("#1B998B", "#2D3047", "#FF9B71", "#ECDD7B")) +
       geom_quasirandom(dodge.width = 0.9) +
       geom_boxplot(position = position_dodge(0.9), aes(alpha = 0.5)) + 
-      labs(title = "TF activity distribution per condition", 
-           subtitle = "Total data distribution") +
-      facet_wrap_paginate(~TF, nrow = 3, ncol = 3, page = i) +
+      labs(title = "Miguels native enhancers per promoter", 
+           subtitle = paste("Page", i)) +
+      facet_wrap_paginate(~TF, nrow = 2, ncol = 2, page = i) +
       theme_bw() +
       ylim(0,6) +
       theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
@@ -841,7 +833,7 @@ for (i in unique(cDNA_df_TF$TF)) {
 }
 
 
-## Fine-tune dfs
+## Prepare lm parameters for plotting
 exp_variance <- melt(exp_variance, variable.name = "TF")
 exp_variance$group <- "no residual"
 exp_variance$group[grep("Residual", exp_variance$feature)] <- "residual"
@@ -858,54 +850,12 @@ weight$condition <- gsub(paste(feature, collapse="|"), "", weight$feature)
 weight <- weight %>% select(-feature)
 
 
-# Model parameters
-ggplot(exp_variance, 
-       aes(x = reorder(feature, -value), y = value, fill = group)) +
-  scale_fill_manual(values = c("#1B998B", "#2D3047")) +
-  geom_bar(stat = "identity") + 
-  ylab("Variance explained (%)") + xlab("") + 
-  labs(title = "Linear variance modelling", 
-       subtitle = "Expression variance predicted by features") +
-  theme_bw() +
-  theme(text = element_text(size = 12)) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12), 
-        axis.text.y = element_text(size = 10)) +
-  facet_wrap(~TF)
-
-# Model prediction accuracy
-sp <- ggscatter(cDNA_df_TF, x = "log_reporter_activity", y = "activity_predicted",
-   add = "reg.line", 
-   add.params = list(color = "blue", fill = "lightgray"),
-   conf.int = TRUE, ylab = "Predicted log2-activity", xlab = "Average log2-activity",
-   title = "Correlation between predicted and actual reporter activities") +
-  facet_wrap(~TF) + theme_bw()
-sp + stat_cor(method = "pearson", label.x = -3, label.y = 3.7) + geom_abline(linetype = "dashed")
-
-
-## Plot weights of parameters in model - this helps to understand the model 
+# Further plotting preparations
 level_order <- c("2i_pos_LIF", "LIF_pos_CH", 
                  "LIF_pos_PD", "vitA", "N2B27", 
                  "NPC", "mCMV", "minP", "Random",
-                 "2", "3", "10bp", "21bp")
+                 "2", "3", "10bp", "21bp", "5bp")
 
-
-ggplot(weight, 
-       aes(x = factor(feature, level = level_order), y = value, fill = condition)) +
-  scale_fill_manual(values = c("#1B998B", "#2D3047", "#FF9B71", "#ECDD7B", "#C2B2B4", "#A54657")) +
-  geom_bar(stat = "identity") + 
-  ylab("Variance explained (%)") + xlab("") + 
-  labs(title = "Linear variance modelling", 
-       subtitle = "Expression variance predicted by features") +
-  theme_bw() +
-  theme(text = element_text(size = 12)) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 10), 
-        axis.text.y = element_text(size = 10)) +
-  facet_wrap(~TF)
-
-
-
-## Final overview - model fit for each TF
-# Feature importance overview for each TF in a single plot (bar-chart including mean activities per feature)
 
 # Model parameters
 exp_variance$value[exp_variance$feature == "Residuals"] <- 100 - exp_variance$value[exp_variance$feature == "Residuals"]
@@ -1026,20 +976,85 @@ colors <- c("2i_neg_LIF" = "#2D3047",
             "all" = "#1B998B"
             )
 
-ggplot(x, aes(fill=condition, y=activity, x=reorder(group, activity))) +
+
+
+
+
+for (i in unique(cDNA_df_TF$TF)) {
+  
+  # Plot to show prediction accuracy
+  sp <- ggscatter(cDNA_df_TF, x = "log_reporter_activity", y = "activity_predicted",
+   add = "reg.line", 
+   add.params = list(color = "blue", fill = "lightgray"),
+   conf.int = TRUE, ylab = "Predicted log2-activity", xlab = "Average log2-activity",
+   title = "Correlation between predicted and actual reporter activities") + theme_bw() +
+  stat_cor(method = "pearson", label.x = -3, label.y = 3.7) + geom_abline(linetype = "dashed") +
+  facet_wrap_paginate(~TF, nrow = 1, ncol = 1, page = i)
+  
+  
+  # Feature importance overview for each TF (including mean activities per feature)
+  fp <- ggplot(x, aes(fill=condition, y=activity, x=reorder(group, activity))) +
   geom_bar(position="stack", stat="identity") +
   coord_flip() +
   scale_fill_manual(values = colors) +
   #scale_fill_viridis(discrete = T) +
   ylab("Variance explained (%)") + xlab("") + 
-  labs(title = "Linear variance modelling", 
-       subtitle = "Expression variance predicted by features") +
+  labs(title = "Linear activity variance modelling", 
+       subtitle = "Feature colors scaled using mean activity data") +
   theme_bw() +
   theme(text = element_text(size = 12)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12), 
         axis.text.y = element_text(size = 10)) +
-  facet_wrap(~TF)
+    facet_wrap_paginate(~TF, nrow = 1, ncol = 1, page = i)
+  
+  # Plot weights of parameters in model - this helps to understand the model 
+  p <- ggplot(weight, 
+       aes(x = factor(feature, level = level_order), y = value, fill = condition)) +
+  scale_fill_manual(values = c("#1B998B", "#2D3047", "#FF9B71", "#ECDD7B", "#C2B2B4", "#A54657")) +
+  geom_bar(stat = "identity") + 
+  ylab("Variance explained (%)") + xlab("") + 
+  labs(title = "Linear variance modelling", 
+       subtitle = paste("Weights used in the linear model, page", i)) +
+  theme_bw() +
+  theme(text = element_text(size = 12)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 10), 
+        axis.text.y = element_text(size = 10)) +
+    facet_wrap_paginate(~TF, nrow = 1, ncol = 1, page = i)
+
+  # Combine all plots
+  sp.plot <- arrangeGrob(sp,p,fp, nrow = 2, ncol = 2)
+  grid.arrange(sp.plot)
+}
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
