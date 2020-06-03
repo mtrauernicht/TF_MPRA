@@ -1179,6 +1179,18 @@ bc_df_cDNA_filt$sd_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$rep
 ```
 
 
+## Add pDNA data
+```{r}
+pDNA <- bc_df[grep("pDNA", bc_df$condition),] %>% 
+  select(barcode, bc_counts_rpm) %>% unique() %>%
+  setnames("bc_counts_rpm", "pDNA_counts_rpm") %>%
+  mutate(pDNA_counts_rpm = ave(pDNA_counts_rpm, barcode, FUN = function(x) mean(x))) %>%
+  unique()
+bc_df_cDNA_filt <- merge(pDNA, bc_df_cDNA_filt, all = T)
+bc_df_cDNA_filt <- bc_df_cDNA_filt[!is.na(bc_df_cDNA_filt$condition),]
+```
+
+
 
 
 ## Annotate controls
@@ -1284,31 +1296,44 @@ names(rep3) <- c("rep3", "reporter", "condition")
 
 bc_df_rep <- merge(rep1, rep2, all = TRUE)
 bc_df_rep <- merge(bc_df_rep, rep3, all = TRUE)
+bc_df_rep$neg_ctrl <- "No"
+bc_df_rep$neg_ctrl[grep("neg", bc_df_rep$reporter)] <- "Yes"
+
+colors <- c("#2D3047", "#1B998B")
 
 sp1 <- ggscatter(bc_df_rep, x = "rep1", y = "rep2",
    add = "reg.line",
+   color = "neg_ctrl",
+   size = 1,
    add.params = list(color = "blue", fill = "lightgray"), title = "rep1 vs rep2",
    conf.int = TRUE, ylab = "rep2", xlab = "rep1") + 
   stat_cor(method = "pearson", label.x = 1, label.y = 25) + 
-  geom_abline(linetype = "dashed")
+  geom_abline(linetype = "dashed") +
+  scale_color_manual(values = colors)
 
 sp2 <- ggscatter(bc_df_rep, x = "rep1", y = "rep3",
    add = "reg.line",
+   color = "neg_ctrl",
+   size = 1,
    add.params = list(color = "blue", fill = "lightgray"), title = "rep1 vs rep3",
    conf.int = TRUE, ylab = "rep3", xlab = "rep1") + 
   stat_cor(method = "pearson", label.x = 1, label.y = 25) + 
-  geom_abline(linetype = "dashed")
+  geom_abline(linetype = "dashed")+
+  scale_color_manual(values = colors)
 
 sp3 <- ggscatter(bc_df_rep, x = "rep3", y = "rep2",
    add = "reg.line",
+   color = "neg_ctrl",
+   size = 1,
    add.params = list(color = "blue", fill = "lightgray"), title = "rep3 vs rep2",
    conf.int = TRUE, ylab = "rep2", xlab = "rep3") + 
   stat_cor(method = "pearson", label.x = 1, label.y = 25) + 
-  geom_abline(linetype = "dashed")
+  geom_abline(linetype = "dashed")+
+  scale_color_manual(values = colors)
 
 
 #Grid three plots to one panel
-sp.plot <- arrangeGrob(sp1,sp2,sp3, nrow = 3)
+sp.plot <- arrangeGrob(sp1,sp2,sp3, nrow = 2, ncol = 2)
 grid.arrange(sp.plot)
 ```
 
