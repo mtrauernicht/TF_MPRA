@@ -1,0 +1,565 @@
+---
+title: "pDNA insert matching"
+author: "Max Trauernicht"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output: 
+  html_document:
+    theme: journal #cerulean
+    highlight: monochrome
+    toc: true
+    toc_float: true
+    code_folding: show
+  editor_options:
+    chunk_output_type: console
+---
+
+# knitr document van Steensel lab
+
+
+# Introduction
+I sequenced the complete insert of the pDNA library of pMT02. I now want to check whether the sequences in the pDNA still match the designed inserts. 
+
+
+## Description of Data
+How to make a good rendering table: 
+```{r table1, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "
+| column1	|	column2	|	column3	|	
+|----|----|----|
+|1	|	2	|	3	|	
+|a	|	b	|	c	|	
+"
+cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
+```
+
+# Data processing
+## Path, Libraries, Parameters and Useful Functions
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+StartTime <-Sys.time()
+
+# 8-digit Date tag:
+Date <- substr(gsub("-","",Sys.time()),1,8) 
+# libraries:
+library(seqinr)
+library(ShortRead)
+library(plyr)
+library(maditr)
+library(phylotools)
+library(tidyr)
+```
+
+### Custom functions
+Functions used thoughout this script.
+```{r}
+SetFileName <- function(filename, initials) {
+  # Set filename with extension and initials to make filename with date integrated.
+  filename <- substitute(filename)
+  initials <- substitute(initials)
+  filename <- paste0(initials, Date, filename)
+  filename
+}
+
+ReadFasta<-function(file) {
+   # Read the file line by line
+   fasta<-readLines(file)
+   # Identify header lines
+   ind<-grep(">", fasta)
+   # Identify the sequence lines
+   s<-data.frame(ind=ind, from=ind+1, to=c((ind-1)[-1], length(fasta)))
+   # Process sequence lines
+   seqs<-rep(NA, length(ind))
+   for(i in 1:length(ind)) {
+      seqs[i]<-paste(fasta[s$from[i]:s$to[i]], collapse="")
+   }
+   # Create a data frame 
+   DF<-data.frame(name=gsub(">", "", fasta[ind]), sequence=seqs)
+   # Return the data frame as a result object from the function
+   return(DF)
+}
+
+# Function to load PWM matrix
+get_pwm_feature_matrix <- function(motif_meta_fn, fimo_fn, db = 2) {
+
+  # validate args
+  valid_dbs <- 1:2
+  if(!db %in% valid_dbs)
+    stop('Invalid db (database version). Please use db=1 (maintained for backward compatibility only) or db=2')
+
+  # db=1 is maintained for backward compatibility only
+  if(db == 1) {
+
+    # read in motif metadata
+    motif_meta    <- read.csv(motif_meta_fn)
+
+    # check whether motif metadata contain essential annotations
+    if(!all(c('PWM.ID', 'Cognate.TF') %in% colnames(motif_meta))) {
+      message('The motif metadata file does not contain the essential columns PWM.ID and Cognate.TF')
+    }
+
+    motif_minimal <- motif_meta[, c('PWM.ID', 'Cognate.TF')]
+
+    # load fimo output --> extract motif id, sequence id and p-value
+    df <- read.table(fimo_fn)
+    df <- df[, c(1, 2, 7)]
+
+    colnames(df) <- c('PWM.ID', 'seqid', 'pval')
+
+    # add TF id
+    df <- merge(df, motif_minimal, by = 'PWM.ID')
+
+    # group motif hits by sequence id
+    l <- split(df, df[['seqid']])
+
+    # multiple PWM and multiple hits possible. Reduce hits to one per TF, keeping best p-val only
+    l <- lapply(l, function(x) {
+      x_by_tf <- split(x, x[['Cognate.TF']], drop = TRUE)
+      x_by_tf <- lapply(x_by_tf, function(y) y[which.min(y$pval), ])
+      do.call('rbind', x_by_tf)
+    })
+
+    # initialize feature matrix
+    n_tf          <- motif_minimal[['Cognate.TF']] %>%
+      unique %>%
+      length
+    n_seq         <- length(l)
+    pwm           <- matrix(1, nrow = n_seq, ncol = n_tf)
+    colnames(pwm) <- (motif_minimal[['Cognate.TF']] %>% unique)
+
+    # replace :: from names of composite motifs
+    colnames(pwm) <- str_replace_all(colnames(pwm), '::', '_')
+
+    # fill in feature matrix
+    for(i in 1 : n_seq) {
+      pwm[i, l[[i]][['Cognate.TF']]] <- l[[i]]$pval
+    }
+
+    # -log10 transform
+    pwm           <- -1 * log10(pwm)
+
+    # coerce to tib and return
+    tib_fimo <- as_data_frame(pwm) %>%
+      mutate(id = names(l))
+      dplyr::select(id, everything())
+
+  }
+
+  # db = 2 (default)
+  else {
+
+    # load metadata
+    tib_meta    <- read_csv(motif_meta_fn) %>%
+      # extract tf symbol from motif id (Cognate_TF unsafe, it can be empty) and replace :: occurrences
+      mutate(tf_symbol = str_remove(ID, '_[0-9]*'),
+             tf_symbol = str_replace(tf_symbol, '::', '_')) %>%
+      select(motif_id = `PWM ID`, tf_symbol)
+
+    # load fimo results
+    tib_fimo <- read_tsv(fimo_fn) %>%
+      # extract motif id, sequence id and p-value
+      select(motif_id, sequence_name, pval = `p-value`)
+
+    # add tf symbol to fimo results
+    tib_fimo <- tib_fimo %>%
+      left_join(tib_meta, by = 'motif_id') %>%
+      # remove hits with missing motif id (composite pwms)
+      filter(!is.na(tf_symbol))
+
+    # select best hit for each motif and sequence
+    tib_fimo <- tib_fimo %>%
+      group_by(sequence_name, tf_symbol) %>%
+      dplyr::slice(which.min(pval)) %>%
+      ungroup()
+
+    # spread into feature matrix
+    tib_fimo <- tib_fimo %>%
+      mutate(pval = -1 * log10(pval)) %>%
+      select(-motif_id) %>%
+      spread(key = tf_symbol, value = pval, fill = 0, drop = TRUE) %>%
+      # perform cosmetics on the id
+      mutate(id = sequence_name) %>%
+      select(-c(sequence_name)) %>%
+      select(id, everything())
+
+  }
+
+  return(tib_fimo)
+
+}
+```
+
+
+## Data import
+```{r}
+# Import reference sequences
+ref_seq <- ReadFasta("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/mt20191205_oligo_pool.fasta")
+
+# Remove adapters from reference sequence
+ref_seq$sequence <- gsub("CGGAGCGAACCGAGTTAG", "", ref_seq$sequence)
+ref_seq$sequence <- gsub("CATCGTCGCATCCAAGAG", "", ref_seq$sequence)
+
+# Split up in insert and barcode part
+ref_seq$barcode <- gsub(".*([A-Z]{12})$", "\\1", ref_seq$sequence)
+ref_seq$insert <- gsub("(.*)[A-Z]{12}$", "\\1", ref_seq$sequence)
+
+# Import sequence files
+pDNA_seq <- read_tsv("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/pDNA_seq/pDNA-seq-starcode.tsv", col_names = c("sequence", "number"))
+pDNA_seq$barcode <- gsub(".*([A-Z]{12})$", "\\1", pDNA_seq$sequence)
+pDNA_seq$insert <- gsub("(.*)[A-Z]{12}$", "\\1", pDNA_seq$sequence)
+
+pDNA_seq_clust <- read_tsv("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/pDNA_seq/pDNA-seq-starcode-d1.tsv", col_names = c("sequence", "number"))
+pDNA_seq_clust$barcode <- gsub(".*([A-Z]{12})$", "\\1", pDNA_seq_clust$sequence)
+pDNA_seq_clust$insert <- gsub("(.*)[A-Z]{12}$", "\\1", pDNA_seq_clust$sequence)
+```
+
+# Analysis
+
+
+## Match barcodes
+```{r}
+# Match barcodes with original data
+ref_seq_bc <- ref_seq %>% select(name, barcode)
+pDNA_seq_bc <- pDNA_seq %>% select(barcode) %>% unique() %>% mutate(id = "pDNA")
+match_bc <- merge(ref_seq_bc, pDNA_seq_bc, by = "barcode", all = T)
+```
+
+
+
+
+
+## Plot how many barcodes are found in pDNA data
+```{r}
+## Identify the unmapped fraction
+match_df_ref <- match_bc[!is.na(match_bc$name),]
+n_match <- nrow(match_df_ref[!is.na(match_df_ref$id),])
+n_nomatch <- nrow(match_df_ref[is.na(match_df_ref$id),])
+
+# Create donut chart
+data <- data.frame(
+  lbls=c("matched:", "unmatched:"),
+  count=c(n_match, n_nomatch)
+)
+ 
+# Compute percentages
+data$fraction <- data$count / sum(data$count)
+data$percentage <- data$fraction * 100
+
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+# Compute the bottom of each rectangle
+data$ymin <- c(0, head(data$ymax, n=-1))
+
+# Compute label position
+data$labelPosition <- (data$ymax + data$ymin) / 2
+
+# Compute a good label
+data$label <- paste0(data$lbls, "\n", round(data$percentage), "%")
+
+# Make the plot
+ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
+  geom_rect() +
+  geom_text(x=2, aes(y=labelPosition, label=label, color=lbls), size=5) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#1B998B", "#2D3047")) +
+  scale_color_manual(values = c("#1B998B", "#2D3047")) +
+  labs(title = "percentage of matched barcodes between design and pDNA") +
+  coord_polar(theta="y") +
+  xlim(c(0, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+
+
+
+## Now we want to know if the inserts match to the barcodes
+```{r}
+## Only select barcodes from design in pDNA data
+pDNA_seq_insert <- pDNA_seq[pDNA_seq$barcode %in% ref_seq$barcode,] %>% select(sequence, number)
+ref_seq_insert <- ref_seq %>% select(name, sequence)
+match_insert <- merge(pDNA_seq_insert, ref_seq_insert, by = "sequence", all = T)
+
+## Identify the unmapped fraction
+match_df_reads <- match_insert[!is.na(match_insert$number),]
+n_match <- sum(match_df_reads$number[!is.na(match_df_reads$name)])
+n_nomatch <- sum(match_df_reads$number[is.na(match_df_reads$name)])
+
+# Create donut chart
+data <- data.frame(
+  lbls=c("matched:", "unmatched:"),
+  count=c(n_match, n_nomatch)
+)
+ 
+# Compute percentages
+data$fraction <- data$count / sum(data$count)
+data$percentage <- data$fraction * 100
+
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+# Compute the bottom of each rectangle
+data$ymin <- c(0, head(data$ymax, n=-1))
+
+# Compute label position
+data$labelPosition <- (data$ymax + data$ymin) / 2
+
+# Compute a good label
+data$label <- paste0(data$lbls, "\n", round(data$percentage), "%")
+
+# Make the plot
+ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
+  geom_rect() +
+  geom_text(x=2, aes(y=labelPosition, label=label, color=lbls), size=5) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#1B998B", "#2D3047")) +
+  scale_color_manual(values = c("#1B998B", "#2D3047")) +
+  labs(title = "percentage of reads from unmatched sequences (only matched barcodes)") +
+  coord_polar(theta="y") +
+  xlim(c(0, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+
+
+# Barcodes attached to wrong insert?
+```{r}
+# Select only matched barcodes
+pDNA_seq_insert <- pDNA_seq[pDNA_seq$barcode %in% ref_seq$barcode,]
+
+# Add bc-id to the barcodes found in pDNA
+ref_seq_insert <- ref_seq %>% select(barcode, name) %>% setnames("name", "bc-match")
+pDNA_seq_insert <- merge(pDNA_seq_insert, ref_seq_insert)
+
+# Add insert-id to the inserts found in pDNA
+ref_seq_insert <- ref_seq %>% select(insert, name) %>% setnames("name", "insert-match")
+ref_seq_insert$`insert-match` <- gsub("(.*)_bc-[0-9]$", "\\1", ref_seq_insert$`insert-match`)
+pDNA_seq_insert <- merge(pDNA_seq_insert, ref_seq_insert)
+
+# Count occurences where bc matches insert
+pDNA_seq_insert$`bc-match` <- gsub("(.*)_bc-[0-9]$", "\\1", pDNA_seq_insert$`bc-match`)
+for (i in 1:nrow(pDNA_seq_insert)) {
+  pDNA_seq_insert$match[i] <- identical(pDNA_seq_insert$`bc-match`[i], pDNA_seq_insert$`insert-match`[i])
+  
+}
+
+
+
+
+
+## Identify the unmapped fraction
+n_match <- sum(pDNA_seq_insert$number[pDNA_seq_insert$match == T])
+n_nomatch <- sum(pDNA_seq_insert$number[pDNA_seq_insert$match == F])
+
+# Create donut chart
+data <- data.frame(
+  lbls=c("matched:", "unmatched:"),
+  count=c(n_match, n_nomatch)
+)
+ 
+# Compute percentages
+data$fraction <- data$count / sum(data$count)
+data$percentage <- data$fraction * 100
+
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+# Compute the bottom of each rectangle
+data$ymin <- c(0, head(data$ymax, n=-1))
+
+# Compute label position
+data$labelPosition <- (data$ymax + data$ymin) / 2
+
+# Compute a good label
+data$label <- paste0(data$lbls, "\n", round(data$percentage), "%")
+
+# Make the plot
+ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
+  geom_rect() +
+  geom_text(x=2, aes(y=labelPosition, label=label, color=lbls), size=5) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#1B998B", "#2D3047")) +
+  scale_color_manual(values = c("#1B998B", "#2D3047")) +
+  labs(title = "percentage of reads where bc attached to wrong insert ") +
+  coord_polar(theta="y") +
+  xlim(c(0, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+
+```
+
+# Extract those barcodes that are clearly attached to a wrong insert
+## These probably need to be excluded from the analysis
+```{r}
+mismatch_df <- pDNA_seq_insert[pDNA_seq_insert$match == F,] %>% select(barcode, number) %>% unique()
+mismatch_df <- ddply(mismatch_df,~barcode, summarise, number = sum(number))
+
+match_df <- pDNA_seq_insert[pDNA_seq_insert$match == T,]  %>% select(barcode, number) %>% unique()
+match_df <- ddply(match_df,~barcode, summarise, number = sum(number))
+setnames(match_df, "number", "match")
+setnames(mismatch_df, "number", "mismatch")
+matching_df <- merge(match_df, mismatch_df, all = T)
+matching_df$match[is.na(matching_df$match)] <- 1
+matching_df$mismatch[is.na(matching_df$mismatch)] <- 1
+
+# Calculate match/mismatch ratio
+matching_df$ratio <- matching_df$match / matching_df$mismatch
+matching_df$type <- "good matching"
+matching_df$type[matching_df$ratio < 2 & matching_df$ratio > 0.5] <- "unclear matching"
+matching_df$type[matching_df$ratio < 0.5] <- "incorrect matching"
+
+# Plot match/mismatch distribution
+ggplot(matching_df, 
+       aes(x = match, y = mismatch, colour = type), alpha = 0.5) +
+  geom_point() + 
+  xlab("number of reads: barcodes match with insert") + 
+  ylab("number of reads: barcodes do not match insert") +
+  scale_color_manual(values = c("#1B998B", "#2D3047", "#FF9B71")) +
+  theme_bw() + theme(legend.position = c(.8, .8))
+
+
+ggplot(matching_df, aes(x = "match/mismatch ratio", y = ratio, colour = type), alpha = 0.5) +
+  geom_quasirandom() + theme_bw() + ylim(0,100) + 
+  scale_color_manual(values = c("#1B998B", "#2D3047", "#FF9B71")) +
+  theme(legend.position = c(.8, .8))
+
+# Fraction of barcodes with match/mismatch
+n_match <- nrow(matching_df[matching_df$mismatch == 1,])
+n_nomatch <- nrow(matching_df[matching_df$mismatch > 1,])
+
+# Create donut chart
+data <- data.frame(
+  lbls=c("matched:", "unmatched:"),
+  count=c(n_match, n_nomatch)
+)
+ 
+# Compute percentages
+data$fraction <- data$count / sum(data$count)
+data$percentage <- data$fraction * 100
+
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+# Compute the bottom of each rectangle
+data$ymin <- c(0, head(data$ymax, n=-1))
+
+# Compute label position
+data$labelPosition <- (data$ymax + data$ymin) / 2
+
+# Compute a good label
+data$label <- paste0(data$lbls, "\n", round(data$percentage), "%")
+
+# Make the plot
+ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
+  geom_rect() +
+  geom_text(x=2, aes(y=labelPosition, label=label, color=lbls), size=5) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#1B998B", "#2D3047")) +
+  scale_color_manual(values = c("#1B998B", "#2D3047")) +
+  labs(title = "percentage at least 1 bc wrongly attached to its insert") +
+  coord_polar(theta="y") +
+  xlim(c(0, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+
+
+# Barcode re-evaluation 
+```{r}
+# Barcodes with a mixed match of correct and incorrect insert need to be excluded from the analysis
+matching_df_exclude <- matching_df[matching_df$ratio < 2 & matching_df$ratio > 0.5,]
+
+# Barcodes with incorrect matching can be assigned to new insert if only 1 insert has all barcodes
+matching_df_incorrect <- matching_df[matching_df$ratio < 0.5,]
+pDNA_seq_incorrect <- pDNA_seq_insert[pDNA_seq_insert$barcode %in% matching_df_incorrect$barcode,] %>%
+  select(barcode, `bc-match`, `insert-match`, number, match) %>% unique()
+pDNA_seq_incorrect$ratio <- ave(pDNA_seq_incorrect$number, pDNA_seq_incorrect$barcode, 
+                                FUN = function(x) x/sum(x))
+pDNA_seq_incorrect <- pDNA_seq_incorrect[pDNA_seq_incorrect$ratio >0.7,]
+```
+
+
+
+
+
+
+# Investigate the mutational load of the barcodes with a good match
+```{r}
+## Only select barcodes from design in pDNA data
+matching_df_correct <- matching_df[matching_df$ratio > 2,]
+pDNA_seq_insert <- pDNA_seq[pDNA_seq$barcode %in% matching_df$barcode,] %>% 
+  select(barcode, insert, number) %>%
+  setnames("insert", "pDNA")
+ref_seq_insert <- ref_seq %>% select(barcode, insert) %>% setnames("insert", "ref")
+match_insert <- merge(pDNA_seq_insert, ref_seq_insert, by = "barcode")
+match_insert$lv <- levenshtein.distance(match_insert$pDNA, match_insert$ref)
+
+## Plot levenshtein distance distribution
+ggplot(match_insert, aes(x = lv)) +
+  geom_density() +
+  xlim(-0.2,6.2) + theme_bw()
+
+## Plot levenshtein distance in relation to read count
+lv <- seq(-1,19,1)
+match_insert$lv_bin <- cut(match_insert$lv, breaks = lv)
+
+## Read distribution vs. TF reporter length
+ggplot(data = match_insert, aes(x = lv_bin, y = number)) + 
+  geom_quasirandom(color = "#2D3047") + xlab("Levenshtein distance") + 
+  labs(title = "Sum pDNA counts vs. at levenshtein distances") + 
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12), 
+          axis.text.y = element_text(size = 12)) +
+  ylab("read count") + 
+  theme(text = element_text(size = 12))
+```
+
+
+
+
+
+# Generate final overview
+
+## How many barcodes in pDNA match the design?
+## How many complete sequences match the design?
+
+## Mutational load of inserts that are attached to the right barcode?
+
+## How many barcodes are attached to the correct insert?
+## How many barcodes are attached to mixed population of inserts?
+## How many barcodes were completely attached to the wrong inserts?
+
+
+
+
+# Conclusions
+```{r}
+```
+
+## Exporting potential data. 
+```{r}
+```
+
+# Session Info
+```{r}
+paste("Run time: ",format(Sys.time()-StartTime))
+getwd()
+date()
+sessionInfo()
+```
+
