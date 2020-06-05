@@ -1166,8 +1166,47 @@ bc_df_cDNA$lower_activity <- bc_df_cDNA$mean_activity - (2 * bc_df_cDNA$sd_activ
 bc_df_cDNA$low_outlier <- bc_df_cDNA$activity - bc_df_cDNA$lower_activity
 bc_df_cDNA$high_outlier <- bc_df_cDNA$upper_activity - bc_df_cDNA$activity
 
+## Plot effect of highest outlier bc -> SNP in minP promoter
+outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "Zfp42_5bp_21bp_minP_3",] %>% 
+  select(`bc.number`, activity) %>%
+  unique()
+
+ggplot(outlier, aes(x = `bc.number`, y = activity)) +
+  geom_quasirandom() + theme_bw() +
+  scale_x_continuous(breaks = seq(1, 8, by = 1)) +
+  xlab("barcode #") + 
+  labs(title = "Zfp42 reporter - TATA-box minP mutated", 
+       subtitle = "bc8 AGAGGGTATATAAT -> AGAGGGGATATAAT" )
+
+
+## Plot effect of highest outlier bc -> Elk1 outlier
+outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "Elk1_5bp_21bp_mCMV_2",] %>% 
+  select(`bc.number`, activity) %>%
+  unique()
+
+ggplot(outlier, aes(x = `bc.number`, y = activity)) +
+  geom_quasirandom() + theme_bw() +
+  scale_x_continuous(breaks = seq(1, 8, by = 1)) +
+  xlab("barcode #") + 
+  labs(title = "Elk1 reporter - bc1 attached to Pax6 reporter")
+
+
+
+## Plot effect of highest outlier bc -> Elk1 outlier
+outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "Tcf7l2_5bp_10bp_hBGm_3",] %>% 
+  select(`bc.number`, activity) %>%
+  unique()
+
+ggplot(outlier, aes(x = `bc.number`, y = activity)) +
+  geom_quasirandom() + theme_bw() +
+  scale_x_continuous(breaks = seq(1, 8, by = 1)) +
+  xlab("barcode #") + 
+  labs(title = "Tcfl1 reporter - bc1 attached to multiple (less active) reporters")
+
+
+
 ## Choose arbitrary cutoff to get rid of most extreme outliers
-bc_df_cDNA_filt <- bc_df_cDNA[bc_df_cDNA$low_outlier > -0.5 & bc_df_cDNA$high_outlier > -2,]
+bc_df_cDNA_filt <- bc_df_cDNA[bc_df_cDNA$low_outlier > -0.3 & bc_df_cDNA$high_outlier > -2,]
 
 ## Recalculate mean and sd
 bc_df_cDNA_filt$mean_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id, 
@@ -1177,6 +1216,18 @@ bc_df_cDNA_filt$sd_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$rep
                               bc_df_cDNA_filt$condition,  FUN =
                                   function(x) sd(x))
 ```
+
+
+
+
+
+## Filter out data using pDNA-insert-seq data
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+
+```
+
+
+
 
 
 ## Add pDNA data
@@ -1304,7 +1355,7 @@ colors <- c("#2D3047", "#1B998B")
 sp1 <- ggscatter(bc_df_rep, x = "rep1", y = "rep2",
    add = "reg.line",
    color = "neg_ctrl",
-   size = 1,
+   size = 0.5,
    add.params = list(color = "blue", fill = "lightgray"), title = "rep1 vs rep2",
    conf.int = TRUE, ylab = "rep2", xlab = "rep1") + 
   stat_cor(method = "pearson", label.x = 1, label.y = 25) + 
@@ -1314,7 +1365,7 @@ sp1 <- ggscatter(bc_df_rep, x = "rep1", y = "rep2",
 sp2 <- ggscatter(bc_df_rep, x = "rep1", y = "rep3",
    add = "reg.line",
    color = "neg_ctrl",
-   size = 1,
+   size = 0.5,
    add.params = list(color = "blue", fill = "lightgray"), title = "rep1 vs rep3",
    conf.int = TRUE, ylab = "rep3", xlab = "rep1") + 
   stat_cor(method = "pearson", label.x = 1, label.y = 25) + 
@@ -1324,7 +1375,7 @@ sp2 <- ggscatter(bc_df_rep, x = "rep1", y = "rep3",
 sp3 <- ggscatter(bc_df_rep, x = "rep3", y = "rep2",
    add = "reg.line",
    color = "neg_ctrl",
-   size = 1,
+   size = 0.5,
    add.params = list(color = "blue", fill = "lightgray"), title = "rep3 vs rep2",
    conf.int = TRUE, ylab = "rep2", xlab = "rep3") + 
   stat_cor(method = "pearson", label.x = 1, label.y = 25) + 
