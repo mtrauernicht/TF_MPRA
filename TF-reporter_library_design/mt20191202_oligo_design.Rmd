@@ -193,10 +193,6 @@ distances <- read.csv2("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/da
 promoters <- read.csv2("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/Promoter.csv", header = T)
 barcodes <- read.csv2("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/Barcode.csv", header = T)
 background <- read.csv2("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/Background.csv", header = T)
-
-# Import motif similarity data
-motif_sim <- read.csv2("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/MotifSimMatrix_Lambert_2018.csv", header = T, row.names = 1)
-motif_annotation <- read.csv2("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/HumanTFs_Lambert_curated.csv", header = T)
 ```
 
 # Analysis
@@ -206,82 +202,82 @@ motif_annotation <- read.csv2("/DATA/usr/m.trauernicht/projects/tf_activity_repo
 ## Selecting motifs for the chosen TFs
 # Visualize 'best' chosen motifs from Lambert et al., 2018 (Cell)
 # Load and prepare the pwms
-stat3 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M05480_1.94d.txt", header = T)
+stat3 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M05480_1.94d.txt", header = T)
 stat3 <- stat3[,-1]
 stat3 <- t(stat3)
-zfx <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M00640_1.94d.txt", header = T)
+zfx <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M00640_1.94d.txt", header = T)
 zfx <- zfx[,-1]
 zfx <- t(zfx)
-esrrb <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M08637_1.94d.txt", header = T)
+esrrb <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M08637_1.94d.txt", header = T)
 esrrb <- esrrb[,-1]
 esrrb <- t(esrrb)
-smad4 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M10290_1.94d.txt", header = T)
+smad4 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M10290_1.94d.txt", header = T)
 smad4 <- smad4[,-1]
 smad4 <- t(smad4)
-klf4 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M08884_1.94d.txt", header = T)
+klf4 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M08884_1.94d.txt", header = T)
 klf4 <- klf4[,-1]
 klf4 <- t(klf4)
-tfcp2l1 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M09235_1.94d.txt", header = T)
+tfcp2l1 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M09235_1.94d.txt", header = T)
 tfcp2l1 <- tfcp2l1[,-1]
 tfcp2l1 <- t(tfcp2l1)
-gbx2 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M05758_1.94d.txt", header = T)
+gbx2 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M05758_1.94d.txt", header = T)
 gbx2 <- gbx2[,-1]
 gbx2 <- t(gbx2)
-zfp42 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M09317_1.94d.txt", header = T)
+zfp42 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M09317_1.94d.txt", header = T)
 zfp42 <- zfp42[,-1]
 zfp42 <- t(zfp42)
-trp53 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M06704_1.94d.txt", header = T)
+trp53 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M06704_1.94d.txt", header = T)
 trp53 <- trp53[,-1]
 trp53 <- t(trp53)
-rara <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M06033_1.94d.txt", header = T)
+rara <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M06033_1.94d.txt", header = T)
 rara <- rara[,-1]
 rara <- t(rara)
-neurog2 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M08951_1.94d.txt", header = T)
+neurog2 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M08951_1.94d.txt", header = T)
 neurog2 <- neurog2[,-1]
 neurog2 <- t(neurog2)
-pax6 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M09045_1.94d.txt", header = T)
+pax6 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M09045_1.94d.txt", header = T)
 pax6 <- pax6[,-1]
 pax6 <- t(pax6)
-rbpj <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M00862_1.94d.txt", header = T)
+rbpj <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M00862_1.94d.txt", header = T)
 rbpj <- rbpj[,-1]
 rbpj <- t(rbpj)
-sp1 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M06128_1.94d.txt", header = T)
+sp1 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M06128_1.94d.txt", header = T)
 sp1 <- sp1[,-1]
 sp1 <- t(sp1)
-nr3c1 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M10263_1.94d.txt", header = T)
+nr3c1 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M10263_1.94d.txt", header = T)
 nr3c1 <- nr3c1[,-1]
 nr3c1 <- t(nr3c1)
-nfe2l2 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M02705_1.94d.txt", header = T)
+nfe2l2 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M02705_1.94d.txt", header = T)
 nfe2l2 <- nfe2l2[,-1]
 nfe2l2 <- t(nfe2l2)
-nfkb1 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M10276_1.94d.txt", header = T)
+nfkb1 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M10276_1.94d.txt", header = T)
 nfkb1 <- nfkb1[,-1]
 nfkb1 <- t(nfkb1)
-creb1 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M10066_1.94d.txt", header = T)
+creb1 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M10066_1.94d.txt", header = T)
 creb1 <- creb1[,-1]
 creb1 <- t(creb1)
-gli1 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M00597_1.94d.txt", header = T)
+gli1 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M00597_1.94d.txt", header = T)
 gli1 <- gli1[,-1]
 gli1 <- t(gli1)
-irf3 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M08827_1.94d.txt", header = T)
+irf3 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M08827_1.94d.txt", header = T)
 irf3 <- irf3[,-1]
 irf3 <- t(irf3)
-irx3 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M03266_2.00.txt", header = T)
+irx3 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M03266_2.00.txt", header = T)
 irx3 <- irx3[,-1]
 irx3 <- t(irx3)
-otx1 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M05974_1.94d.txt", header = T)
+otx1 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M05974_1.94d.txt", header = T)
 otx1 <- otx1[,-1]
 otx1 <- t(otx1)
-elk1 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M05658_1.94d.txt", header = T)
+elk1 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M05658_1.94d.txt", header = T)
 elk1 <- elk1[,-1]
 elk1 <- t(elk1)
-tcf7l2 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M02162_1.94d.txt", header = T)
+tcf7l2 <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M02162_1.94d.txt", header = T)
 tcf7l2 <- tcf7l2[,-1]
 tcf7l2 <- t(tcf7l2)
-homez <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M05805_1.94d.txt", header = T)
+homez <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M05805_1.94d.txt", header = T)
 homez <- homez[,-1]
 homez <- t(homez)
-nfya <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/lambert_2018/PWMs/M06672_1.94d.txt", header = T)
+nfya <- read.table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/lambert_2018/PWMs/M06672_1.94d.txt", header = T)
 nfya <- nfya[,-1]
 nfya <- t(nfya)
 
@@ -296,32 +292,6 @@ names(seqlogos) <- c("Stat3", "Zfx", "Esrrb", "Smad4", "Klf4", "Tfcp2l1", "Gbx2"
 # Create sequence plot of all pwms
 ggseqlogo(seqlogos, ncol = 4) + theme_bw()+ theme(strip.background =element_rect(fill="#E6A08A"))
 
-
-
-# Compare motifs in a stack plot
-
-
-
-
-
-
-
-# Check similarity between chosen motifs
-motif_sim_short <- motif_sim[,1:1402]
-# Not found in sim matrix: M00640_1.94d, M06033_1.94d, M02705_1.94d, M00597_1.94d, M10263_1.94d
-motif_sim_sel <- motif_sim_short %>% dplyr::select(M05480_1.94d, M08637_1.94d, M08884_1.94d,
-                                                   M05758_1.94d, M06704_1.94d, M09235_1.94d,
-                                                   M00862_1.94d, M06128_1.94d, M09317_1.94d,
-                                                   M08827_1.94d, M05974_1.94d, M08951_1.94d,
-                                                   M05658_1.94d, M02162_1.94d, M05805_1.94d,
-                                                   M06672_1.94d, M09045_1.94d, M10290_1.94d,
-                                                   M10276_1.94d, M10066_1.94d)
-# Change column names to TFs
-names(motif_sim_sel) <- motif_annotation$motif_ID[match(names(motif_sim_sel), motif_annotation$CIS.BP_ID)]
-
-# Change row names to TFs
-# rownames(motif_sim_sel) <- motif_annotation$motif_ID[match(rownames(motif_sim_sel), motif_annotation$CIS.BP_ID)]
- 
 ```
 
 # Create DNA barcodes
@@ -331,7 +301,7 @@ names(motif_sim_sel) <- motif_annotation$motif_ID[match(names(motif_sim_sel), mo
 #                            filter.gc = T, filter.self_complementary = T, cores = 24)
 
 # write.csv2(barc, file = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/barcodes.csv")
-barc <- read.csv2("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/barcodes.csv", row.names = 1)
+barc <- read.csv2("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/barcodes.csv", row.names = 1)
 colnames(barc) <- "barcode"
 
 # Filter out ATGs
@@ -451,7 +421,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 ```{r build tf motif matrices db2: random_promoter, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # load motif Metadata --> PWM feature matrix
 tib_pwm_random_promoter  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
-                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/random_promoter/fimo.tsv',
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/random_promoter/fimo.tsv',
                                         db            = 2)
 ```
 
@@ -544,7 +514,7 @@ motif_primer_1_space$seq.text <- paste(motif_primer_1_space$primer,
 # Write fasta file to run on FIMO script
 motif_primer_1_space_export <- motif_primer_1_space
 motif_primer_1_space_export <- motif_primer_1_space %>% select (seq.name, seq.text)
-# dat2fasta(motif_primer_1_space_export, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/primer_1_2.fasta")     
+# dat2fasta(motif_primer_1_space_export, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/primer_1_2.fasta")     
 ```
 
 
@@ -552,8 +522,8 @@ motif_primer_1_space_export <- motif_primer_1_space %>% select (seq.name, seq.te
 ## Run FIMO script again 
 ```{bash run fimo db2_2, eval = FALSE}
 # motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
-# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/primer_1_2
-# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/primer_1_2.fasta
+# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/primer_1_2
+# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/primer_1_2.fasta
 
 # nice -n 19 fimo --no-qvalue --thresh 1e-4 --verbosity 1 --o $odir $motfn $query 
 ```
@@ -566,7 +536,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 ```{r build tf motif matrices db2: primer_1, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # load motif Metadata --> PWM feature matrix
 tib_pwm_primer_1  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
-                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/primer_1_2/fimo.tsv',
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/primer_1_2/fimo.tsv',
                                         db            = 2)
 ```
 
@@ -652,7 +622,7 @@ motif_primer_2_space$seq.text <- paste(motif_primer_2_space$primer)
 # Write fasta file to run on FIMO script
 motif_primer_2_space_export <- motif_primer_2_space
 motif_primer_2_space_export <- motif_primer_2_space[,c(-1:-2)]
-# dat2fasta(motif_primer_2_space_export, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/primer_2.fasta")     
+# dat2fasta(motif_primer_2_space_export, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/primer_2.fasta")     
 ```
 
 
@@ -660,8 +630,8 @@ motif_primer_2_space_export <- motif_primer_2_space[,c(-1:-2)]
 ## Run FIMO script again 
 ```{bash run fimo db2_3, eval = FALSE}
 # motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
-# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/primer_2
-# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/primer_2.fasta
+# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/primer_2
+# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/primer_2.fasta
 
 # nice -n 19 fimo --no-qvalue --thresh 1e-4 --verbosity 1 --o $odir $motfn $query 
 ```
@@ -674,7 +644,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 ```{r build tf motif matrices db2: primer_2, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # load motif Metadata --> PWM feature matrix
 tib_pwm_primer_2  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
-                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/primer_2/fimo.tsv',
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/primer_2/fimo.tsv',
                                         db            = 2)
 ```
 
@@ -775,15 +745,15 @@ motif_5bp$seq.text <- paste(substrRight(motif_5bp$motif1, 4),
 
 # Write fasta file to run on FIMO script
 motif_5bp_export <- motif_5bp[,c(-1:-5)]
-# dat2fasta(motif_5bp_export, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/5bp_spacer_2.fasta")       
+# dat2fasta(motif_5bp_export, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/5bp_spacer_2.fasta")       
 ```
 
 
 ## Run FIMO script
 ```{bash run fimo db2_4, eval = FALSE}
 # motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
-# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/space_1_3
-# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/5bp_spacer_2.fasta
+# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/space_1_3
+# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/5bp_spacer_2.fasta
 
 # nice -n 19 fimo --no-qvalue --thresh 1e-4 --verbosity 1 --o $odir $motfn $query 
 ```
@@ -796,7 +766,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 ```{r build tf motif matrices db2: 5bp_spacer, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # load motif Metadata --> PWM feature matrix
 tib_pwm_5bp_spacer  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
-                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/space_1_3/fimo.tsv',
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/space_1_3/fimo.tsv',
                                         db            = 2)
 ```
 
@@ -913,7 +883,7 @@ motif_10bp_space$seq.text <- paste(substrRight(motif_10bp_space$motif1, 4),
 # Write fasta file to run on FIMO script
 motif_10bp_space_export <- motif_10bp_space
 motif_10bp_space_export <- motif_10bp_space_export[,c(-1:-5)]
-# dat2fasta(motif_10bp_space_export, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/10bp_spacer_2_2.fasta")     
+# dat2fasta(motif_10bp_space_export, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/10bp_spacer_2_2.fasta")     
 ```
 
 
@@ -921,8 +891,8 @@ motif_10bp_space_export <- motif_10bp_space_export[,c(-1:-5)]
 ## Run FIMO script again 
 ```{bash run fimo db2_5, eval = FALSE}
 # motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
-# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/space_2_3
-# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/10bp_spacer_2_2.fasta
+# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/space_2_3
+# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/10bp_spacer_2_2.fasta
 
 # nice -n 19 fimo --no-qvalue --thresh 1e-4 --verbosity 1 --o $odir $motfn $query 
 ```
@@ -935,7 +905,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 ```{r build tf motif matrices db2: 10bp_spacer, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # load motif Metadata --> PWM feature matrix
 tib_pwm_10bp_spacer  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
-                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/space_2_3/fimo.tsv',
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/space_2_3/fimo.tsv',
                                         db            = 2)
 ```
 
@@ -1051,7 +1021,7 @@ motif_promoter_space$seq.text <- paste(substrRight(motif_promoter_space$Motif, 4
 # Write fasta file to run on FIMO script
 motif_promoter_space_export <- motif_promoter_space
 motif_promoter_space_export <- motif_promoter_space_export[,c(-1:-5)]
-# dat2fasta(motif_promoter_space_export, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/promoter_spacer_1_3.fasta")     
+# dat2fasta(motif_promoter_space_export, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/promoter_spacer_1_3.fasta")     
 ```
 
 
@@ -1059,8 +1029,8 @@ motif_promoter_space_export <- motif_promoter_space_export[,c(-1:-5)]
 ## Run FIMO script again 
 ```{bash run fimo db2_6, eval = FALSE}
 # motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
-# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/promoter_space_1_5
-# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/promoter_spacer_1_3.fasta
+# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/promoter_space_1_5
+# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/promoter_spacer_1_3.fasta
 
 # nice -n 19 fimo --no-qvalue --thresh 1e-4 --verbosity 1 --o $odir $motfn $query 
 ```
@@ -1073,7 +1043,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 ```{r build tf motif matrices db2: promoter_spacer, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # load motif Metadata --> PWM feature matrix
 tib_pwm_promoter_spacer  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
-                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/promoter_space_1_5/fimo.tsv',
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/promoter_space_1_5/fimo.tsv',
                                         db            = 2)
 ```
 
@@ -1162,7 +1132,7 @@ motif_promoter_space$seq.text <- paste(substrRight(motif_promoter_space$Motif, 4
 # Write fasta file to run on FIMO script
 motif_promoter_space_export <- motif_promoter_space
 motif_promoter_space_export <- motif_promoter_space_export[,c(-1:-5)]
-# dat2fasta(motif_promoter_space_export, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/promoter_spacer_2_2.fasta")     
+# dat2fasta(motif_promoter_space_export, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/promoter_spacer_2_2.fasta")     
 ```
 
 
@@ -1170,8 +1140,8 @@ motif_promoter_space_export <- motif_promoter_space_export[,c(-1:-5)]
 ## Run FIMO script again 
 ```{bash run fimo db2_7, eval = FALSE}
 # motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
-# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/promoter_space_2_5
-# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/promoter_spacer_2_2.fasta
+# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/promoter_space_2_5
+# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/promoter_spacer_2_2.fasta
 
 # nice -n 19 fimo --no-qvalue --thresh 1e-4 --verbosity 1 --o $odir $motfn $query 
 ```
@@ -1184,7 +1154,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 ```{r build tf motif matrices db2: promoter_spacer_2, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # load motif Metadata --> PWM feature matrix
 tib_pwm_promoter_spacer_2  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
-                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/promoter_space_2_5/fimo.tsv',
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/promoter_space_2_5/fimo.tsv',
                                         db            = 2)
 ```
 
@@ -1329,7 +1299,7 @@ random_motif_2$seq.text <- paste(substrRight(random_motif_2$spacing, 4),
 
 # Write fasta file to run on FIMO script
 random_motif_2_exp <- random_motif_2 %>% select(seq.name, seq.text)
-# dat2fasta(random_motif_2_exp, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/random_motif.fasta")     
+# dat2fasta(random_motif_2_exp, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/random_motif.fasta")     
 ```
 
 
@@ -1337,8 +1307,8 @@ random_motif_2_exp <- random_motif_2 %>% select(seq.name, seq.text)
 ## Run FIMO script again 
 ```{bash run fimo db2_8, eval = FALSE}
 # motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
-# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/random_motif
-# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/random_motif.fasta
+# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/random_motif
+# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/random_motif.fasta
 
 # nice -n 19 fimo --no-qvalue --thresh 1e-4 --verbosity 1 --o $odir $motfn $query 
 ```
@@ -1351,7 +1321,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 ```{r build tf motif matrices db2: rd_motif, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # load motif Metadata --> PWM feature matrix
 tib_pwm_random_motif  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
-                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/random_motif/fimo.tsv',
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/random_motif/fimo.tsv',
                                         db            = 2)
 ```
 
@@ -1512,7 +1482,7 @@ tf.df <- rbind(tf.df, pgk)
 
 # Export pgk for adding the control to different libraries
 filename <- SetFileName("_pgk", "mt")
-setwd("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/")
+setwd("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/")
 write.csv(pgk, file = paste(filename,".csv", sep = ""), row.names = F)
 ```
 
@@ -1851,7 +1821,7 @@ tf.df <- rbind(tf.df, klf2)
 
 # Export klf enhancers for adding the control to different libraries
 filename <- SetFileName("_klf2", "mt")
-setwd("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/")
+setwd("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/")
 write.csv(klf2, file = paste(filename,".csv", sep = ""), row.names = F)
 ```
 
@@ -1886,7 +1856,7 @@ tf.df.check$seq.text <- paste(tf.df.check$Primer1_seq,
 tf.df.check$seq.text[tf.df.check$TF == "ctrl"] <- tf.df.check$Promoter_sequence[tf.df.check$TF == "ctrl"]
 tf.df.check <- tf.df.check %>% select(seq.name, seq.text)
 tf.df.check <- unique(tf.df.check)
-# dat2fasta(tf.df.check, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/tf_check_2.fasta")     
+# dat2fasta(tf.df.check, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/tf_check_2.fasta")     
 ```
 
 
@@ -1894,8 +1864,8 @@ tf.df.check <- unique(tf.df.check)
 ## Run FIMO script again 
 ```{bash run fimo db2_9, eval = FALSE}
 # motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
-# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/tf_check_6
-# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/tf_check_2.fasta
+# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/tf_check_6
+# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/tf_check_2.fasta
 
 # nice -n 19 fimo --no-qvalue --thresh 1e-4 --verbosity 1 --o $odir $motfn $query 
 ```
@@ -1908,7 +1878,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 ```{r build tf motif matrices db2: tf_check, out.width= "100%", fig.align= "center", echo=FALSE}
 # load motif Metadata --> PWM feature matrix
 tib_pwm_tf_check  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
-                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/tf_check_6/fimo.tsv',
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/tf_check_6/fimo.tsv',
                                         db            = 2)
 ```
 
@@ -2028,18 +1998,18 @@ print(p)
 # Compare our binding specificity to the ones used in O'Connell et al. 2016 (TF-seq)
 ```{r out.width= "100%", fig.align= "center", echo=FALSE}
 # Import synthesized sequences from TF-seq paper
-tf_seq_oligos <- read.csv2("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/RegulatoryElements_OConnell2016.csv", header = T)
+tf_seq_oligos <- read.csv2("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/RegulatoryElements_OConnell2016.csv", header = T)
 tf_seq_oligos <- tf_seq_oligos %>% select(Transcription.Factor, Synthesis.sequence)
 tf_seq_oligos <- tf_seq_oligos[c(-58,-59),]
 names(tf_seq_oligos) <- c("seq.name","seq.text")
-# dat2fasta(tf_seq_oligos, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/tf_seq.fasta")
+# dat2fasta(tf_seq_oligos, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/tf_seq.fasta")
 ```
 
 ## Run FIMO script again 
 ```{bash run fimo db2_10, eval = FALSE}
 # motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
-# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/tf_seq
-# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/tf_seq.fasta
+# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/tf_seq
+# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/tf_seq.fasta
 
 # nice -n 19 fimo --no-qvalue --thresh 1e-4 --verbosity 1 --o $odir $motfn $query 
 ```
@@ -2052,7 +2022,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 ```{r build tf motif matrices db2: tf_seq, out.width= "100%", fig.align= "center", echo=FALSE}
 # load motif Metadata --> PWM feature matrix
 tib_pwm_tf_seq  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
-                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/tf_seq/fimo.tsv',
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/tf_seq/fimo.tsv',
                                         db            = 2)
 ```
 
@@ -2292,7 +2262,7 @@ tf.df_davis$seq.text <- paste(tf.df_davis$Primer1_seq,
                     tf.df_davis$Distance_seq, sep = "")
 tf.df_davis <- tf.df_davis %>% select(seq.name, seq.text)
 tf.df_davis <- unique(tf.df_davis)
-# dat2fasta(tf.df_davis, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/tf_bg_davis.fasta")     
+# dat2fasta(tf.df_davis, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/tf_bg_davis.fasta")     
 ```
 
 
@@ -2300,8 +2270,8 @@ tf.df_davis <- unique(tf.df_davis)
 ## Run FIMO script again 
 ```{bash run fimo db2_11, eval = FALSE}
 # motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
-# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/tf_bg_davis_3
-# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/tf_bg_davis.fasta
+# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/tf_bg_davis_3
+# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/tf_bg_davis.fasta
 
 # nice -n 19 fimo --no-qvalue --thresh 1e-4 --verbosity 1 --o $odir $motfn $query 
 ```
@@ -2314,7 +2284,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 ```{r build tf motif matrices db2: tf_bg_davis, out.width= "100%", fig.align= "center", echo=FALSE}
 # load motif Metadata --> PWM feature matrix
 tib_pwm_tf_bg_davis  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
-                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/tf_bg_davis_3/fimo.tsv',
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/tf_bg_davis_3/fimo.tsv',
                                         db            = 2)
 ```
 
@@ -2406,15 +2376,15 @@ barcode_selection <- barcode_selection[barcode_selection$barc %in% barcode_list,
 # Write fasta file to run on FIMO script
 barcode_selection_export <- barcode_selection
 barcode_selection_export <- barcode_selection_export[,c(-1:-4)]
-# dat2fasta(barcode_selection_export, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/barcodes.fasta") 
+# dat2fasta(barcode_selection_export, outfile = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/barcodes.fasta") 
 ```
 
 
 ## Run FIMO script again 
 ```{bash run fimo db2_12, eval = FALSE}
 # motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
-# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/barcodes
-# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/barcodes.fasta
+# odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/barcodes
+# query=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/barcodes.fasta
 
 # nice -n 19 fimo --no-qvalue --thresh 1e-4 --verbosity 1 --o $odir $motfn $query 
 ```
@@ -2427,7 +2397,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 ```{r build tf motif matrices db2: barcodes, out.width= "100%", fig.align= "center", echo=FALSE}
 # load motif Metadata --> PWM feature matrix
 tib_pwm_barcodes  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
-                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/fimo/barcodes/fimo.tsv',
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/barcodes/fimo.tsv',
                                         db            = 2)
 ```
 
@@ -2468,7 +2438,7 @@ barc_list <- barc_list$barc
 filename <- SetFileName("_barcodes_validated", "mt")
 
 # Write csv file
-setwd("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/")
+setwd("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/")
 write.csv(barc_list, file = paste(filename,".csv", sep = ""), row.names = F)
 ```
 
@@ -2589,15 +2559,15 @@ tf.df.export <- tf.df.export %>% select(seq.name, seq.text)
 filename <- SetFileName("_oligo_pool", "mt")
 
 # Write csv file
-setwd("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/")
+setwd("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/")
 write.csv(tf.df.export, file = paste(filename,".csv", sep = ""), row.names = F)
 
 # Write fasta file
-setwd("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/")
+setwd("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/")
 dat2fasta(tf.df.export, outfile = paste(filename,".fasta", sep = ""))  
 
 # Write .csv file for tf-array
-setwd("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/output/")
+setwd("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/")
 filename <- SetFileName("_tf-array", "mt")
 write.csv(tf.df.long.export, file = paste(filename,".csv", sep = ""), row.names = F)
 ```
