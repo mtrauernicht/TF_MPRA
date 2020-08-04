@@ -22,7 +22,7 @@ output:
 
 ## Description of Data
 How to make a good rendering table: 
-```{r table1, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+```{r table1, echo=FALSE, message=FALSE, warnings=FALSE, results='asis', message = FALSE}
 tabl <- "
 | column1	|	column2	|	column3	|	
 |----|----|----|
@@ -34,7 +34,7 @@ cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
 
 # Data processing
 ## Path, Libraries, Parameters and Useful Functions
-```{r setup}
+```{r setup, message = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 StartTime <-Sys.time()
 
@@ -933,12 +933,26 @@ ggplot(data = pDNA, aes(x = "pDNA counts per barcode", y = pDNA)) +
   theme(text = element_text(size = 12))
 
 
-
 # Which samples are not represented in pDNA?
 ## Check if there's a specific TF
 pDNA <- bc_df %>% select(pDNA_1, pDNA_2, barcode, TF) 
 pDNA$pDNA <- rowMeans(pDNA %>% select(pDNA_1, pDNA_2)) 
 pDNA <- pDNA %>% select(barcode, pDNA, TF)
+
+# Is Trp53 (a very repetitive and long oligo) underrepresented in the library?
+pDNA2 <- pDNA
+pDNA2$trp[pDNA2$TF == "Trp53"] <- "== Trp53"
+pDNA2$trp[pDNA2$TF != "Trp53"] <- "!= Trp53"
+
+ggplot(data = pDNA2, aes(x = trp, y = pDNA)) + 
+  geom_quasirandom() + 
+  labs(title = "pDNA barcode count distribution", subtitle = "Trp53 (complex oligo) vs. no Trp53") +
+  theme_classic() + geom_hline(yintercept = 100, linetype = "dashed", color = "#1B998B", size = 1.5) +
+  theme(axis.text.x = element_text(size = 12), 
+          axis.text.y = element_text(size = 12)) +
+  ylab("") + xlab("") +
+  theme(text = element_text(size = 12))
+
 TF_count <- data.frame(table(pDNA$TF))
 names(TF_count) <- c("TF", "TF_count")
 pDNA <- merge(pDNA, TF_count, all = T)
@@ -1104,11 +1118,13 @@ p + geom_line(aes(y = total_mean, group = total_mean), linetype = "dashed")
 ```{r normalization, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Normalize data using pDNA data
 
-## First normalize barcode counts to sequencing depth (rpm)
+# First normalize barcode counts by sequencing depth
+# Adding a pseudocount of 1 to compute low activity values for not expressed barcodes
 for (i in unique(bc_df$condition)) {
   lib_size <- sum(bc_df$bc_counts[bc_df$condition == i]) / 1e6
-  bc_df$bc_counts_rpm[bc_df$condition == i]<- bc_df$bc_counts[bc_df$condition == i] / lib_size
+  bc_df$bc_counts_rpm[bc_df$condition == i]<- bc_df$bc_counts[bc_df$condition == i] / lib_size + 1
 }
+
 
 
 ## Compute activity by dividing through pDNA data
@@ -1133,9 +1149,7 @@ for (i in unique(bc_df$condition)) {
     if (percent %% 1 == 0) {
     print(progress)
   }
-}
-
-bc_df$activity[is.na(bc_df$activity)] <- 0
+ }
 ```
 
 
@@ -1222,8 +1236,49 @@ bc_df_cDNA_filt$sd_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$rep
 
 
 ## Filter out data using pDNA-insert-seq data
+## pDNA data seems ambigous - data doesn't match sometimes - exclude for now
 ```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
-
+# # Remove barcodes with multiple inserts attached
+# bc_exclude <- read.csv("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/pDNA_seq/bc_exclude.csv") %>% select(-X) %>% setnames("x", "barcode")
+# exclude <- bc_df_cDNA_filt[!bc_df_cDNA_filt$barcode %in% bc_exclude$barcode,]
+# 
+# # Reassign barcodes with wrong inserts attached
+# bc_replace <- read.csv("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/pDNA_seq/bc_replace.csv") %>% select(-X, -bc.match)
+# change.df <- exclude[exclude$barcode %in% bc_replace$barcode,]
+# exclude <- exclude[!exclude$barcode %in% bc_replace$barcode,]
+# 
+# change.df$bc.number <- 9
+# change.df <- merge(change.df, bc_replace)
+# e <- c("e11", "e93", "e97")
+# change.df.e <- change.df[grep(paste(e, collapse = "|"), change.df$insert.match),]
+# change.df <- change.df[-grep(paste(e, collapse = "|"), change.df$insert.match),]
+# change.df <- change.df %>%
+#   mutate(TF = gsub("(^.*?)_.*", "\\1", insert.match),
+#          promoter = gsub(".*(minP|mCMV|hBGm|Random)_.*", "\\1", insert.match),
+#          distance = gsub(".*_d-([0-9]{1,2}bp)_.*", "\\1", insert.match),
+#          spacing = gsub(".*_s-([0-9]{1,2}bp)_.*", "\\1", insert.match),
+#          background = gsub(".*([0-9]{1}$)", "\\1", insert.match),
+#          reporter_id = paste(TF, spacing, distance, promoter, background, sep = "_"))
+# change.df <- change.df %>% select(-insert.match)
+# 
+# change.df.e <- change.df.e %>%
+#   mutate(TF = gsub("(.*?)_(minP|mCMV|hBGm|Random)$", "\\1", insert.match),
+#          promoter = gsub(".*(minP|mCMV|hBGm|Random)", "\\1", insert.match),
+#          spacing = "",
+#          distance = "",
+#          background = "",
+#          reporter_id = paste(TF, promoter, sep ="_"))
+# change.df.e <- change.df.e %>% select(-insert.match)
+# 
+# 
+# exclude$reporter_id <- gsub("___", "_", exclude$reporter_id)
+# exclude$reporter_id <- gsub("_0", "", exclude$reporter_id)
+# 
+# 
+# 
+# exclude <- rbind(exclude, change.df, change.df.e)
+# 
+# bc_df_cDNA_filt <- exclude
 ```
 
 
@@ -1266,9 +1321,18 @@ bc_df_cDNA_filt <- bc_df_cDNA_filt[!is.na(bc_df_cDNA_filt$condition),]
 ```
 
 
+## Scale data to 1 for negative controls
+```{r}
+mean_neg_ctrl <- mean(bc_df_cDNA_filt$activity[bc_df_cDNA_filt$neg_ctrls == "Yes"])
+bc_df_cDNA_filt$activity <- bc_df_cDNA_filt$activity / mean_neg_ctrl
+bc_df_cDNA_filt$mean_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id, 
+                                bc_df_cDNA_filt$condition, FUN =
+                                  function(x) mean(x))
+```
 
 
-## Recalculate correlations
+
+## Calculate correlations between technical replicates
 ```{r correlations_2, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 ## Combine replicates in 8 different columns
 bc_df_rep <- bc_df_cDNA_filt[bc_df_cDNA_filt$hPGK == "No" & bc_df_cDNA_filt$native_enhancer == "No" &
@@ -1283,6 +1347,7 @@ rep6 <- bc_df_rep[bc_df_rep$`bc.number` == 6,] %>% select(-`bc.number`)
 rep7 <- bc_df_rep[bc_df_rep$`bc.number` == 7,] %>% select(-`bc.number`)
 rep8 <- bc_df_rep[bc_df_rep$`bc.number` == 8,] %>% select(-`bc.number`)
 
+
 setnames(rep1, "activity", "bc1")
 setnames(rep2, "activity", "bc2")
 setnames(rep3, "activity", "bc3")
@@ -1291,6 +1356,7 @@ setnames(rep5, "activity", "bc5")
 setnames(rep6, "activity", "bc6")
 setnames(rep7, "activity", "bc7")
 setnames(rep8, "activity", "bc8")
+
 
 bc_df_rep <- merge(rep1, rep2, all = T)
 bc_df_rep <- bc_df_rep[rowSums(is.na(bc_df_rep)) != ncol(bc_df_rep), ]
@@ -1358,8 +1424,9 @@ sp1 <- ggscatter(bc_df_rep, x = "rep1", y = "rep2",
    size = 0.5,
    add.params = list(color = "blue", fill = "lightgray"), title = "rep1 vs rep2",
    conf.int = TRUE, ylab = "rep2", xlab = "rep1") + 
-  stat_cor(method = "pearson", label.x = 1, label.y = 25) + 
+  stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
   geom_abline(linetype = "dashed") +
+  xlim(0,10) + ylim(0,10) +
   scale_color_manual(values = colors)
 
 sp2 <- ggscatter(bc_df_rep, x = "rep1", y = "rep3",
@@ -1368,8 +1435,9 @@ sp2 <- ggscatter(bc_df_rep, x = "rep1", y = "rep3",
    size = 0.5,
    add.params = list(color = "blue", fill = "lightgray"), title = "rep1 vs rep3",
    conf.int = TRUE, ylab = "rep3", xlab = "rep1") + 
-  stat_cor(method = "pearson", label.x = 1, label.y = 25) + 
+  stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
   geom_abline(linetype = "dashed")+
+  xlim(0,10) + ylim(0,10) +
   scale_color_manual(values = colors)
 
 sp3 <- ggscatter(bc_df_rep, x = "rep3", y = "rep2",
@@ -1378,8 +1446,9 @@ sp3 <- ggscatter(bc_df_rep, x = "rep3", y = "rep2",
    size = 0.5,
    add.params = list(color = "blue", fill = "lightgray"), title = "rep3 vs rep2",
    conf.int = TRUE, ylab = "rep2", xlab = "rep3") + 
-  stat_cor(method = "pearson", label.x = 1, label.y = 25) + 
+  stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
   geom_abline(linetype = "dashed")+
+  xlim(0,10) + ylim(0,10) +
   scale_color_manual(values = colors)
 
 
