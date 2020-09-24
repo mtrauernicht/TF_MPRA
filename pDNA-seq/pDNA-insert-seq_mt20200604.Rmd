@@ -476,11 +476,14 @@ ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
   theme(legend.position = "none")
 
 
-ggplot(pDNA_seq_insert, aes(x=number, color=match)) +
-  geom_histogram(fill="white", position="dodge", bins = 500)+
+ggplot(pDNA_seq_insert, aes(x=number, fill=match)) +
+  geom_histogram(position="dodge", bins = 50)+
   theme(legend.position="top")+
-  scale_color_grey()+scale_fill_grey() +
-  theme_classic()
+  scale_fill_grey()+
+  labs(title = "Histogram: Read count distribution", 
+       subtitle = "bc attached to correct insert vs. attached to wrong insert")+
+  ylab("counts") + xlab("read counts in pDNA-seq data")+
+  theme_bw()
 ```
 
 # Identify those barcodes that are attached to a wrong insert
@@ -651,12 +654,12 @@ match_insert$lv <- levenshtein.distance(match_insert$pDNA, match_insert$ref)
 
 ## Read distribution vs. TF reporter length
 ggplot(data = match_insert, aes(x = lv)) + 
-  geom_histogram(color = "#2D3047") + xlab("Levenshtein distance") + 
-  labs(title = "Sum pDNA counts vs. at levenshtein distances") + 
+  geom_histogram(color = "#2D3047") + xlab("Levenshtein distance of designed insert vs sequenced insert") + 
+  labs(title = "Trp53 reporters: is the sequence correct in the pDNA?") + 
   theme_classic() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12), 
           axis.text.y = element_text(size = 12)) +
-  ylab("read count")
+  ylab("reporter counts")
 ```
 
 
