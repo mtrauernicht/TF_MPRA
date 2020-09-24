@@ -14,7 +14,7 @@ The designed first library contains:
 
 All TF reporters were designed using FIMO. This way, the spacings were designed to be inactive, while the TF binding sites were ensured to be active.
 
-**Experimental setting:**\
+**Experimental setting stimulation 1:**\
 In a first experiment, the library was transfected into cells using 7 different conditions:
 1. mESC: 2i+LIF
 2. mESC: 2i-LIF
@@ -24,5 +24,22 @@ In a first experiment, the library was transfected into cells using 7 different 
 6. mESC: N2B27 (neural differentiation medium)
 7. NPC
 
+The cells were grown in this condition for 24h after transfection before RNA isolation.
+
+**Experimental setting stimulation 2:**\
+In a first experiment, the library was transfected into cells using 7 different conditions:
+1. mESC: DMSO
+2. mESC: Nutlin-3a
+3. mESC: Dexamethasone
+4. mESC: Retinoic Acid
+5. mESC: Bmp4
+6. mESC: Forskolin
+7. mESC: LPS
+8. mESC: Hydroquinone
+9. mESC: Sonic Hedgehog
+10. mESC: 4-OHT
+
+The cells were grown in this condition for 24h after transfection before RNA isolation.
+
 **Sequencing data analysis:**
-- Raw sequencing data were processed by counting the barcodes and clustering the barcodes using starcode
+- Raw sequencing data were processed by counting the barcodes and clustering the barcodes using starcode (levenshtein distance = 1)
