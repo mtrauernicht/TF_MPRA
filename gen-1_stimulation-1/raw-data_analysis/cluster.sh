@@ -1,0 +1,1 @@
+bartender_single_com -f bartender/bc_LIF_pos_PD_r2_GATCAGAT_S105_conv_barcode.txt -o bartender/LIF_pos_PD_r2_GATCAGAT_S105_clustered-barcodes.txt -d 2

@@ -1,0 +1,46 @@
+##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
+'''
+    Title: BC extraction
+    Date last modified: 2020/04/15
+    Python Version: 3.6.2
+'''
+##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
+
+include:
+    'config.py'
+
+# Rules -----------------------------------------------------------------------
+
+rule all:
+    input:
+        expand('results_e3_s0/{ecn}_barcode_counts.tsv', ecn = ECN)
+
+
+# Extract barcodes from cDNA/pDNA SE fastq files
+rule extract_barcodes_from_fq:
+    input:
+        fq = ECN_DIR + S1
+    output:
+        tsv = 'results_e3_s0/{ecn}_barcodes.tsv'
+    log:
+        'logs/{ecn}_extract_barcodes_from_fq.log'
+    conda:
+        'environment.yaml'
+    script:
+        'mt20200415_bc-counts.py'
+
+# Cluster cDNA/pDNA barcodes with Starcode
+
+rule cluster_ecn_barcodes:
+    input:
+        starcode_in = 'results_e3_s0/{ecn}_barcodes.tsv'
+    output:
+        ofn = 'results_e3_s0/{ecn}_barcode_counts.tsv',
+    log:
+        'logs/{ecn}_cluster_ecn_barcodes.log'
+    conda:
+        'environment.yaml'
+    threads: 12
+    shell:
+        'starcode --threads {threads} --print-clusters -i {input.starcode_in} --dist 0 | \
+        sort -k1,1 > {output.ofn}'

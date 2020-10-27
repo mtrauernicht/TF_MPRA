@@ -1,0 +1,2248 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<!-- Copyright (c) 2017 Matthew P. Davis -->
+<head>
+<meta name="keywords" content="deduplication of sequence fragments">
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<style type="text/css">
+.slartibartfast { background-color: pink; text-decoration: blink; }
+
+   /* open base2 */
+/* start aephea.base.css */
+
+   body
+      {  text-align: justify;
+         margin-left: 0%;
+         margin-right: 0%;
+      }
+
+   a:link            { text-decoration: none; }
+   a:active          { text-decoration: none; }
+   a:visited         { text-decoration: none; }
+
+   a:link            { color: #1111aa; }
+   a:active          { color: #1111aa; }
+   a:visited         { color: #111166; }
+   a.local:link      { color: #11aa11; }
+   a.local:active    { color: #11aa11; }
+   a.local:visited   { color: #116611; }
+   a.intern:link     { color: #1111aa; }
+   a.intern:active   { color: #1111aa; }
+   a.intern:visited  { color: #111166; }
+   a.extern:link     { color: #aa1111; }
+   a.extern:active   { color: #aa1111; }
+   a.extern:visited  { color: #661111; }
+   a.quiet:link      { color: black; }
+   a.quiet:active    { color: black; }
+   a.quiet:visited   { color: black; }
+
+   p.asd_par         {  margin-bottom:0em }
+   p.asd_cpar        {  margin-bottom:0em }
+   span.asd_cpar_caption  {  font-weight: bold; display: block }
+
+   p.asd_car         {  margin-top:0em; margin-bottom:0em }
+   p.asd_ccar        {  margin-top:0em; margin-bottom:0em }
+   span.asd_ccar_caption  {  font-weight: bold; display: block }
+
+   div.verbatim
+      {  font-family: monospace;
+         margin-top: 1em;
+         margin-bottom: 1em;
+         font-size: 10pt;
+         margin-left: 2em;
+         white-space: pre;
+      }
+
+   div.indent
+      {  margin-left: 8%;
+         margin-right: 0%;
+      }
+
+   .right   { text-align: right; }
+   .left    { text-align: left; }
+   .nowrap  { white-space: nowrap; }
+
+   .item_leader 
+      {  position: relative;
+         margin-left: 8%;
+      }
+   
+   .item_compact     {  position: absolute; vertical-align: baseline; }
+   .item_cascade     {  position: relative; }
+
+   .item_leftalign   {  text-align: left; }
+
+   .item_rightalign
+      {  width: 2em;
+         text-align: right;
+      }
+   .item_compact .item_rightalign
+      {  position: absolute;
+         width: 52em;
+         right: -2em;
+         text-align: right;
+      }
+
+   .item_text
+      {  position: relative;
+         margin-left: 3em;
+      }  
+
+   .smallcaps { font-size: smaller; text-transform: uppercase }
+   .underline { text-decoration: underline }
+
+   acronym.ucase { font-size: smaller; text-transform: uppercase }
+   abbr.ucase { font-size: smaller; text-transform: uppercase }
+
+/* end aephea.base.css */
+/* close base2 */
+/* open simpledocument2 */
+/* start aephea.asd.css */
+
+   body {
+      margin:0px;
+      padding:0px;
+      border: 0px;
+   }
+
+
+   .sec_leader
+      {  margin-top: 1em;
+         margin-bottom: 0em;
+         position: relative;
+         right: 0px;
+         left: 0px;
+         top: 0px;
+      }
+
+   .sec_title
+      {  color: black;
+         position: relative;
+         margin-bottom: 0px;
+         margin-top: 0px;
+         margin-right: 5em;
+         margin-left: 5em;
+         text-align: center
+      }
+
+   .sec_num
+      {  color: black;
+         position: absolute;
+         right: 0px;
+         text-align: right;
+         width: 5em;
+         top: 0px;
+      }
+
+   .sec_lev1 { font-size: 20px; }
+   .sec_lev2 { font-size: 18px; }
+   .sec_lev3 { font-size: 16px; }
+   .sec_lev4 { font-size: 14px; }
+   .sec_lev5 { font-size: 12px; }
+   .sec_lev6 { font-size: 12px; }
+
+   .toc_toplevel
+      {  margin-top: 1em;
+      }
+
+   .toc_leader
+      {  margin-top: 0em;
+         margin-bottom: 0em;
+         position: relative;
+         right: 0px;
+         left: 0px;
+      }
+
+   .toc_title { position: relative; }
+
+   .toc_num
+      {  position: absolute;
+         text-align: left;
+         top: 0px;
+         left: 0px;
+      }
+
+   .toc_title1 { margin-left: 3em; }
+   .toc_title2 { margin-left: 6em; }
+   .toc_title3 { margin-left: 9em; }
+   .toc_title4 { margin-left: 12em; }
+
+   .toc_num1   { left: 1em; }
+   .toc_num2   { left: 3em; }
+   .toc_num3   { left: 6em; }
+   .toc_num4   { left: 9em; }
+
+   div.box { border:solid; border-width:thin; width:100%; padding:1em}
+   div.flushright { text-align: right }
+
+/* end aephea.asd.css */
+/* close simpledocument2 */
+/* open css_append */
+
+
+      
+      
+      
+
+      body { font-family: "Verdana", "Garamond", "Gill Sans", "Verdana", sans-serif; }
+
+      body
+         {  text-align: justify;
+            font-size: 10pt;
+         }
+
+      .asd_title
+         {  text-align: center;
+            font-size: 40px;
+            margin-top: 4em;
+         }
+
+      .asd_subtitle
+         {  text-align: center;
+            font-size: 25px;
+            margin-top: 1em;
+            margin-bottom: 2em;
+         }
+
+      #asd_leftcolumn {
+         position: fixed;
+         text-align: left;
+width: 300px;
+overflow: auto;
+         left: 0px; top: 0px; bottom: 0px;
+
+         background-color: #CCFFB2;
+         border-right:6px solid DarkBlue;
+   z-index: 138;
+      }
+
+      #asd_document_outer {
+         position: absolute;
+         top: 0px;
+left: 300px;
+         width: 800px;
+         border-right:6px solid #CCFFB2;
+      }
+
+      #asd_document {
+         width: 700px;
+         overflow: visible;
+         margin: 40px auto;
+   z-index: 137;
+      }
+
+      #asd_toc {
+width: 280px;
+margin: 50px auto;
+         background-color: #CCFFB2;
+      }
+
+      .asd_date
+         {  position: absolute;
+            right: 20px;
+            top: 20px;
+         }
+
+      .asd_version
+      {  position: absolute;
+         left: 26px;
+         top: 20px;
+      }
+
+      .recipe {
+         width: 660px;
+         overflow: auto;
+         border: 3px solid red;
+         padding: 1em;
+      }
+
+      .wordlist   {  font-size: 121%; font-style: italic; }
+      .namelist   {  font-size: 121%; }
+      .example    {  margin-left: 2em; }
+      .sec_title  {  text-align: left; margin-left: 0em; }
+      .sec_lev1   {  font-size: 30px; }
+      .sec_lev2   {  font-size: 25px; }
+      .sec_lev3   {  font-size: 20px; }
+      .toc_and_date_TOC a.intern { visibility: hidden; }
+      .sec_num    {  display: auto; }
+      .quote_attribution {  text-align: right; font-size: smaller; }
+      .smallcaps  {  font-size: smaller; text-transform: uppercase }
+
+
+      .verbatim {
+         margin-top: 1em;
+         margin-bottom: 1em;
+         font-size: 10pt;
+         margin-left: 2em;
+         font-family: courier;
+         white-space: pre;
+      }
+
+      acronym.ucase, abbr.ucase {
+         font-size: smaller;
+         text-transform: uppercase;
+         text-decoration: none;
+         border-style: none;
+      }
+
+
+
+      .ul { font-weight: bold }
+
+      .cleartable_byrow
+      {
+         font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+         font-size: 12px;
+         background: #fff;
+         margin-left: 24pt;
+         margin-top: 2ex;
+         border-collapse: collapse;
+         text-align: left;
+      }
+      .cleartable_byrow th
+      {
+         font-size: 14px;
+         font-weight: normal;
+         color: #038;
+         padding: 10px 8px;
+         border-bottom: 2px solid #018;
+         white-space: pre;
+      }
+
+      .cleartable_byrow td
+      {
+         color: #038;
+         padding: 9px 8px 0px 8px;
+      }
+      .xrowminimalist tbody tr:hover td
+      {
+         color: #009;
+      }
+   
+/* close css_append */
+</style>
+<title>SequenceImp - RNA sequence experiment analysis pipeline</title>
+</head>
+<body>
+<div id=asd_leftcolumn>
+<div id=asd_toc>
+<div class="toc_toplevel">
+<a name="thetoc"></a>
+<div class="toc_leader">
+<div class="toc_num toc_num1"><a class="intern" href="#asd_body_start">Start</a>.</div>
+<div class="toc_title toc_title1"><a name="toc_asd_body_start"></a><a class="intern" href="#asd_body_start">&nbsp;</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num1"><a name="toc1">1</a>.</div>
+<div class="toc_title toc_title1"><a name="toc_syn"></a><a class="intern" href="#syn">Synopsis</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num1"><a name="toc2">2</a>.</div>
+<div class="toc_title toc_title1"><a name="toc_gs"></a><a class="intern" href="#gs">Getting started</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num2">2.1.</div>
+<div class="toc_title toc_title2"><a name="toc_dependencies"></a><a class="intern" href="#dependencies">Additional software dependencies</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num2">2.2.</div>
+<div class="toc_title toc_title2"><a name="toc_plopts"></a><a class="intern" href="#plopts">Pipeline options</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num1"><a name="toc3">3</a>.</div>
+<div class="toc_title toc_title1"><a name="toc_stages"></a><a class="intern" href="#stages">Pipeline stages</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num1"><a name="toc4">4</a>.</div>
+<div class="toc_title toc_title1"><a name="toc_inputs"></a><a class="intern" href="#inputs">Pipeline inputs</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num2">4.1.</div>
+<div class="toc_title toc_title2"><a name="toc_config"></a><a class="intern" href="#config">Configuration setup</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num3">4.1.1.</div>
+<div class="toc_title toc_title3"><a name="toc_cfopts"></a><a class="intern" href="#cfopts">Configuration options</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num2">4.2.</div>
+<div class="toc_title toc_title2"><a name="toc_descfile"></a><a class="intern" href="#descfile">Description file</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num3">4.2.1.</div>
+<div class="toc_title toc_title3"><a name="toc_geometries"></a><a class="intern" href="#geometries">Geometries</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num3">4.2.2.</div>
+<div class="toc_title toc_title3"><a name="toc_schemas"></a><a class="intern" href="#schemas">Geometry schemas</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num2">4.3.</div>
+<div class="toc_title toc_title2"><a name="toc_reapersettings"></a><a class="intern" href="#reapersettings"><i>Reaper</i> settings</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num2">4.4.</div>
+<div class="toc_title toc_title2"><a name="toc_annot"></a><a class="intern" href="#annot">Genomic sequence and annotation (v14-197 onwards)</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num3">4.4.1.</div>
+<div class="toc_title toc_title3"><a name="toc_ensseq"></a><a class="intern" href="#ensseq">Ensembl sequence</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num3">4.4.2.</div>
+<div class="toc_title toc_title3"><a name="toc_ensannot"></a><a class="intern" href="#ensannot">Ensembl annotation</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num3">4.4.3.</div>
+<div class="toc_title toc_title3"><a name="toc_miRannot"></a><a class="intern" href="#miRannot">miRBase annotation</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num3">4.4.4.</div>
+<div class="toc_title toc_title3"><a name="toc_repannot"></a><a class="intern" href="#repannot">Repeat sequences</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num1"><a name="toc5">5</a>.</div>
+<div class="toc_title toc_title1"><a name="toc_outputs"></a><a class="intern" href="#outputs">Pipeline outputs</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num2">5.1.</div>
+<div class="toc_title toc_title2"><a name="toc_outputfiles"></a><a class="intern" href="#outputfiles">Files produced</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num2">5.2.</div>
+<div class="toc_title toc_title2"><a name="toc_dataformats"></a><a class="intern" href="#dataformats">Data formats</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num2">5.3.</div>
+<div class="toc_title toc_title2"><a name="toc_qcplots"></a><a class="intern" href="#qcplots">QC plots</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num1"><a name="toc6">6</a>.</div>
+<div class="toc_title toc_title1"><a name="toc_advanced"></a><a class="intern" href="#advanced">Advanced usage</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num2">6.1.</div>
+<div class="toc_title toc_title2"><a name="toc_parallel"></a><a class="intern" href="#parallel">Parallelisation</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num1"><a name="toc7">7</a>.</div>
+<div class="toc_title toc_title1"><a name="toc_paired"></a><a class="intern" href="#paired">Paired-end processing (v12-060 onwards)</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num2">7.1.</div>
+<div class="toc_title toc_title2"><a name="toc_paired_opt"></a><a class="intern" href="#paired_opt">Additional options</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num2">7.2.</div>
+<div class="toc_title toc_title2"><a name="toc_paired_desc"></a><a class="intern" href="#paired_desc">Alterations to the description file</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num2">7.3.</div>
+<div class="toc_title toc_title2"><a name="toc_paired_run"></a><a class="intern" href="#paired_run">Cleaning paired-end files</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num2">7.4.</div>
+<div class="toc_title toc_title2"><a name="toc_paired_plots"></a><a class="intern" href="#paired_plots">Plots</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num2">7.5.</div>
+<div class="toc_title toc_title2"><a name="toc_paired_formats"></a><a class="intern" href="#paired_formats">Additional files produced</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num1"><a name="toc8">8</a>.</div>
+<div class="toc_title toc_title1"><a name="toc_references"></a><a class="intern" href="#references">References</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num1"><a name="toc9">9</a>.</div>
+<div class="toc_title toc_title1"><a name="toc_contact"></a><a class="intern" href="#contact">Contact details</a></div>
+</div>
+<div class="toc_leader">
+<div class="toc_num toc_num1"><a class="intern" href="#asd_body_end">End</a>.</div>
+<div class="toc_title toc_title1"><a name="toc_asd_body_end"></a><a class="intern" href="#asd_body_end">&nbsp;</a></div>
+</div>
+</div>
+</div>
+</div>
+<div id=asd_document_outer>
+<a name="asd_body_start"></a>
+<div id=asd_document>
+<div class="asd_date">March 28, 2017</div>
+<div class="asd_version">imp-17-087
+</div>
+<div class="asd_title">SequenceImp</div>
+<div class="asd_subtitle">RNA sequence experiment analysis pipeline</div>
+
+<a name="syn"></a><div class="sec_leader sec_lev1"><div class="sec_title"><a class="intern" href="#syn">Synopsis</a></div><div class="sec_num"><a class="intern" href="#toc1"><span class="sec_num">1</span></a></div></div>
+<p class="asd_par">
+The <i>SequenceImp</i> pipeline incorporates bioinformatic tools such as <i>Bowtie</i>,
+<i>Reaper</i>, <i>Tally</i> and various R Bioconductor packages
+into a system for analysing high-throughput sequencing
+studies that can generate sequences in a <span class="smallcaps">fastq</span> format. The
+pipeline is a Unix command line application that allows the simultaneous
+analysis of multiple <span class="smallcaps">fastq</span> files through a single command.
+A second annotation pipeline is available that will generate annotaion
+datasets compatible with <i>SequenceImp</i> to compute read/feature overlaps.
+</p>
+
+<a name="gs"></a><div class="sec_leader sec_lev1"><div class="sec_title"><a class="intern" href="#gs">Getting started</a></div><div class="sec_num"><a class="intern" href="#toc2"><span class="sec_num">2</span></a></div></div>
+<p class="asd_par">
+All stages of the pipeline are orchestrated through the <tt>imp_commandline.pl</tt>
+script in the <tt>seqimp/bin/</tt> directory. The script should be initiated from the
+directory within which the user would like to analyse their data. A simple introduction to
+getting started can be accessed by initiating the script with no arguments.
+Further documentation can be found by initiating the script with the <tt>--help</tt>
+option.
+</p>
+<p class="asd_par">Before analysing data for the first time, it is recommended to
+initiate <tt>imp_commandline.pl</tt> with the <tt>--system-check</tt> flag. This will ensure
+that all dependencies are present and accessible. </p>
+<p class="asd_par"><b>NOTE:</b> In the current implementation the <tt>imp_commandline.pl</tt> script should not be
+initiated from within the <tt>bin</tt> directory.</p>
+
+<a name="dependencies"></a><div class="sec_leader sec_lev2"><div class="sec_title"><a class="intern" href="#dependencies">Additional software dependencies</a></div><div class="sec_num"><a class="intern" href="#toc2"><span class="sec_num">2.1</span></a></div></div>
+<p class="asd_par">
+In order to use the <i>SequenceImp</i> pipeline some additional software must be
+installed on the system. All software should be installed in the user's UNIX
+<tt>PATH</tt>.
+</p>
+<div class=" itemize shift12" style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-2ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">Perl</p>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-2ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">bash</p>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-2ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">R and R libraries with dependencies (available from <a class="extern" target="_parent" href="http://www.r-project.org/">http://www.r-project.org/</a>)</p>
+<p class="asd_car">Additional required packages are:</p>
+<div class=" itemize shift12" style="margin-top:0em; margin-left:0em; font-size:100%">
+<div style="position:relative; margin-top:0em"><div class=" item_compact"><div class=" item_leftalign "
+style="">&rarr;</div></div></div>
+<div class=" item_text " style="margin-left:2em">
+<p class="asd_car">R.utils <a class="intern" href="#ref1">[1]</a></p>
+</div>
+<div style="position:relative; margin-top:0em"><div class=" item_compact"><div class=" item_leftalign "
+style="">&rarr;</div></div></div>
+<div class=" item_text " style="margin-left:2em">
+<p class="asd_car">RColorBrewer <a class="intern" href="#ref2">[2]</a></p>
+</div>
+</div>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-2ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">Bioconducor libraries with dependencies (available from <a class="extern" target="_parent" href="http://www.bioconductor.org/">http://www.bioconductor.org/</a>)</p>
+<p class="asd_car">Additional required packages are:</p>
+<div class=" itemize shift12" style="margin-top:0em; margin-left:0em; font-size:100%">
+<div style="position:relative; margin-top:0em"><div class=" item_compact"><div class=" item_leftalign "
+style="">&rarr;</div></div></div>
+<div class=" item_text " style="margin-left:2em">
+<p class="asd_car">GenomicRanges <a class="intern" href="#ref3">[3]</a></p>
+</div>
+<div style="position:relative; margin-top:0em"><div class=" item_compact"><div class=" item_leftalign "
+style="">&rarr;</div></div></div>
+<div class=" item_text " style="margin-left:2em">
+<p class="asd_car">gplots <a class="intern" href="#ref4">[4]</a></p>
+</div>
+<div style="position:relative; margin-top:0em"><div class=" item_compact"><div class=" item_leftalign "
+style="">&rarr;</div></div></div>
+<div class=" item_text " style="margin-left:2em">
+<p class="asd_car">IRanges <a class="intern" href="#ref5">[5]</a></p>
+</div>
+<div style="position:relative; margin-top:0em"><div class=" item_compact"><div class=" item_leftalign "
+style="">&rarr;</div></div></div>
+<div class=" item_text " style="margin-left:2em">
+<p class="asd_car">ShortRead <a class="intern" href="#ref6">[6]</a></p>
+</div>
+</div>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-2ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>Reaper</i></p>
+<p class="asd_car">Available from <a class="extern" target="_parent" href="http://http://www.ebi.ac.uk/research/enright/software/kraken">http://http://www.ebi.ac.uk/research/enright/software/kraken</a></p>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-2ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>Tally</i></p>
+<p class="asd_car">Available from <a class="extern" target="_parent" href="http://http://www.ebi.ac.uk/research/enright/software/kraken">http://http://www.ebi.ac.uk/research/enright/software/kraken</a></p>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-2ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>Bowtie</i> <a class="intern" href="#ref7">[7]</a></p>
+<p class="asd_car">Available from <a class="extern" target="_parent" href="http://bowtie-bio.sourceforge.net/index.shtml">http://bowtie-bio.sourceforge.net/index.shtml</a></p>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-2ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>Samtools</i> <a class="intern" href="#ref8">[8]</a></p>
+<p class="asd_car">Available from <a class="extern" target="_parent" href="http://samtools.sourceforge.net/">http://samtools.sourceforge.net/</a></p>
+</div>
+</div>
+<p class="asd_par">
+Before running the pipeline for the first time it is recommended that you run
+<tt>imp_commandline.pl</tt> with the <tt>--system-check</tt> option to ensure all software is
+installed correctly. It is possible to run certain stages of the pipeline
+without installing all of the software above. For example, <i>Samtools</i> and <i>Bowtie</i>
+are not required until the <i>align</i> step. Prior to running each pipeline step
+<i>SequenceImp</i> will automatically poll the system to check that all of the
+tools that are required to proceed with the step are available.
+</p>
+<p class="asd_par">
+The latter stages of the pipeline will also require annotation files. A second pipeline
+is available to create and format these files, allowing the pipeline to be applicable
+to broad range of species (see <a class="intern" href="#annot">Genomic sequence and annotation (v14-197 onwards)</a>).
+</p>
+<p class="asd_par">
+Although the majority of the software can run with a very low memory footprint,
+the alignment of reads to a genomic reference sequence remains a memory
+bottleneck. As a consequence it is recommended that the <i>align</i> stage of the
+pipeline is conducted on a server with additional computing power.
+</p>
+
+<a name="plopts"></a><div class="sec_leader sec_lev2"><div class="sec_title"><a class="intern" href="#plopts">Pipeline options</a></div><div class="sec_num"><a class="intern" href="#toc2"><span class="sec_num">2.2</span></a></div></div>
+<p class="asd_par">
+These options are passed directly to the <tt>imp_commandline.pl</tt> script.
+</p>
+<div style="margin-top:2em; margin-left:-2em"><p class="asd_par"><span class="ul">Universal</span><br><br>
+The following options are not particular to any of of the stages.
+</p></div>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">--help</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+Display these options along with a description of the variables
+available in the Configuration file.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">--step=&lt;STRING&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Required</b>&nbsp;
+The pipeline step to initiate.
+Can be <tt>organise</tt>, <tt>reaper</tt>, <tt>filter</tt>, <tt>align</tt> or
+<tt>features</tt>. Steps should be processed sequentially.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">--description=&lt;STRING&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Required</b>&nbsp;
+Full name of the file containing <span class="smallcaps">fastq</span>/sample descriptions (see <a class="intern" href="#descfile">Description file</a>).
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">--user-configuration=&lt;STRING&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Semi-required</b>&nbsp;
+A file containing the settings for
+options required for the analysis run. The file name
+should be visible from the current directory (see <a class="intern" href="#config">Configuration setup</a>).
+Either this option or the one below should be supplied.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">--default-configuration=&lt;STRING&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Semi-required</b>&nbsp;
+A default configuration file containing the settings
+for the options required for the analysis run.
+Just the file name should be given without any
+path components as they are within a default directory (see <a class="intern" href="#config">Configuration setup</a>).
+Either this option or the one above should be supplied.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">--config-list</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+List the default configuration files provided with the pipeline.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">--system-check</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+Check that all external programs
+and libraries upon which the
+pipeline relies are installed
+and accessible.
+</p>
+</div>
+</div>
+<div style="margin-top:2em; margin-left:-2em"><p class="asd_par"><span class="ul">organise</span><br><br>
+The following options pertain to the <tt>organise</tt> stage of the pipeline.
+</p></div>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">--dataDir=&lt;STRING&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+The directory containing the data files. The default is <tt>./</tt>.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">--outDir=&lt;STRING&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+The directory where you would like analysis directories to be built. The default is <tt>./</tt>.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">--identifier=&lt;STRING&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+An identifier for the current analysis: The default is <tt>analysis</tt>.
+A process number will be automatically appended to the name and this will be used to create an analysis directory to store all
+of the related files and data (see <a class="intern" href="#outputs">Pipeline outputs</a>).
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">--no-unique=&lt;FLAG&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+If specified the pipeline will not append a process number to the analysis directory identifier when it is created.
+</p>
+</div>
+</div>
+<div style="margin-top:2em; margin-left:-2em"><p class="asd_par"><span class="ul">reaper/filter/align/features</span><br><br>
+The following options pertain to the remaining stages of the pipeline.
+</p></div>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">--analysisDir=&lt;STRING&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Required</b>&nbsp;
+The directory produced by the <tt>organise</tt> step in which the sample directories reside.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">--annotationDir=&lt;STRING&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Required</b>&nbsp;
+A directory containing species annotation data is required for the <tt>align</tt> and <tt>features</tt> steps only (see <a class="intern" href="#annot">Genomic sequence and annotation (v14-197 onwards)</a>).
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">--processors=&lt;STRING&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+Number of parallel threads to utilise (see <a class="intern" href="#parallel">Parallelisation</a>).
+The default is <tt>1</tt>.
+</p>
+</div>
+</div>
+
+<a name="stages"></a><div class="sec_leader sec_lev1"><div class="sec_title"><a class="intern" href="#stages">Pipeline stages</a></div><div class="sec_num"><a class="intern" href="#toc3"><span class="sec_num">3</span></a></div></div>
+<p class="asd_par">
+The pipeline proceeds via a series of sequential steps.
+</p>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_rightalign nowrap "
+style="right:-1"><i>organise</i></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">
+This sets up an analysis directory and configures the user
+information provided into a structure and formats that the
+pipeline can navigate.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap "
+style="right:-1"><i>reaper</i></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">
+This uses the <i>Reaper</i> software to trim adapter sequences from
+reads and then uses <i>Tally</i> to collapse multiple identical
+sequences into a single non-redundant copy, while recording
+read depth as a separate parameter in the read header.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap "
+style="right:-1"><i>filter</i></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">
+This filters reads based on a set of user defined parameters
+provided as part of the configuration file.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap "
+style="right:-1"><i>align</i></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">
+This aligns reads to the relevant genome using <i>Bowtie</i>, providing
+output in either <i>Bowtie</i> or <span class="smallcaps">sam</span> format. Metrics for assessing the
+features represented in a sample are plotted.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap "
+style="right:-1"><i>features</i></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">
+This conducts preliminary feature analysis, either cross-referencing
+genome alignments with miRBase mature miRNA coordinates or comparing
+the processed reads to canonical repeat sequence data (see
+<a class="intern" href="#cfopts">Configuration options</a> for information on steering the analysis).
+</p>
+</div>
+</div>
+
+<a name="inputs"></a><div class="sec_leader sec_lev1"><div class="sec_title"><a class="intern" href="#inputs">Pipeline inputs</a></div><div class="sec_num"><a class="intern" href="#toc4"><span class="sec_num">4</span></a></div></div>
+<p class="asd_par">
+There are several files and directories required in order to initiate the
+pipeline.
+</p>
+<br>
+<img src="imp_pics/pipeline_input.png" width="500" alt="required inputs">
+<div class=" itemize " style="margin-top:6ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_rightalign nowrap "
+style="right:-1"><i>fastq.gz</i></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">
+In order to run the pipeline you will require the gzipped
+<span class="smallcaps">fastq</span> files generated by the next generation sequencing machine
+(eg. Illumina and 454). A single <tt>imp_commandline.pl</tt> call will accept
+multiple <span class="smallcaps">fastq</span> files simultaneously from a specified directory and
+analyse these sequentially or in parallel.
+</p>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_cascade"><div class=" item_rightalign nowrap "
+style="right:-1"><i>configuration file</i></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">
+This file will contain a series of user defined parameters
+to specify exactly how the pipeline should process your data (see
+<a class="intern" href="#config">Configuration setup</a>). Several default configuration files are
+provided with the pipeline (<tt>--config-list</tt>). These can be specified
+or copied by the user to their working directory and edited
+according to more specific requirements. All <span class="smallcaps">fastq</span> files will
+be analysed according to the parameters specified within the
+configuration file.
+</p>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_cascade"><div class=" item_rightalign nowrap "
+style="right:-1"><i>description file</i></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">
+This is a user-defined, tab delineated table listing the <span class="smallcaps">fastq</span>
+files to be processed along with lane names, sample geometries
+(relative positions of barcodes, adapters and sequence inserts) and adapter, sequence insert and
+barcode sequences (see <a class="intern" href="#descfile">Description file</a>).
+</p>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_cascade"><div class=" item_rightalign nowrap "
+style="right:-1"><i>analysis directory</i></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">
+This is the analysis specific directory created by the initial <tt>organise</tt> step of the
+pipeline according to the current process number. This directory
+should be specified in the subsequent stages of the pipeline (<tt>--analysisDir</tt>).
+</p>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_cascade"><div class=" item_rightalign nowrap "
+style="right:-1"><i>annotation directory</i></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">
+This is the directory containing all of the annotation data required by the
+pipeline. It will either be provided by the Enright lab or can be created
+and added to using the <i>SequenceImp</i> Annotation ppeline. It must be specified in
+the <tt>align</tt> and <tt>features</tt> stages of the pipeline (see <a class="intern" href="#annot">Genomic sequence and annotation (v14-197 onwards)</a>). </p>
+</div>
+</div>
+
+<a name="config"></a><div class="sec_leader sec_lev2"><div class="sec_title"><a class="intern" href="#config">Configuration setup</a></div><div class="sec_num"><a class="intern" href="#toc4"><span class="sec_num">4.1</span></a></div></div>
+<p class="asd_par">
+The control of the pipeline is largely managed through a single configuration file.
+This file contains a list of parameters to be passed to each stage of the pipeline.
+They are separated into seven sections:
+</p>
+<div class=" itemize " style="margin-top:1ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-2ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">organise</p>
+</div>
+<div style="position:relative; margin-top:0ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-2ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">reaper+filter</p>
+</div>
+<div style="position:relative; margin-top:0ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-2ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">reaper</p>
+</div>
+<div style="position:relative; margin-top:0ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-2ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">filter</p>
+</div>
+<div style="position:relative; margin-top:0ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-2ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">align+features</p>
+</div>
+<div style="position:relative; margin-top:0ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-2ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">align</p>
+</div>
+<div style="position:relative; margin-top:0ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-2ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">features</p>
+</div>
+</div>
+<p class="asd_par">
+Each section header is prefixed with an <tt>@</tt> symbol, identifying the stage.
+For more details as to the role of each option use
+<tt>imp_commandline.pl&nbsp;--help</tt> or see below <a class="intern" href="#cfopts">Configuration options</a>. The options
+and variables are tab delineated. The special value <tt>NA</tt> should be used
+in the place of a variable if default settings are desired. If you wish to
+specify the use of a flag in the <i>SequenceImp</i> (eg. <tt>--sam</tt>), this
+variable should be followed by the term <tt>FLAG</tt>. Comments can be
+added to these files to document changes and decisions made regarding
+parameters. Lines containing comments should be prefixed with a # symbol. </p>
+<p class="asd_par">
+An example config file is shown below.
+</p>
+<div class="verbatim">@organise
+reap2imp NA
+geoConfig   NA
+@reaper+filter
+fastq NA
+plotZeros   NA
+@reaper
+reapConfig  NA
+perlUnq  NA
+@filter
+low   NA
+minSize  18
+maxSize  26
+five  NA
+three NA
+@align+features
+genome   mouse
+ensversion  1
+@align
+chunk NA
+mismatches  2
+maxHits  20
+sam   FLAG
+@features
+feature  miRNA
+mirversion  1
+annot_conflict merge
+overlap  15
+proportional   NA
+separate_loci  NA
+collapse_method   NA
+repversion  NA
+repMaxHits  NA
+repMismatches  NA
+repChunk NA
+</div>
+<p class="asd_par">
+There are two ways in which a configuration file can be specified:
+The pipeline is shipped with a number of predefined configuration files. Issuing
+<tt>imp_commandline.pl&nbsp;--config-list</tt> will list these files along with a
+short description of the intended use of each. These configuration files can be
+specified with the <tt>--default-configuration</tt> option. No file path is required
+for this.
+Alternatively it is possible to copy one of these files from the
+<tt>default_configuration_files/</tt> directory to a working directory and edit it
+to suit a user's needs. Such files can be specified with the
+<tt>--user-configuration</tt> option. In such cases the full file name including the
+path to the working directory must be specified.
+</p>
+
+<a name="cfopts"></a><div class="sec_leader sec_lev3"><div class="sec_title"><a class="intern" href="#cfopts">Configuration options</a></div><div class="sec_num"><a class="intern" href="#toc4"><span class="sec_num">4.1.1</span></a></div></div>
+<div style="margin-top:2em; margin-left:-2em"><p class="asd_par"><span class="ul">organise</span><br><br>
+The <tt>@organise</tt> section of the Configuration file controls the <tt>organise</tt> step of the pipeline:
+</p></div>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">reap2imp&nbsp;&nbsp;&lt;STRING&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+Full name of file containing mappings between <i>SequenceImp</i> description
+columns and the <i>Reaper</i> input parameters.<br>
+<b>Default:</b> A pre-shipped mapping file is used.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">geoConfig&nbsp;&nbsp;&lt;STRING&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+Full name of the <i>SequenceImp</i> geometry file that specifies the Description file
+fields required for each sample geometry and the corresponding <i>Reaper</i> requirements, including
+which <i>Reaper</i> config file is required for each specified geometry (see <a class="intern" href="#reapersettings"><i>Reaper</i> settings</a>). <br>
+<b>Default:</b> A pre-shipped geometry configuration file is used.
+</p>
+</div>
+</div>
+<div style="margin-top:2em; margin-left:-2em"><p class="asd_par"><span class="ul">reaper+filter</span><br><br>
+The <tt>@reaper+filter</tt> section of the Configuration file controls both the <tt>reaper</tt> and <tt>filter</tt> steps of the pipeline:
+</p></div>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">fastq&nbsp;&nbsp;&lt;FLAG&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+A flag specifying whether, where possible, output should be supplied
+in <span class="smallcaps">fastq</span> format rather than <span class="smallcaps">fasta</span>.<br>
+<b>Default:</b> <span class="smallcaps">fasta</span> <br>
+<b>NOTE:</b> In the current version, for small RNA analysis, unique read files are fixed as FASTA format.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">plotZeros&nbsp;&nbsp;&lt;FLAG&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+A flag specifying whether reads of length 0 should be considered when
+plotting QC plots.<br>
+<b>Default:</b> y-axis
+set without considering the number
+of reads of length 0.
+</p>
+</div>
+</div>
+<div style="margin-top:2em; margin-left:-2em"><p class="asd_par"><span class="ul">reaper</span><br><br>
+The <tt>@reaper</tt> section of the Configuration
+file controls the <tt>reaper</tt> step of the pipeline:
+</p></div>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">reapConfig&nbsp;&nbsp;&lt;STRING&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+Path to the <i>Reaper</i> geometry configuration directory. This should contain files
+corresponding to each <i>Reaper</i> geometry.<br>
+<b>Default:</b> Pre-shipped <i>Reaper</i> geometry configuration files are used.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">perlUnq&nbsp;&nbsp;&lt;FLAG&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+Flag specifying whether perl should be used in the place of <i>Tally</i> to
+collapse filtered <span class="smallcaps">fasta</span> files to unique reads.<br>
+<b>Default:</b> Use <i>Tally</i>.
+</p>
+</div>
+</div>
+<div style="margin-top:2em; margin-left:-2em"><p class="asd_par"><span class="ul">filter</span><br><br>
+The <tt>@filter</tt> section of the Configuration file, controls the <tt>filter</tt> step of the pipeline:
+</p></div>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">low&nbsp;&nbsp;&lt;INTEGER&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+Maximum low complexity score filter. Low complexity scores are calculated by <i>Reaper</i>. Please see <i>Reaper</i> for more information.
+High score implies low complexity.<br>
+<b>Default:</b> No filter.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">minSize&nbsp;&nbsp;&lt;INTEGER&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+Minimum trimmed read length filter.
+<br>
+<b>Default:</b> No filter.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">maxSize&nbsp;&nbsp;&lt;INTEGER&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+Maximum trimmed read length filter.<br>
+<b>Default:</b> No filter.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">five&nbsp;&nbsp;&lt;INTEGER&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+Bases to be removed from the 5' end of all trimmed reads.
+<br>
+<b>NOTE:</b> Bases are trimmed after length filters have been applied. Once
+reads are trimmed, <i>Tally</i> is called once again to remove redundancy from the
+file.
+<br> <b>Default:</b> <tt>0</tt>. </p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">three&nbsp;&nbsp;&lt;INTEGER&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+Bases to be removed from the 3' end of all trimmed reads. <br>
+<b>NOTE:</b> Bases are trimmed after length filters have been applied. Once
+reads are trimmed, <i>Tally</i> is called once again to remove redundancy from the
+file.
+<br><b>Default:</b> <tt>0</tt>.
+</p>
+</div>
+</div>
+<div style="margin-top:2em; margin-left:-2em"><p class="asd_par"><span class="ul">align+features</span><br><br>
+The <tt>@align+features</tt> section of the Configuration file controls the <tt>align</tt> and <tt>features</tt> steps of the pipeline:
+</p></div>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">genome&nbsp;&nbsp;&lt;STRING&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Required</b>&nbsp;
+The species for which the analysis will be performed (see <a class="intern" href="#annot">Genomic sequence and annotation (v14-197 onwards)</a>).
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">ensversion&nbsp;&nbsp;&lt;INTEGER&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Required</b>&nbsp;
+Ensembl version upon which to perform the analysis.
+For miRNA analysis the user should ensure that the Ensembl and
+miRBase genome build versions are consistent.
+</p>
+</div>
+</div>
+<div style="margin-top:2em; margin-left:-2em"><p class="asd_par"><span class="ul">align</span><br><br>
+The <tt>@align</tt>
+section of the Configuration file controls the <tt>align</tt> step of the pipeline:
+</p></div>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">chunk&nbsp;&nbsp;&lt;INTEGER&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+Value to be passed to the <i>Bowtie</i>
+'chunkmbs' option.<br>
+<b>Default:</b> Not passed to <i>Bowtie</i> unless set.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">mismatches&nbsp;&nbsp;&lt;INTEGER&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+Maximum number of mismatches to be allowed by
+<i>Bowtie</i>. Bowtie is performed with the <i>--strata</i> and <i>--best</i> flags specified.<br>
+<b>Default:</b><tt>0</tt>.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">maxHits&nbsp;&nbsp;&lt;INTEGER&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+Maximum number of hits to be reported by <i>Bowtie</i>. Reads that hit above this
+threshold are discarded.<br>
+<b>Default:</b><tt>10</tt>.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">sam&nbsp;&nbsp;&lt;FLAG&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+Specifies whether to run the pipeline with <span class="smallcaps">sam</span>/<span class="smallcaps">bam</span> alignment
+format. <br>
+<b>Default:</b> Standard <i>Bowtie</i> format.
+</p>
+</div>
+</div>
+<div style="margin-top:2em; margin-left:-2em"><p class="asd_par"><span class="ul">features</span><br><br>
+The <tt>@features</tt>
+section of the Configuration file controls the <tt>features</tt> step of the pipeline. It expects one of two sets
+of parameters, depending on the value of the parameter <tt>feature</tt>.
+</p></div>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">feature&nbsp;&nbsp;&lt;STRING&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Required</b>&nbsp;
+A selected feature type to be assessed.
+Currently supported are <tt>miRNA</tt> and <tt>repeat</tt>.
+</p>
+</div>
+</div>
+<div style="margin-left:0em"><p class="asd_par"><span class="ul">miRNA</span>
+For <tt>feature miRNA</tt> the additional parameters are:
+</p></div>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">mirversion&nbsp;&nbsp;&lt;INTEGER&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Required</b>&nbsp;
+(if <tt>feature</tt> is set to <tt>miRNA</tt>).
+miRNA annotation version to which read alignments will be compared.<br>
+<b>NOTE:</b> Ensure that the Ensembl genome build and miRBase builds are consistent.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">annot_conflict&nbsp;&nbsp;&lt;STRING&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Required</b>&nbsp;
+(if <tt>feature</tt> is set to <tt>miRNA</tt>).
+In rare instances miRBase may contain multiple, overlapping mature miRNA annotations.
+This option instructs the pipeline how to handle such instances.
+If <tt>ignore</tt> is specified
+the pipeline will warn the user of such instances but proceed without altering the annotation.
+<b>NOTE:</b> This may lead to reads overlapping this loci to be counted twice.
+If <tt>merge</tt> is specified the overlapping miRNAs are merged into a single loci and their IDs
+combined, separated by a double backslash.
+If <tt>remove</tt> is specified, overlapping mature miRNAs are removed from the annotation set.
+Currently supported are <tt>ignore</tt>, <tt>merge</tt> and <tt>remove</tt>.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">overlap&nbsp;&nbsp;&lt;INTEGER&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Required</b>&nbsp;
+(if <tt>feature</tt> is set to <tt>miRNA</tt>).
+The nucleotide overlap between the coordinates of a read and those of a miRNA
+for it to be incorporated into the miRNA read count.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">proportional&nbsp;&nbsp;&lt;FLAG&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+(if <tt>feature</tt> is set to <tt>miRNA</tt>).
+The default pipeline will divide all read depths between each of the reads' genomic alignments equally.
+These alignments are then assigned to overlapping mature miRNA loci. If this flag is specified the
+pipeline will only consider those genomic alignments that overlap miRNA loci. The depth of reads that
+align to a single miRNA are assigned first and subsequently reads that map to multiple miRNAs are mapped
+according to a proportion related to these unique alignments.
+See <a class="intern" href="#dataformats">Data formats</a> for more details.
+<b>Default:</b> Reads depths are divided equally between each of their alignments and assigned accordingly.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">separate_loci&nbsp;&nbsp;&lt;FLAG&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+(if <tt>feature</tt> is set to <tt>miRNA</tt>).
+Instructs the pipeline not to merge miRNA counts based on shared mature miRNA IDs in the final table (see <a class="intern" href="#dataformats">Data formats</a>).<br>
+<b>Default:</b> Mature miRNA counts are summed to a single entry where multiple loci share a mature miRNA ID.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">collapse_method&nbsp;&nbsp;&lt;STRING&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+(if <tt>feature</tt> is set to <tt>miRNA</tt>).
+This option determines the method that will be used to merge the counts of miRNAs as specified by the separate_loci flag above.
+The options include <tt>mature_id</tt> to merge based on the miRBase specified mature ID and <tt>sequence</tt> if the miRNAs counts are to
+be merged where mature miRNAs share an identical sequence. This option can only be specified if the <tt>separate_loci</tt> option is not used.<br>
+<b>Default:</b> Mature miRNA counts are summed to a single entry where multiple loci share a mature miRNA ID (<tt>mature_id</tt>).
+</p>
+</div>
+</div>
+<div style="margin-left:0em"><p class="asd_par"><span class="ul">repeat</span>
+For <tt>feature repeat</tt> the additional parameters are:
+</p></div>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">repversion&nbsp;&nbsp;&lt;INTEGER&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Required</b>&nbsp;
+(if <tt>feature</tt> is set to <tt>repeat</tt>).
+The repeat/NCBI annotation version to be used for the <tt>feature</tt> comparisons.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">repMaxHits&nbsp;&nbsp;&lt;INTEGER&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+(if <tt>feature</tt> is set to <tt>repeat</tt>).
+The maximum number of alignments allowed between
+a read and the canonical repeat sequence.<br>
+<b>Default:</b> <tt>10</tt>.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">repMismatches&nbsp;&nbsp;&lt;INTEGER&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+(if <tt>feature</tt> is set to <tt>repeat</tt>).
+The maximum number of mismatches allowed between a
+read and the canonical repeat sequence or reference
+genome (used for normalisation).<br>
+<b>Default:</b> <tt>0</tt>.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">repChunk&nbsp;&nbsp;&lt;INTEGER&gt;</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Optional</b>&nbsp;
+(if <tt>feature</tt> is set to <tt>repeat</tt>).
+Value to be passed to the <i>Bowtie</i> chunkmbs option.<br>
+<b>Default:</b> Not passed to <i>Bowtie</i> unless set.
+</p>
+</div>
+</div>
+
+<a name="descfile"></a><div class="sec_leader sec_lev2"><div class="sec_title"><a class="intern" href="#descfile">Description file</a></div><div class="sec_num"><a class="intern" href="#toc4"><span class="sec_num">4.2</span></a></div></div>
+<p class="asd_par">
+The description file is a tab delineated file describing the experiments to be analysed.
+The analysis is lane-centric so each <span class="smallcaps">fastq</span> file will correspond to a single line in the table
+that will describe the library geometry and any multiplexed samples.
+The file must contain the following headers.
+</p>
+<div class="verbatim">Name  File  Geometry Barcodes    5p_ad    3p_ad    5p_seq_insert  3p_seq_insert</div>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">Name</div></div></div>
+<div class=" item_text " style="margin-left:2">
+<p class="asd_car">
+A name for the sequencing lane. These names are used to create directories to organise the analysis
+so it is essential that they are unique. These can contain alphanumerics and underscores
+and will be used to distinguish unique directories for each lane analysed (see <a class="intern" href="#outputs">Pipeline outputs</a>).</p>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">File</div></div></div>
+<div class=" item_text " style="margin-left:2">
+<p class="asd_car">
+The associated <span class="smallcaps">fastq</span> data file name.</p>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">Geometry</div></div></div>
+<div class=" item_text " style="margin-left:2">
+<p class="asd_car">
+The pipeline currently accepts 5 geometries for small RNA analysis (<tt>no_barcode</tt>, <tt>5p_barcode</tt>,
+<tt>3p_barcode</tt>, <tt>5p_barcode_and_insert</tt> and <tt>3p_barcode_and_insert</tt>) (see <a class="intern" href="#geometries">Geometries</a>).
+The other columns expected to be filled in the description table
+depend upon the geometry used to prepare the samples for sequencing.
+All columns must be included but a single hyphen (<tt>-</tt>)
+can be inserted in fields that are not required.
+<tt>OPTIONAL</tt> columns are not required but can be used to perform more stringent sequence clean up.
+For example, the sequencing primer normally anneals to the 5' adapter
+and as a result its sequence is not expected in the sequence reads. However,
+if supplied, <tt>5p_ad</tt> will be passed to <i>Reaper</i> as a <tt>tabu</tt> sequence (See <tt>reaper -h</tt>).
+Below are the columns expected for each geometry (see <a class="intern" href="#geometries">Geometries</a> for a more thorough description of each.).
+</p>
+</div>
+<div style="position:relative; margin-left:0">
+<div class="recipe" style="margin-top:1em">
+<div class="verbatim">Geometry                Barcodes    5p_ad      3p_ad    5p_seq_insert  3p_seq_insert
+no_barcode              NO          OPTIONAL   YES      NO             NO
+5p_barcode              YES         OPTIONAL   YES      NO             NO
+3p_barcode              YES         OPTIONAL   YES      NO             NO
+5p_barcode_and_insert   YES         OPTIONAL   YES      YES            NO
+3p_barcode_and_insert   YES         OPTIONAL   YES      NO             YES</div>
+</div>
+</div>
+<div class="" style="margin-top:1ex"><div class=" item_cascade config_entry item_rightalign nowrap" style="right:-1">5p_ad</div><div class=" item_cascade config_entry item_rightalign nowrap" style="right:-1">3p_ad</div><div class=" item_cascade config_entry item_rightalign nowrap" style="right:-1">5p_seq_insert</div><div class=" item_cascade config_entry item_rightalign nowrap" style="right:-1">3p_seq_insert</div></div>
+<div class=" item_text " style="margin-left:2">
+</div>
+</div>
+<p class="asd_cpar"><span class="asd_cpar_caption">Barcodes</span>
+If barcodes are supplied these should be given as a single entry with the
+barcodes separated by a single comma.
+</p>
+<p class="asd_par">
+Below is an example description file, specifying two sample <span class="smallcaps">fastq</span> files that
+each contain three samples with barcodes at the 5' end of the sequence.
+</p>
+<div class="recipe" style="margin-top:1em">
+<div class="verbatim">Name     File              Geometry    Barcodes       5p_ad                      3p_ad                      5p_seq_insert  3p_seq_insert
+sample1  sample1.fastq.gz  5p_barcode  ACTA,ACAA,CTAA GTTCAGAGTTCTACAGTCCGACGATC ATCTCGTATGCCGTCTTCTGCTTG   -              -
+sample2  sample2.fastq.gz  5p_barcode  ACTA,ACAA,CTAA GTTCAGAGTTCTACAGTCCGACGATC ATCTCGTATGCCGTCTTCTGCTTG   -              -</div>
+</div>
+
+<a name="geometries"></a><div class="sec_leader sec_lev3"><div class="sec_title"><a class="intern" href="#geometries">Geometries</a></div><div class="sec_num"><a class="intern" href="#toc4"><span class="sec_num">4.2.1</span></a></div></div>
+<p class="asd_par">
+RNA-seq experimental design is becoming increasingly diverse. As a result the
+arrangement and position of barcodes within the adapter sequences of multiplexed
+samples can also vary between experiments. <i>Reaper</i> and the <i>SequenceImp</i> pipeline
+regard <i>read geometries</i> in a modular fashion, describing the expected position
+of RNA fragment sequences, adapters, barcodes and sequence inserts in the sequenced
+reads. This allows <i>Reaper</i> to more accurately demultiplex samples and trim
+adapter derived sequences from the <span class="smallcaps">fastq</span> files.
+</p>
+<p class="asd_par">
+There are 5 geometries currently supported by the <i>SequenceImp</i> as listed below.
+The subparts associated with each of these geometries are described later.
+</p>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_rightalign nowrap "
+style="right:-1"><i>Barcodes</i></div></div></div>
+<div class=" item_text " style="margin-left:2">
+<p class="asd_car">
+Short sequences used to distinguish multiplexed samples.
+</p>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_cascade"><div class=" item_rightalign nowrap "
+style="right:-1"><i>5p_ad</i></div></div></div>
+<div class=" item_text " style="margin-left:2">
+<p class="asd_car">
+The adapter sequence ligated to the 5' end of the RNA fragments.
+</p>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_cascade"><div class=" item_rightalign nowrap "
+style="right:-1"><i>3p_ad</i></div></div></div>
+<div class=" item_text " style="margin-left:2">
+<p class="asd_car">
+The adapter sequence ligated to the 3' end of the RNA fragments.
+</p>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_cascade"><div class=" item_rightalign nowrap "
+style="right:-1"><i>5p_seq_insert</i></div></div></div>
+<div class=" item_text " style="margin-left:2">
+<p class="asd_car">
+In cases where the barcode is expected at the 5' end of the
+reads the 5p_seq_insert is a sequence expected to be found between the
+barcode and the 5' end of the RNA fragment.
+</p>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_cascade"><div class=" item_rightalign nowrap "
+style="right:-1"><i>3p_seq_insert</i></div></div></div>
+<div class=" item_text " style="margin-left:2">
+<p class="asd_car">
+In cases where the barcode is expected at the 3' end of the
+cloned fragments the 3p_seq_insert is a sequence expected to be found
+between the barcode and the 3' end of the RNA fragment.
+</p>
+</div>
+</div>
+<p class="asd_par">
+In cases where ambiguous bases are used at the 3' or 5' end of the
+fragments to address ligation biases, these should not be supplied as sequence
+inserts. Sequence inserts are only suitable for handling known bases. We would
+suggest that ambiguous bases could be trimmed from reads after the filter
+stage of the process. In these cases, the 'x' value in the read headers will
+record the number of instances that an identical read with an identical set of
+ambiguous bases appeared in the original <span class="smallcaps">fastq</span> file.
+</p>
+<p class="asd_par"><b>NOTE:</b> Currently trimming of ambiguous bases can not be performed by the
+pipeline itself, and would need to be implemented independently. Trimming performed by
+<i>SequenceImp</i> is followed by an additional call to Tally to remove redundancy.</p>
+
+<a name="schemas"></a><div class="sec_leader sec_lev3"><div class="sec_title"><a class="intern" href="#schemas">Geometry schemas</a></div><div class="sec_num"><a class="intern" href="#toc4"><span class="sec_num">4.2.2</span></a></div></div>
+<p class="asd_par">
+A schematic representation of the geometries available to the <i>SequenceImp</i>.
+</p>
+<div class="verbatim">KEY:
+FFFFFFF  : RNA Fragment
+55555    : 5' adapter sequence
+33333    : 3' adapter sequence
+BB       : Barcode sequence
+/////    : 5' sequence insert
+&gt;&gt;&gt;&gt;&gt;    : 3' sequence insert
+
+no_barcode              55555-FFFFFFF-33333
+5p_barcode              55555-BB-FFFFFFF-33333
+3p_barcode              55555-FFFFFFF-BB-33333
+5p_barcode_and_insert   55555-BB-/////-FFFFFFF-33333
+3p_barcode_and_insert   55555-FFFFFFF-&gt;&gt;&gt;&gt;&gt;-BB-33333</div>
+
+<a name="reapersettings"></a><div class="sec_leader sec_lev2"><div class="sec_title"><a class="intern" href="#reapersettings"><i>Reaper</i> settings</a></div><div class="sec_num"><a class="intern" href="#toc4"><span class="sec_num">4.3</span></a></div></div>
+<p class="asd_par">
+By default the <i>Reaper</i> settings for each geometry are supplied in the
+configuration files accompanying this software (<tt>config/reaper_config/</tt>).
+The correspondence between geometry names and the <i>Reaper</i> configuration file
+selected is supplied below. If you wish to alter the setting for any
+geometry this can be done in situ. However, we recommend taking a copy of the
+file for the desired geometry, to place it to a new directory. The file name
+should remain the same as this is the name recognised by the pipeline. The
+pipeline can be directed to look in this new directory for the <i>Reaper</i>
+configuration files by specifying the directory as the <tt>reapConfig</tt> option
+in the main configuration file (see <a class="intern" href="#config">Configuration setup</a>). In this way new
+options can be added to the <i>Reaper</i> call without affecting other analyses. The <i>Reaper</i>
+call is printed to standard error.</p>
+<p class="asd_par"><b>NOTE:</b> It is important that the input and output formats are not
+altered in this way, along with the <tt>-basename</tt>, <tt>-meta</tt> and <tt>-i</tt>
+options. This will ensure that the call remains compatible with the pipeline.</p>
+<table summary="geometries and configuration files" class="cleartable_byrow">
+<thead><tr><th>Geometry</th><th>Config file</th></tr></thead>
+<tbody>
+<tr><td>no_barcode</td><td>no_bar.config</td></tr>
+<tr><td>5p_barcode</td><td>5p_bar.config</td></tr>
+<tr><td>3p_barcode</td><td>3p_bar.config</td></tr>
+<tr><td>5p_barcode_and_insert</td><td>5p_bar_si.config</td></tr>
+<tr><td>3p_barcode_and_insert</td><td>3p_bar_si.config</td></tr>
+</tbody>
+</table>
+
+<a name="annot"></a><div class="sec_leader sec_lev2"><div class="sec_title"><a class="intern" href="#annot">Genomic sequence and annotation (v14-197 onwards)</a></div><div class="sec_num"><a class="intern" href="#toc4"><span class="sec_num">4.4</span></a></div></div>
+<p class="asd_par">
+The more recent versions of the pipeline have transitioned to a new annotation system using the
+SequenceImp Annotation pipeline. This is intended to provide a more flexible solution to providing
+annotation for the <i>SequenceImp</i>. Users will be able to convert a set of publicly available annotation files
+to the annotation pipeline and reformat these into a configuration that is recognised by <i>SequenceImp</i>. The
+choice of species that can therefore be supported is limited only to those with available Ensembl gene annotation
+and miRBase miRNA annotation.
+</p>
+<p class="asd_par">
+For more information concerning the SequenceImp Annotation pipeline please visit <a class="extern" target="_parent" href="http://http://www.ebi.ac.uk/research/enright/software/kraken">http://http://www.ebi.ac.uk/research/enright/software/kraken</a>.
+</p>
+<p class="asd_par"><b>NOTE:</b> It is essential to ensure that, upon initiating the
+<tt>features</tt> step for a miRNA analysis, the genome-builds of the Ensembl and miRBase
+versions specified in the Configurration file correspond (see <a class="intern" href="#config">Configuration setup</a>).</p>
+
+<a name="ensseq"></a><div class="sec_leader sec_lev3"><div class="sec_title"><a class="intern" href="#ensseq">Ensembl sequence</a></div><div class="sec_num"><a class="intern" href="#toc4"><span class="sec_num">4.4.1</span></a></div></div>
+<p class="asd_par">
+Alignment to the genome sequence is an essential stage of both the <tt>align</tt>
+and <tt>features</tt> step when <tt>feature repeat</tt> is specified.</p>
+
+<a name="ensannot"></a><div class="sec_leader sec_lev3"><div class="sec_title"><a class="intern" href="#ensannot">Ensembl annotation</a></div><div class="sec_num"><a class="intern" href="#toc4"><span class="sec_num">4.4.2</span></a></div></div>
+<p class="asd_par">
+The Ensembl annotation is primarily used in the <tt>align</tt> step of the pipeline to provide an
+impression as to those features from which short RNA sequences are being derived. In addition
+to Ensembl gene annotation, this genomewide annotation can be suplemented by RepeatMasker repeat
+annotations and tRNAScan tRNAs.
+</p>
+<p class="asd_par">
+In order to determine non-redundant read annotation profiles in the <tt>align</tt>
+step of the pipeline, annotation is reduced to remove feature overlaps.
+This reduction is performed in a hierarchical fashion, with those features
+higher in the hierarchy gaining precedence over those lower in the list. It
+should be noted that at this stage of the pipeline miRNA annotation is
+derived directly form Ensembl. For more information concerning how the hierarchy opporates
+please visit the SequenceImp annotation pipeline documentation, available at <a class="extern" target="_parent" href="http://http://www.ebi.ac.uk/research/enright/software/kraken">http://http://www.ebi.ac.uk/research/enright/software/kraken</a>.</p>
+<p class="asd_par">This annotation is provided as both <i>sense</i> and <i>antisense</i> sets (with
+respect to the feature strand as recorded in Ensembl)
+</p>
+
+<a name="miRannot"></a><div class="sec_leader sec_lev3"><div class="sec_title"><a class="intern" href="#miRannot">miRBase annotation</a></div><div class="sec_num"><a class="intern" href="#toc4"><span class="sec_num">4.4.3</span></a></div></div>
+<p class="asd_par">
+For generating tables of the level of miRNA expression at the <tt>features</tt>
+step, miRNA coordinate sets are derived from miRBase. When performing miRNA
+analyses it is essential that the user ensures the genome builds of both the
+Ensembl and miRBase annotation sets are compatible.
+</p>
+<p class="asd_par"><b>NOTE:</b> miRBase annotation is used for the <tt>features</tt> step only. At the
+<tt>align</tt> stage all annotation is derived from Ensembl.</p>
+
+<a name="repannot"></a><div class="sec_leader sec_lev3"><div class="sec_title"><a class="intern" href="#repannot">Repeat sequences</a></div><div class="sec_num"><a class="intern" href="#toc4"><span class="sec_num">4.4.4</span></a></div></div>
+<p class="asd_par">At the <tt>features</tt> step, when <tt>repeat</tt> is specified as the <tt>feature</tt>,
+the pipeline compares the reads to sequences that are derived from NCBI or
+another source of FASTA sequences. To this end sequences have been converted into
+Bowtie indices.
+</p>
+
+<a name="outputs"></a><div class="sec_leader sec_lev1"><div class="sec_title"><a class="intern" href="#outputs">Pipeline outputs</a></div><div class="sec_num"><a class="intern" href="#toc5"><span class="sec_num">5</span></a></div></div>
+<p class="asd_par">
+Once the first step of the pipeline has been initiated subsequent pipeline
+output will be organised into a directory structure. As mentioned above an
+analysis directory will be created by the pipeline when the <tt>organise</tt> step is
+triggered. Within this new directory, an additional directory will be created corresponding
+to each sequencing lane described in the description file. In turn each of
+these will contain a data folder with a hard link to the relevant <span class="smallcaps">fastq</span> file enclosed and
+a metadata folder containing the adapter and barcode information formatted to
+be compatible with <i>Reaper</i>.
+</p>
+<br>
+<img src="imp_pics/pipeline_output.png" width="500" alt="pipeline output">
+<p class="asd_par">
+Each step produces additional folders within the sample/lane directories
+each containing the relevant pipeline outputs. Where multiplexed samples are
+being analysed, files or information will be labeled with the relevant barcode sequence.
+</p>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>QC</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<i>step=(all stages)</i>
+<p class="asd_car">All PDF QC output and graphical results will be deposited within this directory.</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>REAPER</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<i>step=reaper</i>
+<p class="asd_car">
+The <i>Reaper</i> output will be deposited in this directory, produced
+by the <tt>reaper</tt> pipeline step (see <tt>reaper -h</tt> and <a class="intern" href="#outputfiles">Files produced</a>).
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>PROCESSED</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<i>step=filter</i>
+<p class="asd_car">
+This directory will contain all of the filtered read files
+produced by the <tt>filter</tt> step along
+with files containing various metrics used by the pipeline for
+plotting and subsequent steps (see <a class="intern" href="#outputfiles">Files produced</a>).
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>BOWTIE</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<i>step=align</i>
+<p class="asd_car">
+This directory contains the files produced by the <tt>align</tt> step
+of the pipeline including sam, bam
+and indexed bam files
+for each sample (see <a class="intern" href="#outputfiles">Files produced</a>).
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>miRNA_analysis</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<i>step=features</i>
+<p class="asd_car">
+This directory contains the <tt>features</tt> miRNA analysis output.
+Most significant is the table containing the unique and non-unique
+read depth for reads overlapping mature, miRBase annotated miRNA coordinates
+(see <a class="intern" href="#outputfiles">Files produced</a>).
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>rep_ANALYSIS</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<i>step=features</i>
+<p class="asd_car">
+This directory contains the results of the alignment of the
+processed reads to the genomic sequence and directories which
+contain the alignment data of reads against the additional sequences of
+interest, such as repeats as part of the <tt>features</tt> <tt>repeat</tt> analysis
+output. Again these subsidiary folders contain sam, bam and indexed bam
+files for each sample. </p>
+</div>
+</div>
+
+<a name="outputfiles"></a><div class="sec_leader sec_lev2"><div class="sec_title"><a class="intern" href="#outputfiles">Files produced</a></div><div class="sec_num"><a class="intern" href="#toc5"><span class="sec_num">5.1</span></a></div></div>
+<p class="asd_par">The most significant files produced by the pipeline are listed below.
+Where samples are barcoded within the same lane, files are distinguishable by
+their barcode sequence within the file name.</p>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>REAPER</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<i>step=reaper</i>
+<p class="asd_car"><i><i>&lt;SAMPLE-ID&gt;</i>.clean.gz</i> - These files contain the raw <i>Reaper</i> output reads. This
+will either be in fasta or fastq format, which will depend on the settings in the
+Configuration file. The file will contain all redundant read copies.</p>
+<p class="asd_car"><i><i>&lt;SAMPLE-ID&gt;</i>.uniquified.fa.gz</i> - These files contain the <span class="smallcaps">fasta</span> sequences of
+the non-redundant reads. See the <a class="intern" href="#dataformats">Data formats</a> section for information as to
+how the redundant read frequency is recorded in these files.</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>PROCESSED</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<i>step=filter</i>
+<p class="asd_car"><i><i>&lt;SAMPLE-ID&gt;</i>.clean.processed.fa.gz</i> - These files contain the <span class="smallcaps">fasta</span> sequences of
+all the reads that pass the <tt>filter</tt> step of pipeline.</p>
+<p class="asd_car"><i>total.saved.trimmit.tab</i> - The total number of reads that passed the
+<tt>filter</tt> step of the pipeline for each sample.</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>BOWTIE</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<i>step=align</i>
+<p class="asd_car"><i><i>&lt;SAMPLE-ID&gt;</i>.bowtie.temp.output.sam.gz</i> - Raw <i>Bowtie</i> output in SAM format.
+Unmapped reads are filtered out using <i>Samtools</i>.</p>
+<p class="asd_car"><i><i>&lt;SAMPLE-ID&gt;</i>.bowtie.unique.output.sam.gz</i> - <i>Bowtie</i> output with optional
+fields added (see <a class="intern" href="#dataformats">Data formats</a>).</p>
+<p class="asd_car"><i><i>&lt;SAMPLE-ID&gt;</i>.bowtie.unique.output.bam</i> - The above file converted into BAM
+format using <i>Samtools</i></p>
+<p class="asd_car"><i><i>&lt;SAMPLE-ID&gt;</i>.bowtie.unique.output.sort.bam</i> - BAM file sorted using <i>Samtools</i>.</p>
+<p class="asd_car"><i><i>&lt;SAMPLE-ID&gt;</i>.bowtie.unique.output.sort.bam.bai</i> - BAM file indexed using <i>Samtools</i></p>
+<p class="asd_car"><i><i>&lt;SAMPLE-ID&gt;</i>.bowtie.output.bwt.gz</i> - <i>Bowtie</i> output in standard <i>Bowtie</i> format.
+Only present if SAM format is not requested in the Configuration File (see <a class="intern" href="#config">Configuration setup</a>).</p>
+<p class="asd_car"><i>bowtie.total.mapping.tab</i> - Contains information about the number of redundant reads
+which map to the genome uniquely and at all, according to the parameters
+that were passed to <i>Bowtie</i>.</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>miRNA_analysis</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<i>step=features</i>
+<p class="asd_car"><i><i>&lt;SAMPLE-ID&gt;</i>.mature.counts.txt</i> - This file contains the number of reads
+associated with each mature miRNA or miRNA locus.
+The exact behaviour of the pipeline is directed by the options passed from the
+Configuration file (see <a class="intern" href="#cfopts">Configuration options</a>). The behaviour of the pipeline and the
+format of this file will be explained in more detail in the <a class="intern" href="#dataformats">Data formats</a>
+section.
+</p>
+</div>
+</div>
+
+<a name="dataformats"></a><div class="sec_leader sec_lev2"><div class="sec_title"><a class="intern" href="#dataformats">Data formats</a></div><div class="sec_num"><a class="intern" href="#toc5"><span class="sec_num">5.2</span></a></div></div>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>Fasta/Fastq headers</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">
+Following the use of <i>Reaper</i> and <i>Tally</i> only non-redundant
+copies of reads are retained in the fasta results files. Additional information
+concerning each read is stored in the read header, for example <tt>&gt;3_t11_w32_x7</tt>. The
+first number is an arbitrary identifier ascribed to each entry by the pipeline.
+The marker <tt>t</tt> precedes the trinucleotide complexity score determined by <i>Reaper</i> (see <a target="_parent" class="extern" href="http://www.ebi.ac.uk/enright/kraken/manuals/reaper/reaper.html"><i>Reaper</i> manual</a>).
+Similarly, <tt>w</tt> precedes read length and <tt>x</tt> precedes the number of copies of the read found in
+the original <i>Reaper</i> trimmed sequence file before the reads are collapsed to
+their non-redundant entries.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>SAM/BAM files</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">
+The SAM and BAM files (<i>&lt;SAMPLE-ID&gt;</i><i>.bowtie.unique.output.sam.gz</i>, <i>&lt;SAMPLE-ID&gt;</i><i>.bowtie.unique.output.bam</i> etc.)
+have two extra optional fields appended to each
+alignment according to standard SAM format specifications
+(<a class="extern" target="_parent" href="http://samtools.sourceforge.net/SAM1.pdf">http://samtools.sourceforge.net/SAM1.pdf</a>).
+None of the currently available
+fields seemed to fit our purposes so tags <tt>DL</tt> and <tt>DR</tt> have been used.
+Reads are collapsed to unique copies in the pipeline so identical reads
+are not mapped more than once. As a consequence each sequence is represented by
+a single set of mappings in the SAM file. This means that each read in the SAM
+format will have a depth value associated with it that corresponds to the
+number of copies of that read that were actually sequenced. This is the <tt>DR</tt>
+value. In addition, some miRNAs will be expected to map to the genome more than
+once. The <tt>DL</tt> value is the number of loci to which a read has mapped in the
+genome. These optional fields can be accessed in the standard way.
+</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>miRNA tables</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_par">
+The <i>&lt;SAMPLE-ID&gt;</i><i>.mature.counts.txt</i> file provides read depths relative to miRBase
+annotation.</p>
+<p class="asd_par">Options specified in the Configuration file will affect how the pipeline proceeds and,
+consequently, the format of this file (see <a class="intern" href="#cfopts">Configuration options</a>). In principle the file will contain 5 core columns:</p>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>Mature</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">This column contains the miRBase mature miRNA ID</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>Precursor</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">This column contains the miRBase precursor ID</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>Width</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">This contains the feature's length (eg. the length of the mature miRNA)</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>lane_Read_Depth</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">This column contains the redundant read depth associated with the mature miRNA locus,
+where replicates of identical reads are considered and incorporated.</p>
+</div>
+<div style="position:relative; margin-top:2ex"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>lane_Non_Redundant_Reads</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">This column contains the non-redundant read depth for each miRNA, where redundancy is
+removed.</p>
+</div>
+</div>
+<p class="asd_par">If a single sequencing lane contains multiple barcoded samples, each sample will be represented by a pair of <tt><i>&lt;BARCODE&gt;</i>_Read_Depth</tt>
+and <tt><i>&lt;BARCODE&gt;</i>_Non_Redundant_Reads</tt> columns, each labelled with the sample's barcode.</p>
+<p class="asd_par">By default, where the same mature miRNA is expressed from multiple loci (according to the mature miRBase ID),
+the expression values for this miRNA are summed together into a single row
+in the table and all of the representative precursors are listed in the
+<tt>Precursor</tt> column. By supplying the <tt>separate_loci</tt> flag in the
+Configuration file (see <a class="intern" href="#cfopts">Configuration options</a>) this behaviour can be changed. In
+this case the miRNAs are not merged and each locus is ascribed its own
+unique ID based on its mature ID, precursor ID and start position. This ID
+is supplied in an additional column within the table (<tt>Unique_ID</tt>). An
+extra column containing the mature miRNA sequence (<tt>Sequence</tt>) is also
+supplied.</p>
+<p class="asd_par">It is also possible to sum the miRNA counts based on shared, identical miRNA mature sequence.
+In this case the <tt>collapse_method</tt> <tt>sequence</tt> should be set in the Configuration file (see <a class="intern" href="#cfopts">Configuration options</a>).
+A <tt>Sequence</tt> column will be included in the output containing the shared sequence, and the <tt>Mature</tt> and <tt>Precursor</tt> columns
+will list those mature and precursor IDs merged in each case.</p>
+<p class="asd_par">In the default mode the pipeline divides read depth equally between all
+the valid genomic read alignments for the read, before assigning this divided
+depth to miRNA loci that may overlap each alignment (as a consequence the
+expression values are not necessarily integer values). When run in this mode
+the final row in the table (<tt>Mapped_library_depth</tt>) represents the number of
+reads which map to entire the genome with the same mapping parameters. This is
+supplied for normalisation purposes.</p>
+<p class="asd_par">The advantage of this method is that it makes no assumptions as to the origins of reads before
+distributing read depth between genomic alignments. However, this may lead to reads
+being erroneously attributed to loci with similar sequence, reducing (or increasing)
+the signal at a region of interest. Furthermore, if one such locus is differentially expressed,
+other regions with shared sequence may be incorrectly identifed as such.</p>
+<p class="asd_par">This default behaviour can be altered by specifying the <tt>proportional</tt>
+flag in the configuration file (see <a class="intern" href="#cfopts">Configuration options</a>). In this case the
+pipeline performs the division of read depth in an entirely miRNA centric
+manner, ignoring alignments to other regions of the genome. This allows the
+pipeline to divide the depth of reads that map to multiple miRNAs
+(multi-mappers) in a manner that approximates the proportion of uniquely
+mapping reads at each of the mature miRNA loci. First the depth of the reads
+whose alignments only overlap a single miRNA (uniquely mapping reads) is
+assigned to these loci. Next, for each of the reads whose alignments overlap
+two or more mature loci, the unique depth at each of these loci is taken and
+temporarily incremented by 1 (this is to prevent all multi-mapping reads being
+subsequently assigned to a single loci in cases where there are very low unique
+mapping counts). Finally the depth of the multi-mappers is divided according to
+the proportion of incremented unique reads at each loci. In this case the
+<tt>Mapped_library_depth</tt> represents the sum of the <tt><i>&lt;BARCODE&gt;</i>_Read_Depth</tt> and
+<tt><i>&lt;BARCODE&gt;</i>_Non_Redundant_Reads</tt> columns. </p>
+<p class="asd_par">This method has the advantage that if the expression of two similar loci
+can be distinguished by reads derived from unique regions, the distribution
+of multi-mapping reads may more accurately reflect the expression of these
+loci than the default behaviour. However, many miRNAs, derived from discrete
+locations will belong to a miRNA families and possess considerable sequence
+similarities. In cases where multiple loci cannot be distinguished by
+uniquely mappng reads, these loci may not subsequently receive the
+biologically accurate proportion of multimappers. This may also cause issues
+where uniquely mapping reads are not identified due to low expression.</p>
+<p class="asd_par"><b>NOTE:</b> As miRNA counts are generated by overlapping sequencing reads
+with genomically annotated miRBase miRNAs, in rare situations, where multiple
+miRNAs are annotated in close proximity it is possible that reads may be counted towards both expression levels.
+For this reason it is important that care is taken when setting the <tt>overlap</tt> parameter in the <a class="intern" href="#cfopts">Configuration options</a>.</p>
+</div>
+</div>
+
+<a name="qcplots"></a><div class="sec_leader sec_lev2"><div class="sec_title"><a class="intern" href="#qcplots">QC plots</a></div><div class="sec_num"><a class="intern" href="#toc5"><span class="sec_num">5.3</span></a></div></div>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b><i>&lt;SAMPLE-ID&gt;</i>.Reaper_qc.pdf</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_par"><i>step=reaper</i></p>
+<p class="asd_car">This PDF is produced during the <tt>reaper</tt> step of the pipeline. It
+summarises <i>Reaper</i> statistics and displays additional metrics such as read
+redundancy, which is calculated as reads are collapsed to unique instances.
+This file is designed to supply information that can be used to interpret the
+quality of data derived from a sequence run and to make informed decisions with
+regard to filters that should be applied in the <tt>filter</tt> step of the pipeline.</p>
+<p class="asd_car">If the pipeline is being used to analyse multiplexed/barcoded sequencing runs. Then
+multiple samples associated with the same <span class="smallcaps">fastq</span> file will be summarised
+together, within the same set of plots.</p>
+<div class=" itemize " style="margin-top:4ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-0ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>Nucleotide Summaries</i></p>
+<img src="imp_pics/nt_pic.png" width="200" alt="nucleotide plot">
+<br>
+<p class="asd_car">These plots depict the base composition of all of the reads in the <span class="smallcaps">fastq</span> file.
+In the <i>&lt;SAMPLE-ID&gt;</i>.Reaper_qc.pdf file there will be a pair of these plots for each sample,
+including each barcoded sample in the case of multiplexed lanes. The first plot
+summarises the raw reads, while the second summarises the reads after <i>Reaper</i> has
+trimmed and filtered them.</p>
+</div>
+<div style="position:relative; margin-top:8ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-0ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>Quality Summary</i></p>
+<br>
+<img src="imp_pics/q_pic.png" width="200" alt="quality plot">
+<p class="asd_car">This plot summarises the quality of the bases called with each sequencing cycle.
+The raw ASCII scores are taken directly from the <span class="smallcaps">fastq</span> file and should be translated
+to Phred scores according to the formulae associated with the quality encoding used by
+the sequencing platform.</p>
+</div>
+<div style="position:relative; margin-top:8ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-0ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>Complexity Summary</i></p>
+<br>
+<img src="imp_pics/tri_pic.png" width="200" alt="complexity plot">
+<p class="asd_car">This plot summarises read complexity. Complexity is recorded for reads of
+increasing length according to the <i>Reaper</i> sequence complexity calculation (see <a target="_parent" class="extern" href="http://www.ebi.ac.uk/research/enright/software/kraken/manuals/reaper/reaper.html">Reaper Manual</a>).
+Lines indicate the proportion of reads that would be filtered from the file at
+the filter stage with each successive complexity threshold applied at the
+'filter' step of the pipeline. Complexity thresholds can be altered in the
+Configuration file.</p>
+</div>
+<div style="position:relative; margin-top:8ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-0ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>Length Summary</i></p>
+<br>
+<img src="imp_pics/len_pic.png" width="200" alt="length plot">
+<p class="asd_car">This plot records the length of the reads in the <i>Reaper</i> output after
+trimming and filtering. It also indicates the how many reads of each length are
+unique, or redundant copies. Redundant copies are collapsed to non-redundant
+entries with an associated frequency value (See <a class="intern" href="#dataformats">Data formats</a> for more
+details of how these depths are recorded).</p>
+</div>
+<div style="position:relative; margin-top:8ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-0ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>The Destiny of Reads in the <tt>reaper</tt> Stage</i></p>
+<br>
+<img src="imp_pics/sstat_pic.png" width="475" alt="summary statistics plot">
+<p class="asd_car">This plot summarises the fate of the reads that were submitted to <i>Reaper</i>.
+The total number and proportion of reads that pass the <i>Reaper</i> thresholds are
+highlighted. In addition the proportion of reads that are discarded due to each
+of the various <i>Reaper</i> criteria is recorded.</p>
+</div>
+<div style="position:relative; margin-top:8ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-0ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>Read per barcode</i></p>
+<br>
+<img src="imp_pics/per_bar.png" width=400 alt="reads per barcode">
+<p class="asd_car">This plot records the number of reads that were associated with each
+barcode supplied in a multiplexed <span class="smallcaps">fastq</span> file. This plot is only displayed when
+appropriate to the experimental format.</p>
+</div>
+</div>
+<p class="asd_car"><br>In the case of multiplexed sample runs, a series of plots will be
+added to summarise the nucleotide and quality of the total lane and nucleotide
+composition of reads for which a barcode could not be discerned.</p>
+</div>
+<div style="position:relative; margin-top:7ex"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b><i>&lt;SAMPLE-ID&gt;</i>.Processed_reads_qc.pdf</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_par"><i>step=filter</i></p>
+<p class="asd_car">These plots provide a summary of read filtering in the 'filter' stage of the pipeline.</p>
+<p class="asd_car">This plot demonstrates those reads that are removed by the filter step of
+the pipeline. Reads lost due to length cutoffs are hashed. Those reads removed
+due to the application of a complexity threshold are also highlighted if
+appropriate.</p>
+<p class="asd_car"><b>NOTE:</b> The length of the reads are recorded prior to 5' or 3' trimming of reads.</p>
+<div class=" itemize " style="margin-top:4ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-0ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>Reads removed by the <tt>filter</tt> step</i></p>
+<br>
+<img src="imp_pics/proc_pic.png" width="200" alt="filtered read plot">
+</div>
+</div>
+</div>
+<div style="position:relative; margin-top:7ex"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b><i>&lt;SAMPLE-ID&gt;</i>.Bowtie_qc.pdf</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_par"><i>step=align</i></p>
+<p class="asd_car">These plots provide a QC summary of the genome mapped reads and a quick
+reference of the features with which these reads are associated.</p>
+<div class=" itemize " style="margin-top:4ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-0ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>Reads Mapping to the Genome</i></p>
+<br>
+<img src="imp_pics/map_pic.png" width="200" alt="mapped read plot">
+<p class="asd_car">The total number of redundant reads that map to the genome and those that
+are mapped to a unique location. The percentage of redundant, filtered reads
+represented is provided.</p>
+</div>
+<div style="position:relative; margin-top:8ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-0ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>Number of Loci to which Reads Map</i></p>
+<br>
+<img src="imp_pics/map_no_pic.png" width="200" alt="mapped loci plot">
+<p class="asd_car">The proportion of the redundant, filtered reads that map to 1 or more loci
+in the genome. Bear in mind that by default <i>Bowtie</i> is performed with a 'maximum
+number of loci' cutoff. This maximum will be reflected in the x axis.</p>
+</div>
+<div style="position:relative; margin-top:8ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-0ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>Function Annotational of Reads which Overlap Genomic Features</i></p>
+<br>
+<img src="imp_pics/annot_pic.png" width="200" height="200" alt="read annotation plot">
+<p class="asd_car">Reads are assigned to a non-redundant annotation class (see
+<a class="intern" href="#annot">Genomic sequence and annotation (v14-197 onwards)</a>) according to the genomic position of their first base. In this
+way, all reads can only be assigned to a single annotation. All redundant
+reads are considered for this analysis. Totals per class are plotted as a
+proportion of the reads found to overlap an annotated region of the genome,
+either on the sense or the antisense strand, with respect to the region as
+annotated in Ensembl/RepeatMasker etc. Classes that each represent only a small
+proportion of the reads that overlap annotation (&lt; 1%) are merged into a set of
+<tt>remaining_repeat_classes</tt> or <tt>remaining_gene_classes</tt>.</p>
+</div>
+<div style="position:relative; margin-top:8ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-0ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>Chromosomes to which Reads Map</i></p>
+<br>
+<img src="imp_pics/chrom_pic.png" width="400" alt="chromosome plot">
+<p class="asd_car">This plots records which chromosome reads are mapping to and to which
+strand of the chromosome. It also depicts whether these reads are mapping to
+single or multiple loci.</p>
+</div>
+</div>
+</div>
+<div style="position:relative; margin-top:7ex"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b><i>&lt;SAMPLE-ID&gt;</i>.mapping_QC.pdf</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_par"><i>step=features</i> (repeat analysis)</p>
+<p class="asd_car">These plots provide a QC, first-pass analysis of repeat associated RNAs
+(or the reads that map to another sequence of interest submitted during
+annotation assembly). It will produce a single QC file for each of the repeats/sequences
+associated with the appropriate <tt>genome</tt> and <tt>repversion</tt> in the annotation. Each will be
+labelled with the repeat name.</p>
+<div class=" itemize " style="margin-top:4ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-0ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>Reads Mapping to the Repeat Sequence</i></p>
+<br>
+<img src="imp_pics/repmap_pic.png" width="300" alt="repeat mapped plot">
+<p class="asd_car">The number of processed reads that map to the canonical repeat sequence
+(mappable) and the number that map to a unique position.</p>
+</div>
+<div style="position:relative; margin-top:8ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-0ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>The Length of Reads Associated with the Repeat</i></p>
+<br>
+<img src="imp_pics/mapsize_pic.png" width="300" alt="repeat read length plot">
+<p class="asd_car">The length of the redundant read sequences that map to the canonical
+repeat sequence.</p>
+</div>
+<div style="position:relative; margin-top:8ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-0ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>The Sense/Antisense Overlap Length of Reads Mapping to the Repeat</i></p>
+<br>
+<img src="imp_pics/overlap_pic.png" width="300" alt="read overlap plot">
+<p class="asd_car">The length of 5' overlap of reads mapping to the positive vs. negative
+strands of the canonical repeat sequence. Redundant read depth is divided by
+the number of loci to which the read maps and overlaps are corrected by
+multiplying the depth of sense and antisense pairs together. The length of
+overlap is represented as an proportion of all overlapping reads (a fraction of
+the sum over all lengths).</p>
+</div>
+<div style="position:relative; margin-top:8ex"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-0ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>Repeat Coverage Profile</i></p>
+<br>
+<img src="imp_pics/where_pic.png" width="400" alt="repeat profile plot">
+<p class="asd_car">The sequence coverage, generated from the redundant reads, on both the
+positive and negative strands of the repeat sequence, according to the criteria
+supplied in the config file. The count number of each read is divided by the
+number of times it maps to the repeat sequence. The coverage is corrected for
+the number of redundant reads that are mappable to the genome, one or more
+times with the same number of mismatches.</p>
+</div>
+</div>
+</div>
+</div>
+
+<a name="advanced"></a><div class="sec_leader sec_lev1"><div class="sec_title"><a class="intern" href="#advanced">Advanced usage</a></div><div class="sec_num"><a class="intern" href="#toc6"><span class="sec_num">6</span></a></div></div>
+
+<a name="parallel"></a><div class="sec_leader sec_lev2"><div class="sec_title"><a class="intern" href="#parallel">Parallelisation</a></div><div class="sec_num"><a class="intern" href="#toc6"><span class="sec_num">6.1</span></a></div></div>
+<p class="asd_par">
+The <i>reaper</i>, <i>filter</i>, <i>align</i> and <i>features</i> stages of the
+pipeline can be run in parallel across multiple processors. This is done in
+a lane centric manner, with the lanes/<span class="smallcaps">fastq</span> files being assigned to threads.
+To trigger parallelisation a user should specify the number of processors to
+be used with the <tt>--processors</tt> option (This corresponds with the number of
+threads to start). If more than one thread is used lane specific output will
+be written straight to file (<tt><i>&lt;SAMPLE-ID&gt;</i>.record.txt</tt>) in
+the lane specific analysis directory rather than to screen. </p>
+<p class="asd_par">
+<b>NOTE:</b> In order to run in parallel, the local Perl installation must be Threads enabled
+upon compilation. If the pipeline is unable to load the Perl <i>threads</i> module, it
+will automatically revert to analysing fastq files sequentially.
+</p>
+
+<a name="paired"></a><div class="sec_leader sec_lev1"><div class="sec_title"><a class="intern" href="#paired">Paired-end processing (v12-060 onwards)</a></div><div class="sec_num"><a class="intern" href="#toc7"><span class="sec_num">7</span></a></div></div>
+<p class="asd_par">
+<i>SequenceImp</i> is able to organise the processing of paired-end sequencing lanes
+in order to conduct QC and filtering prior to mapping. Currently the pipeline
+supports the <tt>organise</tt>, <tt>reaper</tt> and <tt>filter</tt> stages for paired sequence files.
+Throughout this process the <i>SequenceImp</i> maintains the ability to parallelise
+across multiple processors.
+</p>
+<p class="asd_par">
+Paired-end sequence processing requires several changes to the standard, small
+RNA sequencing pipeline:
+</p>
+
+<a name="paired_opt"></a><div class="sec_leader sec_lev2"><div class="sec_title"><a class="intern" href="#paired_opt">Additional options</a></div><div class="sec_num"><a class="intern" href="#toc7"><span class="sec_num">7.1</span></a></div></div>
+<div style="margin-top:2em; margin-left:-2em"><p class="asd_par"><span class="ul">Universal</span><br><br>
+The following options are not particular to any of of the stages.</p></div>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">--paired</div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><b>Required</b>&nbsp;
+The paired flag is required to prompt the pipeline to process paired samples.
+</p>
+</div>
+</div>
+
+<a name="paired_desc"></a><div class="sec_leader sec_lev2"><div class="sec_title"><a class="intern" href="#paired_desc">Alterations to the description file</a></div><div class="sec_num"><a class="intern" href="#toc7"><span class="sec_num">7.2</span></a></div></div>
+<p class="asd_par">
+Each line in the description file will represent a paired-end sequencing sample.
+</p>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">Name</div></div></div>
+<div class=" item_text " style="margin-left:2">
+<p class="asd_car">A separate directory will be created within the analysis directory to house all
+of the data representing each of the <span class="smallcaps">fastq</span> files associated with a single
+paired-end sample. These two directories will be names according to the user
+name supplied in the 'Name' column of the Description file followed by a number
+(1 or 2). The number is assigned according to the order with which the files
+are provided in the 'File' column.</p>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">File</div></div></div>
+<div class=" item_text " style="margin-left:2">
+<p class="asd_car">Each row of the file column should now contain two comma separated <span class="smallcaps">fastq</span> files
+representing the paired sequences. The pipeline assumes that reads within these
+files are paired based on their relative position.</p>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">Paired-end geometries</div></div></div>
+<div class=" item_text " style="margin-left:2">
+<p class="asd_car">Standard geometries are not supported for paired-end sequence analysis. The
+following geometries are currently available.</p>
+</div>
+<div style="position:relative; margin-left:0">
+<div class="recipe" style="margin-top:1em">
+<div class="verbatim">Geometry                Barcodes    5p_ad      3p_ad    5p_seq_insert  3p_seq_insert
+pair_no_barcode         NO          YES        YES      NO             NO
+</div>
+</div>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><i>pair_no_barcode</i></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car">Standard cloning procedure in which fragment is cloned directly between a
+5' and 3' adapter </p>
+</div>
+</div>
+</div>
+<div style="position:relative; margin-top:1ex"><div class=" item_cascade"><div class=" item_rightalign nowrap config_entry"
+style="right:-1">5p_ad and 3p_ad</div></div></div>
+<div class=" item_text " style="margin-left:2">
+<p class="asd_car">Both the 5' and 3' adapter sequences are required for each sample. These
+should be the sequences as represented within the first of the pair of sequence
+files provided in the 'File' column. These sequences will be reverse
+complimented and swapped to determine the expected 5p_ad and 3p_ad for the
+second sequencing file.</p>
+<p class="asd_par"><b>NOTE:</b> Please ensure that the simple reverse complementation of each
+adapter for the cleanup of the second sequencing file is the behaviour you would
+expect for your paired-end read geometry and sequencing procedure prior to
+filtering your sequences using the <i>SequenceImp</i>.</p>
+</div>
+</div>
+
+<a name="paired_run"></a><div class="sec_leader sec_lev2"><div class="sec_title"><a class="intern" href="#paired_run">Cleaning paired-end files</a></div><div class="sec_num"><a class="intern" href="#toc7"><span class="sec_num">7.3</span></a></div></div>
+<p class="asd_par">The manner in which the pipeline proceeds differs slightly for paired
+samples. The organise step will seperate the paired files into independent directories to be
+trimmed and processed. The directories are tagged with the sample name and _1 or _2 (see above).
+The 'reaper' step trims reads but no longer collapses them to unique
+reads. The removal of redundant reads is performed in the 'filter' step along
+with the filtering of reads according to the user's requirements. In the case
+of paired-end read processing, the pipeline uses <i>Tally</i> to both filter/remove
+redundancy and re-pair reads from the two trimmed sequence files associated with a paired-end
+samples. Pairing is encoded by <i>Reaper</i> as a <i>record offset</i>, which is later
+interpreted by <i>Tally</i> (see the
+<a target="_parent" class="extern" href="http://www.ebi.ac.uk/research/enright/software/kraken/manuals/reaper/reaper.html"><i>Reaper</i></a>
+and
+<a target="_parent" class="extern" href="http://www.ebi.ac.uk/research/enright/software/kraken/manuals/reaper/tally.html"><i>Tally</i></a>
+manuals). In this way the pipeline is able to ensure that read pairing is
+maintained.</p>
+<p class="asd_par"><b>NOTE:</b> In the <tt>reaper</tt> step, paired sequence files are trimmed
+independently. As a result the output files may be of different lengths,
+containing different numbers of sequences. This is resolved by <i>Tally</i> in the
+<tt>filter</tt> step. Please bear this in mind if read pairing is required and
+expected.</p>
+<p class="asd_par"><b>NOTE:</b> Currently 3' trimming of reads at the <tt>filter</tt> step of the pipeline
+is not supported for paired-end sequence analysis.</p>
+
+<a name="paired_plots"></a><div class="sec_leader sec_lev2"><div class="sec_title"><a class="intern" href="#paired_plots">Plots</a></div><div class="sec_num"><a class="intern" href="#toc7"><span class="sec_num">7.4</span></a></div></div>
+<p class="asd_par">As a consequence of these changes in the manner in which the pipeline proceeds
+the length distribution plot supplied in the 'reaper' QC pdf no longer defines
+the number of unique and redundant reads of each length.</p>
+<p class="asd_par">In addition there are changes to the plots produced at later stages of
+the pipeline.</p>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b><i>&lt;SAMPLE-ID&gt;</i>.Processed_reads_qc.pdf</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_par"><i>step=filter</i></p>
+<p class="asd_car">For paired-end sequencing the plots for the filter step summarise the
+filtering and pairing of reads between paired files by <i>Tally</i>.</p>
+<div class=" itemize " style="margin-top:4ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_compact"><div class=" item_rightalign "
+style="right:-0ex"><span class="itembullet">&bull;</span></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<p class="asd_car"><i>Summary of read filtering and pairing</i></p>
+<img src="imp_pics/paired_filtering.png" width="400" height="200" alt="filtering and matching pairs">
+<p class="asd_car">This plot summarises the paired-end read filtering statistics. It records
+why reads were removed from each paired sequence file by <i>Tally</i> and the number
+of non-redundant and duplicate reads remaining in each file.</p>
+</div>
+</div>
+</div>
+</div>
+
+<a name="paired_formats"></a><div class="sec_leader sec_lev2"><div class="sec_title"><a class="intern" href="#paired_formats">Additional files produced</a></div><div class="sec_num"><a class="intern" href="#toc7"><span class="sec_num">7.5</span></a></div></div>
+<p class="asd_par">Paired-end processing produces additional files.</p>
+<div class=" itemize " style="margin-top:2ex; margin-left:0; font-size:100%">
+<div style="position:relative; margin-top:0"><div class=" item_cascade"><div class=" item_leftalign nowrap "
+style=""><b>PROCESSED</b></div></div></div>
+<div class=" item_text " style="margin-left:4ex">
+<i>step=filter</i>
+<p class="asd_car"><i><i>&lt;SAMPLE-ID&gt;</i>.tallied.XXXXX.gz</i> - These files contained the paired sequencing
+reads following filtering. They may be in FASTQ or FASTA format denoted as follows.</p>
+<p class="asd_car"><i><i>&lt;SAMPLE-ID&gt;</i>.tallied.fasta.gz</i> - If <tt>fastq</tt> is not specified in the
+Configuration file, the filtered output is returned in <span class="smallcaps">fasta</span> format.</p>
+<p class="asd_car"><i><i>&lt;SAMPLE-ID&gt;</i>.tallied.fastq.gz</i> - If <tt>fastq</tt> is specified (see above),
+reads are returned by <i>Tally</i> in <span class="smallcaps">fastq</span> format. In this case, where
+redundancy has been identified within the sequencing files, for each unique
+read, base quality is determined according the maximum quality at each base
+within the corresponding redundant set.</p>
+</div>
+</div>
+<p class="asd_par"><b>NOTE:</b> Release 17-055 - In the <i><i>&lt;SAMPLE-ID&gt;</i>.tallied.XXXXX.gz</i> files read IDs now take the format
+'read[Unique number]_x[Number of duplicates]/[1 or 2].'.</p>
+
+<a name="references"></a><div class="sec_leader sec_lev1"><div class="sec_title"><a class="intern" href="#references">References</a></div><div class="sec_num"><a class="intern" href="#toc8"><span class="sec_num">8</span></a></div></div>
+<p class="asd_par">
+<a name="ref1">[1]</a>
+R.utils: Various programming utilities. Bengtsson H. (2013).<br>
+http://CRAN.R-project.org/package=R.utils
+</p>
+<p class="asd_par">
+<a name="ref2">[2]</a>
+RColorBrewer: ColorBrewer palettes. Neuwirth E. (2011).<br>
+http://CRAN.R-project.org/package=RColorBrewer
+</p>
+<p class="asd_par">
+<a name="ref3">[3]</a>
+GenomicRanges: Representation and manipulation of genomic intervals. Aboyoun P., Pages H. and Lawrence M.
+</p>
+<p class="asd_par">
+<a name="ref4">[4]</a>
+gplots: Various R programming tools for plotting data. Warnes G.R., Includes R source code and/or documentation contributed by:
+Bolker B., Bonebakker L., Gentleman R., Huber W., Liaw A., Lumley T., Maechler M., Magnusson A., Moeller S., Schwartz M. and
+Venables B. (2012).<br>
+http://CRAN.R-project.org/package=gplots
+</p>
+<p class="asd_par">
+<a name="ref5">[5]</a>
+IRanges: Infrastructure for manipulating intervals on sequences. Pages H., Aboyoun P. and Lawrence M
+</p>
+<p class="asd_par">
+<a name="ref6">[6]</a>
+ShortRead: a Bioconductor package for input, quality assessment and exploration of high-throughput sequence data.
+Morgan M., Anders S., Lawrence M., Aboyoun P., Pages H. and Gentleman R. Bioinformatics (2009), 25:2607-2608.
+</p>
+<p class="asd_par">
+<a name="ref7">[7]</a>
+Ultrafast and memory-efficient alignment of short DNA sequences to the human genome. Langmead B., Trapnell C., Pop M. and Salzberg S.
+Genome Biology (2009), 10:R25.
+</p>
+<p class="asd_par">
+<a name="ref8">[8]</a>
+The Sequence alignment/map (SAM) format and SAMtools. Li H.*, Handsaker B.*, Wysoker A., Fennell T., Ruan J., Homer N., Marth G.,
+Abecasis G., Durbin R. and 1000 Genome Project Data Processing Subgroup. Bioinformatics (2009), 25:2078-9.
+</p>
+
+<a name="contact"></a><div class="sec_leader sec_lev1"><div class="sec_title"><a class="intern" href="#contact">Contact details</a></div><div class="sec_num"><a class="intern" href="#toc9"><span class="sec_num">9</span></a></div></div>
+<p class="asd_par">
+Please contact us with feedback or questions:
+</p>
+<div class="verbatim">kraken@ebi.ac.uk
+</div>
+<a name="asd_body_end"></a>
+</div></div>
+</body>
+</html>

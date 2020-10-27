@@ -1,0 +1,20 @@
+##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
+'''
+    Title: BC extraction
+    Date last modified: 2020/04/15
+    Python Version: 3.6.2
+'''
+##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
+
+# Rules -----------------------------------------------------------------------
+
+# Extract barcodes from cDNA/pDNA SE fastq files
+rule extract_barcodes_from_fq:
+    input:
+        fq = '5977_1_pMT02-insert_NoIndex_S1_R1_001.fastq.gz'
+    output:
+        tsv = 'results/_barcodes.tsv'
+    log:
+        'logs/_extract_barcodes_from_fq.log'
+    script:
+        'mt20200415_bc-counts.py'
