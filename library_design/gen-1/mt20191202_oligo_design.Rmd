@@ -250,6 +250,12 @@ nr3c1 <- t(nr3c1)
 nfe2l2 <- read.table("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/PWMs/M02705_1.94d.txt", header = T)
 nfe2l2 <- nfe2l2[,-1]
 nfe2l2 <- t(nfe2l2)
+nrf1 <- read.table("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/PWMs/M05963_1.94d.txt", header = T)
+nrf1 <- nrf1[,-1]
+nrf1 <- t(nrf1)
+nfe2 <- read.table("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/PWMs/M08957_1.94d.txt", header = T)
+nfe2 <- nfe2[,-1]
+nfe2 <- t(nfe2)
 nfkb1 <- read.table("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/PWMs/M10276_1.94d.txt", header = T)
 nfkb1 <- nfkb1[,-1]
 nfkb1 <- t(nfkb1)
@@ -282,12 +288,12 @@ nfya <- nfya[,-1]
 nfya <- t(nfya)
 
 # Combine all the pwms in a list
-seqlogos <- list(stat3, zfx, esrrb, smad4, klf4, tfcp2l1, gbx2, zfp42, trp53, rara, neurog2, pax6, rbpj, sp1, nr3c1, nfe2l2, nfkb1, creb1, gli1, irf3, irx3, otx1, elk1, tcf7l2, homez, nfya)
+seqlogos <- list(stat3, zfx, esrrb, smad4, klf4, tfcp2l1, gbx2, zfp42, trp53, rara, neurog2, pax6, rbpj, sp1, nr3c1, nfe2l2, nrf1, nfe2, nfkb1, creb1, gli1, irf3, irx3, otx1, elk1, tcf7l2, homez, nfya)
 
 ## Rename the titles of the pwms
 # names(seqlogos) <- c("Stat3 - M05480_1.94d", "Zfx - M00640_1.94d", "Esrrb - M08637_1.94d", "Smad4 - M10290_1.94d", "Klf4 - M08884_1.94d", "Tfcp2l1 - M09235_1.94d", "Gbx2 - M05758_1.94d", "Zfp42 - M09317_1.94d", "Trp53 - M06704_1.94d", "Rara - M06033_1.94d", "Neurog2 - M08951_1.94d", "Pax6 - M09045_1.94d", "Rbpj - M00862_1.94d", "Sp1 - M06128_1.94d", "Nr3c1 - M10263_1.94d", "Nfe2l2 - M02705_1.94d", "Nfkb1 - M10276_1.94d", "Creb1 - M10066_1.94d", "Gli1 - M00597_1.94d", "Irf3 - M08827_1.94d", "Irx3 - M03266_2.00", "Otx1 - M05974_1.94d", "Elk1 - M05658_1.94d", "Tcf7l2 - M02162_1.94d", "Homez - M05805_1.94d", "Nfya - M06672_1.94d")
 
-names(seqlogos) <- c("Stat3", "Zfx", "Esrrb", "Smad4", "Klf4", "Tfcp2l1", "Gbx2", "Zfp42", "Trp53", "Rara", "Neurog2", "Pax6", "Rbpj", "Sp1", "Nr3c1", "Nfe2l2", "Nfkb1", "Creb1", "Gli1", "Irf3", "Irx3", "Otx1", "Elk1", "Tcf7l2", "Homez", "Nfya")
+names(seqlogos) <- c("Stat3", "Zfx", "Esrrb", "Smad4", "Klf4", "Tfcp2l1", "Gbx2", "Zfp42", "Trp53", "Rara", "Neurog2", "Pax6", "Rbpj", "Sp1", "Nr3c1", "Nfe2l2", "Nrf1", "NFE2", "Nfkb1", "Creb1", "Gli1", "Irf3", "Irx3", "Otx1", "Elk1", "Tcf7l2", "Homez", "Nfya")
 
 # Create sequence plot of all pwms
 ggseqlogo(seqlogos, ncol = 4) + theme_bw()+ theme(strip.background =element_rect(fill="#E6A08A"))
@@ -301,7 +307,7 @@ ggseqlogo(seqlogos, ncol = 4) + theme_bw()+ theme(strip.background =element_rect
 #                            filter.gc = T, filter.self_complementary = T, cores = 24)
 
 # write.csv2(barc, file = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/barcodes.csv")
-barc <- read.csv2("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/barcodes.csv", row.names = 1)
+barc <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/output/barcodes.csv", row.names = 1)
 colnames(barc) <- "barcode"
 
 # Filter out ATGs
