@@ -54,6 +54,8 @@ library(ggbeeswarm)
 library(vwr)
 library(d3r)
 library(sunburstR)
+library(LncFinder)
+library(plotly)
 ```
 
 ### Custom functions
@@ -199,7 +201,8 @@ get_pwm_feature_matrix <- function(motif_meta_fn, fimo_fn, db = 2) {
 ## Data import
 ```{r, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Import reference sequences
-ref_seq <- ReadFasta("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/mt20191205_oligo_pool.fasta")
+ref_seq <- ReadFasta("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/output/mt20191205_oligo_pool.fasta")
+
 
 # Remove adapters from reference sequence (cause these are not in the sequencing data)
 ref_seq$sequence <- gsub("CGGAGCGAACCGAGTTAG", "", ref_seq$sequence)
@@ -210,7 +213,7 @@ ref_seq$barcode <- gsub(".*([A-Z]{12})$", "\\1", ref_seq$sequence)
 ref_seq$insert <- gsub("(.*)[A-Z]{12}$", "\\1", ref_seq$sequence)
 
 # Import sequencing files
-pDNA_seq <- read_tsv("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/pDNA_seq/pDNA-seq-starcode.tsv", col_names = c("sequence", "number"))
+pDNA_seq <- read_tsv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/pDNA_insert_seq/pDNA-seq-starcode.tsv", col_names = c("sequence", "number"))
 pDNA_seq$barcode <- gsub(".*([A-Z]{12})$", "\\1", pDNA_seq$sequence)
 pDNA_seq$insert <- gsub("(.*)[A-Z]{12}$", "\\1", pDNA_seq$sequence)
 
@@ -219,7 +222,7 @@ pDNA_seq <- pDNA_seq[pDNA_seq$number >= 15,]
 
 
 
-pDNA_seq_clust <- read_tsv("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/pDNA_seq/pDNA-seq-starcode-d1.tsv", col_names = c("sequence", "number"))
+pDNA_seq_clust <- read_tsv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/pDNA_insert_seq/pDNA-seq-starcode-d1.tsv", col_names = c("sequence", "number"))
 pDNA_seq_clust$barcode <- gsub(".*([A-Z]{12})$", "\\1", pDNA_seq_clust$sequence)
 pDNA_seq_clust$insert <- gsub("(.*)[A-Z]{12}$", "\\1", pDNA_seq_clust$sequence)
 ```
@@ -343,7 +346,6 @@ ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
 
 
 
-
 ## Now we want to know the read distribution of matched/unmatched sequences
 ```{r, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 ## Only select barcodes from design in pDNA data
@@ -405,6 +407,39 @@ ggplot(match_df_reads, aes(x=number, color=match)) +
   scale_color_grey()+scale_fill_grey() +
   theme_classic()
 ```
+
+
+## Correlate to GC contenct
+```{r}
+# Load reference file
+ref_seq <- seqinr::read.fasta("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/output/mt20191205_oligo_pool.fasta")
+
+# Compute gc contents
+gc <- compute_GC(ref_seq)
+
+# Plot gc distribution
+density <- density(gc$GC.content)
+
+plot_ly(x = ~density$x, y = ~density$y, type = 'scatter', mode = 'lines', fill = 'tozeroy') %>% 
+  layout(xaxis = list(title = 'GC content'),
+         yaxis = list(title = 'Density'))
+
+
+match_seq <- match_insert[!is.na(match_insert$name),]
+gc <- gc %>% rownames_to_column(var = "name")
+gc <- merge(gc, match_seq)
+gc[is.na(gc$number),] <- 0
+gc <- gc[apply(gc[,c(-1,-3,-5)], 1, function(x) !all(x==0)),]
+gc$number <- ave(gc$number, FUN = function(x) x/sum(x) *1000000)
+
+
+
+
+plot_ly(data = gc, x = ~GC.content, y = ~number) %>% 
+  layout(xaxis = list(title = 'GC content'),
+         yaxis = list(title = 'reads per million'))
+```
+
 
 
 # Barcodes attached to wrong insert?
@@ -668,11 +703,11 @@ ggplot(data = match_insert, aes(x = lv)) +
 ```{r}
 # Export barcodes that are attached to multiple inserts
 bc_exclude <- matching_df_exclude$barcode %>% unique()
-write.csv(bc_exclude, "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/pDNA_seq/bc_exclude.csv")
+write.csv(bc_exclude, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/pDNA_insert_seq/bc_exclude.csv")
 
 # Export barcodes that are attached to the wrong insert
 bc_replace <- pDNA_seq_incorrect %>% select(barcode, `bc-match`, `insert-match`) %>% unique()
-write.csv(bc_replace, "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/pDNA_seq/bc_replace.csv")
+write.csv(bc_replace, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/pDNA_insert_seq/bc_replace.csv")
 ```
 
 # Session Info
