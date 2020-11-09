@@ -117,7 +117,7 @@ corColor <- function(data, mapping, color = I("black"), sizeRange = c(1, 3), ...
 ## Data import
 ```{r data import, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Import barcode counts per experiment
-bc_files = list.files('/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/results_e3_s1/',
+bc_files = list.files('/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/results_e3_s1/',
                        full.names=T, patter='*_barcode_counts.tsv')
 bc_list <- lapply(bc_files, fread, header = FALSE)
 names(bc_list)<- gsub('.*//(.*?)_[CGAT]{8}.*_barcode_counts.tsv', 
@@ -125,13 +125,13 @@ names(bc_list)<- gsub('.*//(.*?)_[CGAT]{8}.*_barcode_counts.tsv',
                                     bc_files)
 
 # Import barcode annotation
-bc_annotation <- read.csv("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/mt20191218_tf-array.csv", header = T)
+bc_annotation <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/output/mt20191218_tf-array.csv", header = T)
 bc_annotation$TF <- as.character(bc_annotation$TF) 
 bc_annotation$TF[bc_annotation$TF == "ctrl"] <- "hPGK"
 
 # Manually check clustering 
-x <- read_table("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/bartender/bc_2i_neg_LIF_r1_CGATGTAT_S98_conv_barcode.txt", col_names = F)
-y <- read_csv("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/bartender/2i_neg_LIF_r1_CGATGTAT_S98_cluster_barcode.csv", col_names = F)
+x <- read_table("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/bartender/bc_2i_neg_LIF_r1_CGATGTAT_S98_conv_barcode.txt", col_names = F)
+y <- read_csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/bartender/2i_neg_LIF_r1_CGATGTAT_S98_cluster_barcode.csv", col_names = F)
 
 barcodes <- bc_annotation$barcode
 ```
@@ -159,7 +159,7 @@ for (i in 1:22) {
 
 
 # Import starcode data
-bartender_files = list.files('/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/bartender/',
+bartender_files = list.files('/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/bartender/',
                        full.names=T, patter='*_cluster_d3_barcode.csv')
 bartender_list <- lapply(bartender_files, fread, header = FALSE)
 names(bartender_list)<- gsub('.*//(.*?)_[CGAT]{8}.*_cluster_d3_barcode.csv',
@@ -443,6 +443,53 @@ ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
   theme(legend.position = "none")
 ```
 
+# Check if the pDNA-bc count correlates with the barcode count in the pDNA-insert-seq data
+```{r}
+pDNA_count <- bc_df %>% select(barcode, pDNA_1, pDNA_2) %>%
+  mutate(pDNA = (pDNA_1 + pDNA_2) / 2) %>%
+  select(barcode, pDNA) %>% 
+  mutate(pDNA = ave(pDNA, FUN = function(x) x/sum(x) *1000000))
+
+
+ref_seq <- ReadFasta("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/output/mt20191205_oligo_pool.fasta")
+ref_seq$sequence <- gsub("CATCGTCGCATCCAAGAG", "", ref_seq$sequence)
+ref_seq$barcode <- gsub(".*([A-Z]{12})$", "\\1", ref_seq$sequence)
+
+# Add gc content info
+# Load reference file
+ref_seq_2 <- seqinr::read.fasta("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/output/mt20191205_oligo_pool.fasta")
+
+# Compute gc contents
+gc <- compute_GC(ref_seq_2)
+gc <- gc %>% rownames_to_column(var = "name")
+ref_seq <- merge(gc, ref_seq, by = "name")
+
+
+pDNA_seq <- read_tsv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/pDNA_insert_seq/pDNA-seq-starcode.tsv", col_names = c("sequence", "number"))
+
+# Split up in insert and barcode part
+## In my case, the barcode should be the last 12 bases of the sequence
+pDNA_seq$barcode <- gsub(".*([A-Z]{12})$", "\\1", pDNA_seq$sequence)
+pDNA_seq <- pDNA_seq %>% select(barcode, number) %>%
+  unique()
+pDNA_seq <- pDNA_seq %>% 
+  group_by(barcode) %>% summarise(number = sum(number))
+
+pDNA_count <- merge(pDNA_count, ref_seq)
+pDNA_count <- merge(pDNA_count, pDNA_seq)
+pDNA_count <- pDNA_count %>%
+  mutate(number = ave(number, FUN = function(x) x/sum(x) *1000000))
+pDNA_count$gc_status <- "high"
+pDNA_count$gc_status[pDNA_count$GC.content < 0.46] <- "low"
+
+
+
+plot_ly(data = pDNA_count, x = ~pDNA, y = ~number, color = ~gc_status) %>% 
+  layout(xaxis = list(title = 'bc-seq bc rpm'),
+         yaxis = list(title = 'insert-seq bc rpm'))
+
+```
+
 
 ## We still have a lot of unmatched barcodes - Match unmatched barcodes to designed barcodes
 ```{r barcode match, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
@@ -632,7 +679,7 @@ ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
 ## Check again how many bc reads per experiment we have
 ```{r read count 2, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 ## Make a graph to show the previously calculated reads per condition
-bc_df <- read.csv("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/results/mt20200504_bc_df_levenshtein.csv", header = T)
+bc_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/results/mt20200504_bc_df_levenshtein.csv", header = T)
 bc_df_match <- bc_df[!is.na(bc_df$seq),]
 experimental_reads_2 <- data.frame(colSums(bc_df_match[,c(-1:-9)])) %>% 
   tibble::rownames_to_column()
@@ -1483,7 +1530,7 @@ bc_df_cDNA_filt$condition <- gsub("^X", "", bc_df_cDNA_filt$condition)
 
 # Export bc_df for cDNA analysis
 filename <- SetFileName("_reporter_activity_filt", "mt")
-setwd("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/results/")
+setwd("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/results/")
 write.csv(bc_df_cDNA_filt, file = paste(filename,".csv", sep = ""), row.names = F)
 ```
 
