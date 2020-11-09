@@ -1,0 +1,333 @@
+---
+title: "Oligo Design"
+author: "Max Trauernicht"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    code_folding: show
+    highlight: monochrome
+    theme: journal
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+  editor_options:
+    chunk_output_type: console
+---
+
+# knitr document van Steensel lab
+
+# TF reporter oligo design
+
+# Introduction
+In this document, an oligo library of TF reporters will be generated. These oligos contain TF binding sites of ~30 selected TFs, random inactive spacing between them, followed by minimal promoters, and a barcode in the transcription unit.
+
+# Data processing
+## Path, Libraries, Parameters and Useful Functions
+```{r setup, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+StartTime <-Sys.time()
+
+# 8-digit Date tag:
+Date <- substr(gsub("-","",Sys.time()),1,8) 
+# libraries:
+library(ggplot2)
+library(seqinr)
+library(seqLogo)
+library(universalmotif)
+library(Biostrings)
+library(SimRAD)
+library(gtools)
+library(DNABarcodes)
+library(phylotools)
+library(ape)
+library(magrittr)
+library(dplyr)
+library(readr)
+library(stringr)
+library(tidyr)
+library(heatmaply)
+library(pheatmap)
+library(tibble)
+library(ggseqlogo)
+library(RColorBrewer)
+library(data.table)
+library(vwr)
+library(ggbeeswarm)
+library(ggrepel)
+```
+
+### Custom functions
+Functions used thoughout this script.
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+SetFileName <- function(filename, initials) {
+  # Set filename with extension and initials to make filename with date integrated.
+  filename <- substitute(filename)
+  initials <- substitute(initials)
+  filename <- paste0(initials, Date, filename)
+  filename
+}
+
+# Function to substring the right part of the motif
+substrRight <- function(x, n){
+  substr(x, nchar(x)-n+1, nchar(x))
+}
+
+
+# Function to load PWM matrix
+get_pwm_feature_matrix <- function(motif_meta_fn, fimo_fn, db = 2) {
+
+  # validate args
+  valid_dbs <- 1:2
+  if(!db %in% valid_dbs)
+    stop('Invalid db (database version). Please use db=1 (maintained for backward compatibility only) or db=2')
+
+  # db=1 is maintained for backward compatibility only
+  if(db == 1) {
+
+    # read in motif metadata
+    motif_meta    <- read.csv(motif_meta_fn)
+
+    # check whether motif metadata contain essential annotations
+    if(!all(c('PWM.ID', 'Cognate.TF') %in% colnames(motif_meta))) {
+      message('The motif metadata file does not contain the essential columns PWM.ID and Cognate.TF')
+    }
+
+    motif_minimal <- motif_meta[, c('PWM.ID', 'Cognate.TF')]
+
+    # load fimo output --> extract motif id, sequence id and p-value
+    df <- read.table(fimo_fn)
+    df <- df[, c(1, 2, 7)]
+
+    colnames(df) <- c('PWM.ID', 'seqid', 'pval')
+
+    # add TF id
+    df <- merge(df, motif_minimal, by = 'PWM.ID')
+
+    # group motif hits by sequence id
+    l <- split(df, df[['seqid']])
+
+    # multiple PWM and multiple hits possible. Reduce hits to one per TF, keeping best p-val only
+    l <- lapply(l, function(x) {
+      x_by_tf <- split(x, x[['Cognate.TF']], drop = TRUE)
+      x_by_tf <- lapply(x_by_tf, function(y) y[which.min(y$pval), ])
+      do.call('rbind', x_by_tf)
+    })
+
+    # initialize feature matrix
+    n_tf          <- motif_minimal[['Cognate.TF']] %>%
+      unique %>%
+      length
+    n_seq         <- length(l)
+    pwm           <- matrix(1, nrow = n_seq, ncol = n_tf)
+    colnames(pwm) <- (motif_minimal[['Cognate.TF']] %>% unique)
+
+    # replace :: from names of composite motifs
+    colnames(pwm) <- str_replace_all(colnames(pwm), '::', '_')
+
+    # fill in feature matrix
+    for(i in 1 : n_seq) {
+      pwm[i, l[[i]][['Cognate.TF']]] <- l[[i]]$pval
+    }
+
+    # -log10 transform
+    pwm           <- -1 * log10(pwm)
+
+    # coerce to tib and return
+    tib_fimo <- as_data_frame(pwm) %>%
+      mutate(id = names(l))
+      dplyr::select(id, everything())
+
+  }
+
+  # db = 2 (default)
+  else {
+
+    # load metadata
+    tib_meta    <- read_csv(motif_meta_fn) %>%
+      # extract tf symbol from motif id (Cognate_TF unsafe, it can be empty) and replace :: occurrences
+      mutate(tf_symbol = str_remove(ID, '_[0-9]*'),
+             tf_symbol = str_replace(tf_symbol, '::', '_')) %>%
+      select(motif_id = `PWM ID`, tf_symbol)
+
+    # load fimo results
+    tib_fimo <- read_tsv(fimo_fn) %>%
+      # extract motif id, sequence id and p-value
+      select(motif_id, sequence_name, pval = `p-value`)
+
+    # add tf symbol to fimo results
+    tib_fimo <- tib_fimo %>%
+      left_join(tib_meta, by = 'motif_id') %>%
+      # remove hits with missing motif id (composite pwms)
+      filter(!is.na(tf_symbol))
+
+    # select best hit for each motif and sequence
+    tib_fimo <- tib_fimo %>%
+      group_by(sequence_name, tf_symbol) %>%
+      dplyr::slice(which.min(pval)) %>%
+      ungroup()
+
+    # spread into feature matrix
+    tib_fimo <- tib_fimo %>%
+      mutate(pval = -1 * log10(pval)) %>%
+      select(-motif_id) %>%
+      spread(key = tf_symbol, value = pval, fill = 0, drop = TRUE) %>%
+      # perform cosmetics on the id
+      mutate(id = sequence_name) %>%
+      select(-c(sequence_name)) %>%
+      select(id, everything())
+
+  }
+
+  return(tib_fimo)
+
+}
+
+ReadFasta<-function(file) {
+   # Read the file line by line
+   fasta<-readLines(file)
+   # Identify header lines
+   ind<-grep(">", fasta)
+   # Identify the sequence lines
+   s<-data.frame(ind=ind, from=ind+1, to=c((ind-1)[-1], length(fasta)))
+   # Process sequence lines
+   seqs<-rep(NA, length(ind))
+   for(i in 1:length(ind)) {
+      seqs[i]<-paste(fasta[s$from[i]:s$to[i]], collapse="")
+   }
+   # Create a data frame 
+   DF<-data.frame(name=gsub(">", "", fasta[ind]), sequence=seqs)
+   # Return the data frame as a result object from the function
+   return(DF)
+}
+```
+
+
+## Data import
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# Import chosen TFs
+tf.df.frame <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/parameter_files/TF_motifs.csv", header = T)
+tf.df.annotated <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/parameter_files/TF_motifs_annotated.csv", header = T)
+
+# Import parameters
+spacings <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/parameter_files/Spacing.csv", header = T)
+distances <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/parameter_files/Distance.csv", header = T)
+promoters <- read.csv2("//DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/parameter_files/Promoter.csv", header = T)
+barcodes <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/parameter_files/Barcode.csv", header = T)
+background <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/parameter_files/Background.csv", header = T)
+```
+
+# Analysis
+
+# Motif filtering and characterization
+```{r out.width= "80%", fig.align= "center", echo = FALSE, warning = FALSE}
+# Load Lambert et al. cluster information
+tf_clusters <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/lambert_tf_clusters.csv", header = T)
+
+# Select only SELEX data 
+tf_clusters <- tf_clusters[tf_clusters$Motif.Type == "HT-SELEX",]
+
+# Select one motif per TF - Remove duplicate motifs (select newest motif)
+tf_clusters$year <- gsub(".*([0-9]{4})", "\\1", tf_clusters$Motif.Source)
+tf_clusters$TF <- gsub("(.*?)_.*", "\\1", tf_clusters$Motif.ID)
+tf_clusters$TF <- gsub("V\\$","", tf_clusters$TF)
+tf_clusters <- unique(setDT(tf_clusters)[order(TF, -year)], by = "TF")
+
+# Count cluster occurrences within the same family
+tf_clusters$count <- ave(tf_clusters$Cluster.., tf_clusters$Cluster.., tf_clusters$TF.Family, FUN = function(x) length(x))
+
+
+cluster_counts <- tf_clusters %>% select(TF.Family, Cluster.., count) %>% unique()
+cluster_counts$total_count <- ave(cluster_counts$count, cluster_counts$TF.Family, FUN = function(x) sum(x))
+cluster_counts$motif_count <- ave(cluster_counts$Cluster.., cluster_counts$TF.Family, FUN = function(x) length(unique(x)))
+
+# Plot cluster occurrence distribution
+ggplot(cluster_counts, aes(y = count, x = "All TFs", label = TF.Family)) +
+  geom_quasirandom(color = ifelse(cluster_counts$count <= 8, "black", "red")) +
+  ylab("TF motifs per cluster") +
+  xlab("") +
+  geom_hline(yintercept = 8, linetype = "dashed", color = "red") +
+  geom_text(aes(1.4,7,label = "motif overlap cutoff", vjust = 0.5), size = 4) +
+  geom_text_repel(data = subset(cluster_counts, count > 8),
+                  segment.color = "black",
+                  direction = "x") +
+  theme_bw()
+
+
+
+# Plot number of distinct motifs vs. number of clusters
+plot_ly(data=cluster_counts %>% select(TF.Family, total_count, motif_count) %>% 
+          unique(), 
+        x = ~reorder(TF.Family,-total_count), 
+        y = ~total_count, type = 'bar', name = 'Distinct motifs',
+        marker = list(color = "#2D3047")) %>%
+    add_trace(y = ~motif_count, name = 'Distinct motif clusters',
+              marker = list(color = "#FF9B71")) %>%
+    layout(yaxis = list(title = 'Count'), barmode = 'group') %>%
+  layout(xaxis = list(title = "TF family"),
+         yaxis = list(title = "Distinct motifs"),
+         title = "All TFs - Motif cluster counts vs. motif counts")
+
+ggplot(cluster_counts) +
+  geom_quasirandom(aes(x = reorder(TF.Family,-total_count), y = count), 
+             color = ifelse(cluster_counts$count <= 8, "grey50", "red"))+ 
+  theme_bw() +
+  geom_hline(yintercept = 8, linetype = "dashed", color = "red") +
+  geom_text(aes(30,8,label = "motif overlap cutoff", vjust = -0.5), size = 4)+
+  ylab("TF motifs per cluster") +
+  xlab("TF family") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1.0, vjust = 0)) 
+
+tf_clusters$count <- as.numeric(tf_clusters$count)
+tfs_selected <- tf_clusters[tf_clusters$count <= 8,]
+
+# Manually remove all irrelevant zinc-finger TFs - re-check this if needed
+znf <- c("ZNF", "BCL", "CG31670", "DPF1", "HIC", "HINFP1", "OSR", "OVOL", "PRDM", "SNAI", "ZBTB", "ZSCAN")
+tfs_selected <- tfs_selected[!grep(paste(znf, collapse = "|"), tfs_selected$TF),]
+
+# Load additional filtering data
+tf_properties <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/garcia_tf-properties.csv", header = T) 
+tf_properties <- tf_properties[tf_properties$TF %in% tfs_selected$TF, c(1,2,8)]
+
+tfs_selected <- merge(tfs_selected, tf_properties, all = T)
+
+
+# Manually curated TF-list
+tf_candidates <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/tf_candidate_list.csv", header = T) 
+tfs_removed <- tfs_selected[!tfs_selected$TF %in% tf_candidates$TF, ]
+tfs_selected_filt <- tfs_selected[tfs_selected$TF %in% tf_candidates$TF, ]
+
+tfs_selected_filt$total_count <- ave(tfs_selected_filt$TF.Family, tfs_selected_filt$TF.Family,FUN = function(x) length(x))
+tfs_selected_filt$motif_count <- ave(tfs_selected_filt$Cluster.., tfs_selected_filt$TF.Family, FUN = function(x) length(unique(x)))
+tfs_selected_filt$total_count <- as.numeric(tfs_selected_filt$total_count)
+
+
+clusters_sel <- tfs_selected_filt %>% select(TF.Family, Cluster..)
+cluster_counts$cluster_id <- paste(cluster_counts$TF.Family, cluster_counts$Cluster.., sep = "_")
+clusters_sel$cluster_id <- paste(clusters_sel$TF.Family, clusters_sel$Cluster.., sep = "_")
+clusters_sel_df <- cluster_counts[cluster_counts$cluster_id %in% clusters_sel$cluster_id,]
+clusters_sel_df$total_count <- ave(clusters_sel_df$count, clusters_sel_df$TF.Family, FUN = function(x) sum(x))
+clusters_sel_df$motif_count <- ave(clusters_sel_df$Cluster.., clusters_sel_df$TF.Family, FUN = function(x) length(unique(x)))
+
+plot_ly(data=clusters_sel_df %>% select(TF.Family, total_count, motif_count) %>% 
+          unique(), 
+        x = ~reorder(TF.Family,-total_count), 
+        y = ~total_count, type = 'bar', name = 'Total number of TFs with these motifs',
+        marker = list(color = "#2D3047")) %>%
+    add_trace(y = ~motif_count, name = 'Number of distinct TFs',
+              marker = list(color = "#FF9B71")) %>%
+    layout(yaxis = list(title = 'Count'), barmode = 'group') %>%
+  layout(xaxis = list(title = "TF family"),
+         yaxis = list(title = "Distinct motifs"),
+         title = "Chosen TFs - Motif cluster counts vs. motif counts")
+
+```
+
+# Session Info
+```{r}
+paste("Run time: ",format(Sys.time()-StartTime))
+getwd()
+date()
+sessionInfo()
+```
+
