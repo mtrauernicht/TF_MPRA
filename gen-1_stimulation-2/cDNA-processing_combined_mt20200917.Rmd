@@ -554,7 +554,7 @@ tf_activity_heatmap <- merge(tf_activity_heatmap, group)
 tf_activity_heatmap <- tf_activity_heatmap %>% 
   remove_rownames %>% column_to_rownames(var="TF")
 # Keeping the scale in the pheatmap function
-myBreaks1 <- seq(0,3.5,0.035)
+myBreaks1 <- seq(0,4.5,0.045)
 
 
 # pheatmap function
@@ -1109,6 +1109,74 @@ for(i in unique(tf_activity_heatmap$TF)){
 dev.off()
 ```
 ### All of these heatmaps conclude that there we have informative reporters for ~10 TFs, and that the TF reporter design matters for some but not all TFs 
+
+# Print heatmaps for conditions that worked
+```{r}
+## Prepare dataframe
+tf_activity_heatmap <- cDNA_df_ctrl[cDNA_df_ctrl$neg_ctrls == "No",] %>% 
+  select(reporter_2, TF, condition, log_reporter_activity_relative) %>% unique()
+tf_activity_heatmap <- tf_activity_heatmap %>% select(-reporter_2) %>%
+  mutate(log_reporter_activity_relative = 
+           ave(log_reporter_activity_relative, condition, TF, FUN = function(x) mean(x))) %>%
+  unique()
+tf_activity_heatmap <- dcast(tf_activity_heatmap, TF ~ condition, value.var="log_reporter_activity_relative")
+tf_activity_heatmap <- merge(tf_activity_heatmap, group)
+
+tf_activity_heatmap <- tf_activity_heatmap %>% 
+  remove_rownames %>% column_to_rownames(var="TF")
+# Keeping the scale in the pheatmap function
+myBreaks1 <- seq(0,3.5,0.035)
+
+
+# pheatmap function
+pheatmap(as.matrix(t(tf_activity_heatmap[,-17])),
+         color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100),
+         breaks = myBreaks1, border_color = "black", 
+         cellwidth = 12, cellheight = 10,
+         angle_col = 90)
+
+
+# selective representation
+tf_activity_heatmap <- tf_activity_heatmap %>% select(-vitA, -`4-OHT`, -Bmp4, -Dex, -FK, -LPS, -RA, -Shh)
+tf_activity_heatmap <- tf_activity_heatmap[,c(4,3,5:8,1,2,9)]
+for (i in unique(tf_activity_heatmap$group)) {
+  p <- pheatmap(as.matrix(t(tf_activity_heatmap[tf_activity_heatmap$group == i,-9])),
+         color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100),
+         breaks = myBreaks1, border_color = "black", 
+         cellwidth = 12, cellheight = 10, cluster_rows = F,
+         angle_col = 90)
+  print(p) 
+}
+
+
+# The same for all designs
+tf_activity_heatmap <- cDNA_df_ctrl[cDNA_df_ctrl$neg_ctrls == "No",] %>% 
+  select(reporter_2, TF, condition, log_reporter_activity_relative) %>% unique()
+tf_activity_heatmap <- tf_activity_heatmap %>% 
+  mutate(log_reporter_activity_relative = 
+           ave(log_reporter_activity_relative, reporter_2, condition, FUN = function(x) mean(x))) %>%
+  unique()
+tf_activity_heatmap <- tf_activity_heatmap %>% 
+  dcast(reporter_2+TF ~ condition, value.var = "log_reporter_activity_relative")
+tf_activity_heatmap <- tf_activity_heatmap %>% 
+  remove_rownames %>% column_to_rownames(var="reporter_2")
+tf_activity_heatmap <- tf_activity_heatmap %>% select(-vitA, -`4-OHT`, -Bmp4, -Dex, -FK, -LPS, -RA, -Shh)
+
+tf_activity_heatmap$sum <- rowSums(tf_activity_heatmap %>% select(-TF))
+tf_activity_heatmap <- tf_activity_heatmap[tf_activity_heatmap$sum != 0, ] %>% select(-sum)
+
+pdf("results/mt20200924_tf-reporter-variants-all-activity.pdf")
+for(i in unique(tf_activity_heatmap$TF)){
+  print(pheatmap(as.matrix(t(tf_activity_heatmap[tf_activity_heatmap == i,-1])),
+         color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100),
+         border_color = "black",
+         breaks = myBreaks1, main = i, cluster_rows = F,
+         cellwidth = 10, cellheight = 10, angle_col = 90))
+}
+dev.off()
+```
+
+
 
 
 ## SuperPlot of TF activity per condition - this way we can plot not only the mean, but the complete data distribution across technical and biological replicates
@@ -2057,7 +2125,7 @@ level_order <- c("mCMV", "minP","Random",
 # Feature importance overview for each TF in a single plot (bar-chart including mean activities per feature)
 
 
-for (i in unique(cDNA_df_TF$TF[grep("Trp53", cDNA_df_TF$TF)])) {
+for (i in unique(cDNA_df_TF$TF[grep("Nfe2l2", cDNA_df_TF$TF)])) {
   
   # Plot to show prediction accuracy
   sp <- ggscatter(cDNA_df_TF[cDNA_df_TF$TF == i,], x = "log_reporter_activity", y = "activity_predicted",
