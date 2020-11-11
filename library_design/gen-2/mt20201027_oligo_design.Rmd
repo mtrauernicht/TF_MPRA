@@ -312,9 +312,9 @@ clusters_sel_df$motif_count <- ave(clusters_sel_df$Cluster.., clusters_sel_df$TF
 plot_ly(data=clusters_sel_df %>% select(TF.Family, total_count, motif_count) %>% 
           unique(), 
         x = ~reorder(TF.Family,-total_count), 
-        y = ~total_count, type = 'bar', name = 'Total number of TFs with these motifs',
+        y = ~total_count, type = 'bar', name = 'Total TFs in selected clusters',
         marker = list(color = "#2D3047")) %>%
-    add_trace(y = ~motif_count, name = 'Number of distinct TFs',
+    add_trace(y = ~motif_count, name = 'Selected TFs',
               marker = list(color = "#FF9B71")) %>%
     layout(yaxis = list(title = 'Count'), barmode = 'group') %>%
   layout(xaxis = list(title = "TF family"),
@@ -322,6 +322,67 @@ plot_ly(data=clusters_sel_df %>% select(TF.Family, total_count, motif_count) %>%
          title = "Chosen TFs - Motif cluster counts vs. motif counts")
 
 ```
+
+
+# Create DNA barcodes
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# # Create barcodes with length = 13
+# barc <- create.dnabarcodes(n = 13, dist = 3, filter.triplets = T,
+#                            filter.gc = T, filter.self_complementary = T, cores = 24)
+
+# write.csv2(barc, file = "/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/parameter_files/barcodes.csv")
+# barc <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/output/barc-13.csv", row.names = 1)
+# colnames(barc) <- "barcode"
+# 
+# # Filter out ATGs
+# barc <- barc[-grep("ATG",barc$barcode),]
+# 
+# # Filter out EcoRI & NheI sites
+# ecori_nhei <- c("GAATTC","GCTAGC")
+# barc <- barc[-grep(paste(ecori_nhei, collapse = "|"),barc)]
+# 
+# # Filter out barcodes that are similar to the pMT02 barcodes
+# ref_seq <- ReadFasta("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/output/mt20191205_oligo_pool.fasta")
+# 
+# # Remove adapters from reference sequence (cause these are not in the sequencing data)
+# ref_seq$sequence <- gsub("CGGAGCGAACCGAGTTAG", "", ref_seq$sequence)
+# ref_seq$sequence <- gsub("CATCGTCGCATCCAAGAG", "", ref_seq$sequence)
+# 
+# 
+# ## the barcode should be the last 12 bases of the sequence
+# ref_seq$barcode <- gsub(".*([A-Z]{12})$", "\\1", ref_seq$sequence)
+# ref_bc <- ref_seq$barcode
+# 
+# # For each barcode in the deisgn, calculate the levenshtein distance to each non-matched barcode
+# n <- 0
+# for (i in 1:46643) {
+#   if (i == 1) {
+#     l <- data.frame(levenshtein.distance(barc[i], ref_bc))
+#   }
+#   else {
+#     l[i] <- levenshtein.distance(barc[i], ref_bc)
+# 
+#     # Keep track of the progress
+#     n <- n + length(i)
+#     percent <- (n / 46643)*100
+#     progress <- paste("progress:", percent, "%")
+#     if (percent %% 10 == 0) {
+#     print(progress)
+#     }
+#   }
+# 
+# }
+# names(l) <- barc
+# 
+# # Discard sequences that have a levenshtein distance of 3 or more to one or more pMT02 barcodes
+# lev <- l
+# lev2 <- lev[,!colSums(lev <= 2) >= 1]
+# barc_keep <- colnames(lev2)
+# write.csv(barc_keep, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/parameter_files/barc_selected.csv")
+```
+
+
+
 
 # Session Info
 ```{r}
