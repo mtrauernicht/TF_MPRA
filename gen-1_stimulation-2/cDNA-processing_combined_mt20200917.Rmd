@@ -1,40 +1,28 @@
 ---
-title: "cDNA processing"
+title: "cDNA counts functional analysis - stimulation 2"
 author: "Max Trauernicht"
 date: "`r format(Sys.time(), '%Y-%m-%d')`"
-output:
-  html_document:
-    theme: journal
-    highlight: monochrome
-    toc: yes
-    toc_float: yes
-    code_folding: show
-  editor_options:
-    chunk_output_type: console
-  pdf_document:
-    toc: yes
+output: 
+  prettydoc::html_pretty:
+    theme: leonids
+    highlight: github
+  #   toc: true
+  #   toc_float: true
+  #   code_folding: show
+  # editor_options:
+  #   chunk_output_type: console
 ---
 
-# knitr document van Steensel lab
+*knitr document van Steensel lab*
 
-# Introduction
+# TF reporter cDNA-count processing - stimulation 2
+
+## Introduction
 I previously processed the raw sequencing data, optimized the barcode clustering, quantified the pDNA data and normalized the cDNA data. In this script, I want to have a detailed look at the cDNA data from a general perspective.
 
-## Description of Data
-How to make a good rendering table: 
-```{r table1, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
-tabl <- "
-| column1	|	column2	|	column3	|	
-|----|----|----|
-|1	|	2	|	3	|	
-|a	|	b	|	c	|	
-"
-cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
-```
 
-# Data processing
-## Path, Libraries, Parameters and Useful Functions
-```{r setup, message = FALSE}
+
+```{r setup, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 StartTime <-Sys.time()
 
@@ -60,9 +48,7 @@ library(stringr)
 library(tidyr)
 ```
 
-### Custom functions
-Functions used thoughout this script.
-```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 SetFileName <- function(filename, initials) {
   # Set filename with extension and initials to make filename with date integrated.
   filename <- substitute(filename)
@@ -240,14 +226,13 @@ corColor <- function(data, mapping, color = I("black"), sizeRange = c(1, 3), ...
 ```
 
 
-## Data import
-```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 # Import processed bc counts from the preprocessing step
-cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6139_stimulation-2/results/mt20200918_reporter_activity_filt.csv", header = T)
+cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6139_stimulation-2/results/mt20201125_reporter_activity_filt.csv", header = T)
 
 
 # Also import data from SuRE_TF_1 experiments
-cDNA_df_1 <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/results/mt20200715_reporter_activity_filt.csv", header = T)
+cDNA_df_1 <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/results/mt20201125_reporter_activity_filt.csv", header = T)
 cDNA_df_1 <- cDNA_df_1 %>% setnames(c("background", "promoter", 
                                       "spacing", "distance", "bc.number"),
                                     c("Background", "Promoter", "Spacing", 
@@ -274,17 +259,6 @@ dmso_2i_lif <- rbind(dmso, lif) %>%
 
 colors <- c("#1B998B", "#2D3047", "#FF9B71")
 
-#ggplot(dmso_2i_lif) +
-  #geom_point(aes(x = `2i_pos_LIF`, y = `DMSO 1`), color = "#1B998B", 
-             #size = 0.5, alpha = 0.5) + theme_bw() +
-  #geom_point(aes(x = `2i_pos_LIF`, y = `DMSO 2`), color = "#2D3047",
-             #size = 0.5, alpha = 0.5) +
-  #geom_point(aes(x = `2i_pos_LIF`, y = `DMSO 3`), color = "#FF9B71",
-             #size = 1, alpha = 0.5) +
-  #labs(x = "Experiment 1", y = "Experiment 2", col = "rep") +
-  #xlim(-2.5,2.5) + ylim(-2.5,2.5) +
-  #labs(title = "Mean log2(cDNA/pDNA) experiment 1 vs experiment 2")
-
 cDNA_df$rep[cDNA_df$condition == "DMSO"] <- 4
 cDNA_df$condition[cDNA_df$condition == "DMSO"] <- "2i_pos_LIF"
 cDNA_df <- cDNA_df %>%
@@ -296,15 +270,15 @@ cDNA_df <- cDNA_df %>%
 
 # Prepare df
 cDNA_df$Background <- as.character(cDNA_df$Background)
-cDNA_df <- na.omit(cDNA_df)
+cDNA_df$Background[is.na(cDNA_df$Background)] <- ""
 cDNA_df$TF <- revalue(cDNA_df$TF, c("Tcfcp2l1" = "Tfcp2l1", "Tcfcp2l1_neg" = "Tfcp2l1_neg"))
 cDNA_df$reporter_id <- gsub("Tcfcp2l1", "Tfcp2l1", cDNA_df$reporter_id)
 ```
 
-# Analysis
+## Analysis
 
-## First insights into data distribution - reporter activity distribution plots
-```{r data_density, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+### First insights into data distribution - reporter activity distribution plots
+```{r data_density, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 ## reporter activity distribution over all experiments
 colors <- c("#1B998B", "#2D3047", "#FF9B71")
 
@@ -401,7 +375,7 @@ ggplot(cDNA_df[cDNA_df$Spacing != "",], aes(x = log_activity, fill = Spacing, al
   xlim(-5,5) + theme_classic()
 
 ## reporter activity distribution - highlight different backgrounds
-ggplot(cDNA_df[cDNA_df$Background != "0",], aes(x = log_activity, fill = Background, alpha = 0.4)) + 
+ggplot(cDNA_df[cDNA_df$Background != "",], aes(x = log_activity, fill = Background, alpha = 0.4)) + 
   geom_density() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - backgrounds") +
   scale_fill_manual(values = colors) +
@@ -412,7 +386,7 @@ ggplot(cDNA_df[cDNA_df$native_enhancer == "No" &
                cDNA_df$neg_ctrls  == "No" &
                cDNA_df$hPGK == "No" &
                cDNA_df$rand_promoter == "No",]) + 
-  geom_density(aes(x = bc_counts_rpm, fill = "#1B998B", alpha = 0.4)) + 
+  geom_density(aes(x = rpm, fill = "#1B998B", alpha = 0.4)) + 
   geom_density(aes(x = pDNA_counts_rpm, fill = "#2D3047", alpha = 0.4)) + 
   xlab("bc-counts per million") + 
   labs(title = "bc-count distribution cDNA (green) vs. pDNA (blue)") +
@@ -425,7 +399,7 @@ sp <- ggscatter(cDNA_df[cDNA_df$native_enhancer == "No" &
                cDNA_df$neg_ctrls  == "No" &
                cDNA_df$hPGK == "No" &
                cDNA_df$rand_promoter == "No",],
-               x = "pDNA_counts_rpm", y = "bc_counts_rpm",
+               x = "pDNA_counts_rpm", y = "rpm",
                size = 0.1, alpha = 0.3, color = "#2D3047", 
    add = "reg.line",
    add.params = list(color = "blue", fill = "lightgray"), title = "normalized barcode counts cDNA vs. pDNA",
@@ -529,8 +503,8 @@ print(plt)
 
 
 
-## Heat map - display mean log2-activity for each TF in each condition
-```{r tf_activity_heatmap, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+### Heat map - display mean log2-activity for each TF in each condition
+```{r tf_activity_heatmap, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 ## Prepare dataframe
 # Caculate mean TF activity per condition
 cDNA_df$tf_activity <- ave(cDNA_df$reporter_activity, cDNA_df$condition, cDNA_df$TF, FUN = function(x) mean(x))
@@ -577,8 +551,8 @@ for (i in unique(tf_activity_heatmap$group)) {
 }
 ```
 
-## Heatmap for native enhancers
-```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+### Heatmap for native enhancers
+```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 ## Prepare dataframe
 # Caculate mean TF activity per condition
 tf_activity_heatmap <- cDNA_df[cDNA_df$native_enhancer == "Yes",] %>% 
@@ -641,7 +615,6 @@ cDNA_df_native <- rbind(cDNA_df_native, promoters) %>%
 
 ```
 
-## Run FIMO script again 
 ```{bash run fimo db2_1, eval = FALSE}
 # motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
 # odir=/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/results/native-enhancer/fimo
@@ -651,9 +624,6 @@ cDNA_df_native <- rbind(cDNA_df_native, promoters) %>%
 ```
 
 
-## load fimo results
-We built a TF motif matrix using -log10 transformed FIMO scores. We used this feature encoding throughout the rest of this analysis, unless otherwise stated.
-
 ```{r build tf motif matrices db2: random_promoter, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # # load motif Metadata --> PWM feature matrix
 # tib_pwm_native_enhancer  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
@@ -662,8 +632,6 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 ```
 
 
-
-## visualize fimo results
 ```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # ## Add groups so I can plot them individually
 # tib_pwm_native_enhancer$group <- gsub("(^e[0-9]{1,2}).*", "\\1", tib_pwm_native_enhancer$id)
@@ -671,7 +639,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 # tib_pwm_native_enhancer$group <- gsub(paste(controls, collapse = "|"), "Control", tib_pwm_native_enhancer$group)
 ```
 
-## Look at only expressed TFs in mESCs
+
 ```{r out.width= "100%", fig.align= "center", echo=FALSE}
 # load('/DATA/usr/m.martinez.ara/GitLab/gurten/gurten/data/fc181121_epsure_tadec_rnaseq_expr_joshi.RData')
 # 
@@ -683,7 +651,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 #   ungroup()
 ```
 
-## Filter expressed TFs
+
 ```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # # only select fpkm>0
 # tib_fpkm_joshi_expressed <- tib_fpkm_joshi %>% filter(expr_mean>10)
@@ -693,8 +661,6 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 # 
 # tib_pwm_native_enhancer_ES <- tib_pwm_native_enhancer[,colnames(tib_pwm_native_enhancer) %in% tib_fpkm_joshi_expressed$symbol | colnames(tib_pwm_native_enhancer) %in% c("id", "group")]
 ```
-
-
 
 
 ```{r, fig.height=10, fig.width=10, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
@@ -729,8 +695,6 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 
 ```
 
-## Use FIMO matrix to build loglinear model
-## Binary presence of motif to explain expression variance
 ```{r fimo_model, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # # Subselect interesting TFs
 # tib_pwm_native_enhancer_ES <- tib_pwm_native_enhancer_ES %>%
@@ -885,10 +849,8 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 
 
 
-
-
-## Heatmap per TF - comparing design activities mutated vs. non-mutated
-```{r heatmap_4, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+### Heatmap per TF - comparing design activities mutated vs. non-mutated
+```{r heatmap_4, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 ## Prepare dataframe
 # Caculate mean TF activity per condition
 cDNA_df$reporter <- gsub("_[0-9]{1}$", "", cDNA_df$reporter_id)
@@ -941,8 +903,8 @@ for(i in unique(tf_activity_heatmap$TF)){
 
 
 
-## Heatmap per TF - only WT TF activities
-```{r heatmap_5, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+### Heatmap per TF - only WT TF activities
+```{r heatmap_5, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 ## Prepare dataframe
 # Caculate mean TF activity per condition
 tf_activity_heatmap <- cDNA_df[cDNA_df$native_enhancer == "No" & 
@@ -973,8 +935,8 @@ for(i in unique(tf_activity_heatmap$TF)){
 
 
 
-## Compute activity changes relative to their negative controls
-```{r, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+### Compute activity changes relative to their negative controls
+```{r, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 ## TF activity relative to negative controls 
 cDNA_df_ctrl <- cDNA_df[cDNA_df$native_enhancer == "No" &
                           cDNA_df$hPGK == "No" & cDNA_df$TF != "Random1" &
@@ -1099,7 +1061,7 @@ tf_activity_heatmap$sum <- rowSums(tf_activity_heatmap %>% select(-TF))
 tf_activity_heatmap <- tf_activity_heatmap[tf_activity_heatmap$sum != 0, ] %>% select(-sum)
 
 pdf("results/mt20200924_tf-reporter-variants-all-activity.pdf")
-for(i in unique(tf_activity_heatmap$TF)){
+for(i in unique(tf_activity_heatmap$TF[tf_activity_heatmap$TF != "Irx3" & tf_activity_heatmap$TF != "Neurog2" & tf_activity_heatmap$TF != "Nr3c1(GR)"])){
   print(pheatmap(as.matrix(t(tf_activity_heatmap[tf_activity_heatmap == i,-1])),
          color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100),
          border_color = "black",
@@ -1108,10 +1070,10 @@ for(i in unique(tf_activity_heatmap$TF)){
 }
 dev.off()
 ```
-### All of these heatmaps conclude that there we have informative reporters for ~10 TFs, and that the TF reporter design matters for some but not all TFs 
+*All of these heatmaps conclude that there we have informative reporters for ~10 TFs, and that the TF reporter design matters for some but not all TFs *
 
-# Print heatmaps for conditions that worked
-```{r}
+### Print heatmaps for conditions that worked
+```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 ## Prepare dataframe
 tf_activity_heatmap <- cDNA_df_ctrl[cDNA_df_ctrl$neg_ctrls == "No",] %>% 
   select(reporter_2, TF, condition, log_reporter_activity_relative) %>% unique()
@@ -1166,7 +1128,7 @@ tf_activity_heatmap$sum <- rowSums(tf_activity_heatmap %>% select(-TF))
 tf_activity_heatmap <- tf_activity_heatmap[tf_activity_heatmap$sum != 0, ] %>% select(-sum)
 
 pdf("results/mt20200924_tf-reporter-variants-all-activity.pdf")
-for(i in unique(tf_activity_heatmap$TF)){
+for(i in unique(tf_activity_heatmap$TF[tf_activity_heatmap$TF != "Irx3" & tf_activity_heatmap$TF != "Neurog2" & tf_activity_heatmap$TF != "Nr3c1(GR)"])){
   print(pheatmap(as.matrix(t(tf_activity_heatmap[tf_activity_heatmap == i,-1])),
          color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100),
          border_color = "black",
@@ -1177,9 +1139,6 @@ dev.off()
 ```
 
 
-
-
-## SuperPlot of TF activity per condition - this way we can plot not only the mean, but the complete data distribution across technical and biological replicates
 ```{r SuperPlot, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # # Plot for each tf-activity per condition per biological replicate the techical replicate distribution and means
 # ## Compute relevant mean and sd values
@@ -1331,7 +1290,6 @@ dev.off()
 ```
 
 
-# SuperPlots comparing different designs 
 ```{r superplot_2, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # # Same as before - now compare different designs
 # ## Generate facet_wrap plot for each TF - each facet is a different design 
@@ -1537,8 +1495,8 @@ dev.off()
 
 
 
-## Log-linear expression modelling to explain variance - model for each TF
-```{r log-linear-model-3, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+### Log-linear expression modelling to explain variance - model for each TF
+```{r log-linear-model-3, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 ### For each TF separately - only the non-mutated 
 cDNA_df_TF <- cDNA_df[cDNA_df$native_enhancer == "No" &
                         cDNA_df$hPGK == "No" & 
@@ -1581,7 +1539,7 @@ cDNA_df_TF$row <- rownames(cDNA_df_TF)
 
 
 
-for (i in unique(cDNA_df_TF$TF)) {
+for (i in unique(cDNA_df_TF$TF[cDNA_df_TF$TF != "Homez" & cDNA_df_TF$TF != "Irx3"])) {
   x <- lm(log_reporter_activity_relative ~ condition + 
                        Promoter + Spacing + Distance + Background, 
                      cDNA_df_TF[cDNA_df_TF$TF == i,])
@@ -1721,8 +1679,8 @@ for (i in unique(cDNA_df_TF$TF)) {
 
 
 
-## Log-linear expression modelling to explain variance - model for each TF - only WT - without condition
-```{r log-linear-model-4, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+### Log-linear expression modelling to explain variance - model for each TF - only WT - without condition
+```{r log-linear-model-4, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 ### For each TF separately - only the non-mutated 
 cDNA_df_TF <- cDNA_df[cDNA_df$native_enhancer == "No" &
                         cDNA_df$hPGK == "No" & 
@@ -1761,7 +1719,7 @@ names(weight) <- "feature"
 
 cDNA_df_TF$row <- rownames(cDNA_df_TF)
 
-for (i in unique(cDNA_df_TF$TF)) {
+for (i in unique(cDNA_df_TF$TF[cDNA_df_TF$TF != "Homez" & cDNA_df_TF$TF != "Irx3"])) {
   x <- lm(log_reporter_activity ~ Promoter + Spacing + Distance + Background, 
                      cDNA_df_TF[cDNA_df_TF$TF == i,])
   y <- data.frame(x$fitted.values) %>% rownames_to_column()
@@ -1877,10 +1835,6 @@ for (i in unique(cDNA_df_TF$TF)) {
 ```
 
 
-
-
-
-## Can expression variance be explained by the TF properties?
 ```{r tf-properties, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # # Import tf properties dataframe
 # tf_properties <- read.csv2("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/tf_properties.csv", header = T)
@@ -1999,12 +1953,8 @@ for (i in unique(cDNA_df_TF$TF)) {
 ```
 
 
-
-
-
-## Finding the best reporters for a single TF
-## Make the same models as before - but now per TF and per condition
-```{r log-linear-model-5, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+### Make the same models as before - but now per TF and per condition
+```{r log-linear-model-5, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 ### For each TF separately - only the non-mutated 
 cDNA_df_TF <- cDNA_df[cDNA_df$native_enhancer == "No" &
                         cDNA_df$hPGK == "No" & 
@@ -2048,7 +1998,7 @@ cDNA_df_TF$row <- rownames(cDNA_df_TF)
 cDNA_df_TF <- cDNA_df_TF[cDNA_df_TF$Promoter != "Random",]
 
 
-for (i in unique(cDNA_df_TF$TF)) {
+for (i in unique(cDNA_df_TF$TF[-grep("Irx3|Homez", cDNA_df_TF$TF)])) {
   if (length(cDNA_df_TF[cDNA_df_TF$TF == i,] > 1)) {
     x <- lm(log_reporter_activity_relative ~ Promoter + Spacing + Distance + Background, 
                      cDNA_df_TF[cDNA_df_TF$TF == i,])
@@ -2163,23 +2113,6 @@ for (i in unique(cDNA_df_TF$TF[grep("Nfe2l2", cDNA_df_TF$TF)])) {
   sp.plot <- arrangeGrob(sp,fp,p, nrow = 2, ncol = 2)
   grid.arrange(sp.plot)
 }
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## Exporting potential data. 
-```{r}
 ```
 
 # Session Info

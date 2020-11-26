@@ -427,7 +427,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 ```{r build tf motif matrices db2: random_promoter, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # load motif Metadata --> PWM feature matrix
 tib_pwm_random_promoter  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
-                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/tf_activity_reporter/data/SuRE_TF_1/TF-reporter_library_design/output/fimo/random_promoter/fimo.tsv',
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/random_promoter/fimo.tsv',
                                         db            = 2)
 ```
 
