@@ -1286,10 +1286,9 @@ cDNA_df_TF$row <- rownames(cDNA_df_TF)
 
 
 for (i in unique(cDNA_df_TF$TF[cDNA_df_TF$TF != "Homez" & cDNA_df_TF$TF != "Irx3"])) {
-  cDNA_df_TF_2 <- cDNA_df_TF[cDNA_df_TF$TF != "Homez" & cDNA_df_TF$TF != "Irx3",]
   x <- lm(log_reporter_activity_relative ~ condition + 
                        promoter + spacing + distance + background, 
-                     cDNA_df_TF_2[cDNA_df_TF_2$TF == i,])
+                     cDNA_df_TF[cDNA_df_TF$TF == i,])
   y <- data.frame(x$fitted.values) %>% rownames_to_column()
   par(mfrow=c(2,2))
   plot(x, main = i)

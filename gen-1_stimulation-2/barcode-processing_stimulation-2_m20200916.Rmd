@@ -1,5 +1,5 @@
 ---
-title: "Barcode processing"
+title: "Barcode processing - pMT02 - stimulation 2"
 author: "Max Trauernicht"
 date: "`r format(Sys.time(), '%Y-%m-%d')`"
 output: 
@@ -15,7 +15,7 @@ output:
 
 *knitr document van Steensel lab*
 
-# TF reporter barcode processing
+# TF reporter barcode processing - pMT02 - stimulation 2
 
 ## Introduction
 18,000 TF reporters on pMT02 were transfected into mESCs (in total 10 different conditions), sequencing data yielded barcode counts of these experiments. These counts will be processed in this script. 
@@ -345,8 +345,8 @@ bc_df_2 <- bc_df_2[!is.na(bc_df_2$condition),]
 
 ggplot(bc_df_2, aes(x = pDNA, y = rpm)) +
   geom_bin2d(bins = 100)+
-  xlim(0,400) +
-  ylim(0,400)+
+  xlim(0,1000) +
+  ylim(0,1000)+
   theme_bw()+
   facet_wrap(~condition)
 

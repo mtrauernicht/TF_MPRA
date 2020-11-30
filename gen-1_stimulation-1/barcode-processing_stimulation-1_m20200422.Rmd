@@ -1,5 +1,5 @@
 ---
-title: "Barcode processing"
+title: "Barcode processing - pMT02 - stimulation 1"
 author: "Max Trauernicht"
 date: "`r format(Sys.time(), '%Y-%m-%d')`"
 output: 
@@ -15,7 +15,7 @@ output:
 
 *knitr document van Steensel lab*
 
-# TF reporter barcode processing
+# TF reporter barcode processing - pMT02 - stimulation 1
 
 ## Introduction
 18,000 TF reporters on pMT02 were transfected into mESCs and NPCs (in total 7 different conditions), sequencing data yielded barcode counts of these experiments. These counts will be processed in this script. 
