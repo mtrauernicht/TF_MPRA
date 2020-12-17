@@ -146,12 +146,12 @@ bc_annotation$seq <- paste(bc_annotation$Primer1_seq, bc_annotation$motif1, bc_a
                                 bc_annotation$Space3, bc_annotation$motif4, bc_annotation$Distance_seq,
                                 bc_annotation$Promoter_sequence, bc_annotation$S1_primer,
                                 bc_annotation$barcode, bc_annotation$Primer2_seq, sep = "")
-bc_annotation <- bc_annotation %>% select(TF, Spacing, Distance, Barcode, Promoter, Background,
+bc_annotation <- bc_annotation %>% dplyr::select(TF, Spacing, Distance, Barcode, Promoter, Background,
                                           barcode, seq)
 bc_df <- merge(bc_df, bc_annotation, all = T)
 bc_df_long <- melt(bc_df, id.vars = "barcode",
               variable.name = "condition", value.name = "starcode_counts")
-bc_df <- bc_df %>% select(-TF, -Spacing, -Distance, -Barcode,
+bc_df <- bc_df %>% dplyr::select(-TF, -Spacing, -Distance, -Barcode,
                                                                 -Promoter, -Background, -seq)
 ```
 
@@ -207,7 +207,7 @@ p + geom_line(aes(y = mean, group = mean), linetype = "dashed")
 ```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
 ## Attach pDNA data
 pDNA <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/results/mt20200504_bc_df_levenshtein.csv", header = T, stringsAsFactors = F) %>%
-  select(barcode, pDNA_1, pDNA_2)
+  dplyr::select(barcode, pDNA_1, pDNA_2)
 bc_df <- merge(pDNA, bc_df, all = T)
 
 ## Import the previously saved read count data frame
@@ -243,7 +243,7 @@ bc_df <- bc_df[!is.na(bc_df$condition),]
 ```{r read count 2, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message= FALSE}
 # First compute reads per million to estimate the relative counts in their respective sample
 for (i in unique(bc_df$condition)) {
-  bc_df$rpm[bc_df$condition == i] <- bc_df$bc_counts[bc_df$condition == i] + 1/ # Adds a pseudocount of 1
+  bc_df$rpm[bc_df$condition == i] <- (bc_df$bc_counts[bc_df$condition == i] + 1) / # Adds a pseudocount of 1
     sum(bc_df$bc_counts[bc_df$condition == i]) *1e6
 }
 
@@ -252,18 +252,18 @@ for (i in unique(bc_df$condition)) {
 ggplot(bc_df[bc_df$native_enhancer == "No" & bc_df$neg_ctrls == "No",], aes(x = TF, y = rpm)) +
   geom_bin2d(bins = 100) +
   theme_bw() +
-  ylim(0,10000) +
+  ylim(0,2500) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1)) +
   facet_wrap(~condition)
 
-bc_df_2 <- bc_df[bc_df$rpm <= 500,]
+bc_df_2 <- bc_df[bc_df$rpm <= 250,]
 bc_df_2 <- bc_df_2[bc_df_2$rpm >= 0.5,]
 bc_df_2 <- bc_df_2[!is.na(bc_df_2$TF),]
 
 ggplot(bc_df_2, aes(x = rpm)) +
   geom_histogram(binwidth = 20) +
   theme_bw() +
-  xlim(0,750)+
+  xlim(0,500)+
   ylim(0,1400)+
   facet_wrap(~condition)+
   theme(strip.background =element_rect(fill="#D6D5C9"))
@@ -271,8 +271,8 @@ ggplot(bc_df_2, aes(x = rpm)) +
 ggplot(bc_df[bc_df$rpm >= 500 & !is.na(bc_df$TF),], aes(x = rpm)) +
   geom_histogram(binwidth = 20) +
   theme_bw() +
-  xlim(500,2000)+
-  ylim(0,100)+
+  xlim(250,100)+
+  ylim(0,50)+
   facet_wrap(~condition)+
   theme(strip.background =element_rect(fill="#D6D5C9"))
 
@@ -350,27 +350,17 @@ ggplot(bc_df_2, aes(x = pDNA, y = rpm)) +
   theme_bw()+
   facet_wrap(~condition)
 
-cor <- data.frame("condition" = unique(bc_df_2$condition), "cor" = "", stringsAsFactors = F)
-
-for (i in unique(bc_df_2$condition)) {
-  x <- bc_df_2$rpm[bc_df_2$condition == i]
-  y <- bc_df_2 %>% select(barcode, pDNA) %>% unique()
-  cor$cor[cor$condition == i] <- cor(x, y$pDNA, "pairwise.complete.obs")
-}
-
-bc_df <- merge(bc_df, cor, by = "condition", all = T)
-
 ## 4: Correlation plots of the replicates
 ## Combine replicates of normalized data in 3 different columns
 bc_df$rep <- gsub(".*([1-3]{1}$)","\\1",bc_df$condition)
-bc_df_rep <- bc_df[!is.na(bc_df$TF),] %>% select(rep, rpm, barcode, condition) %>% unique()
+bc_df_rep <- bc_df[!is.na(bc_df$TF),] %>% dplyr::select(rep, rpm, barcode, condition) %>% unique()
 bc_df_rep$condition <- gsub("(.*?)_r[1-3]$", "\\1", bc_df_rep$condition)
 rep1 <- bc_df_rep[bc_df_rep$rep == 1,]
 rep2 <- bc_df_rep[bc_df_rep$rep == 2,]
 rep3 <- bc_df_rep[bc_df_rep$rep == 3,]
-rep1 <- rep1 %>% select(-rep)
-rep2 <- rep2 %>% select(-rep)
-rep3 <- rep3 %>% select(-rep)
+rep1 <- rep1 %>% dplyr::select(-rep)
+rep2 <- rep2 %>% dplyr::select(-rep)
+rep3 <- rep3 %>% dplyr::select(-rep)
 
 names(rep1) <- c("rep1", "reporter", "condition")
 names(rep2) <- c("rep2", "reporter", "condition")
@@ -422,11 +412,11 @@ ggscatter(bc_df_rep, x = "rep3", y = "rep2",
 # Plot pDNA distribution vs. cutoff
 pDNA_fraction <- bc_df[grep("pDNA", bc_df$condition),]
 pDNA_fraction <- pDNA_fraction[!is.na(pDNA_fraction$TF),]
-pDNA_fraction <- pDNA_fraction %>% select(barcode, condition, rpm)
+pDNA_fraction <- pDNA_fraction %>% dplyr::select(barcode, condition, rpm)
 pDNA_fraction <- dcast(pDNA_fraction, barcode ~ condition)
 pDNA_fraction <- pDNA_fraction %>% 
   mutate(pDNA = (pDNA_1 + pDNA_2) / 2) %>%
-  select(-pDNA_1, -pDNA_2)
+  dplyr::select(-pDNA_1, -pDNA_2)
 pDNA_fr <- data.frame("cutoff" = seq(0,100, 1),
                       "bcs_missing" = "", stringsAsFactors=FALSE)
 for (i in pDNA_fr$cutoff) {
@@ -449,12 +439,7 @@ ggplot(pDNA_fr) +
 for (i in unique(bc_df$condition)) {
   bc_df$n_bc[bc_df$condition == i] <- length(bc_df$barcode[bc_df$rpm > 500 & bc_df$condition == i])
 }
-bc_df <- bc_df[bc_df$n_bc >= 1700,] %>% select(-n_bc)
-
-# Remove samples with high pDNA contamination
-pDNA <- bc_df[grep("pDNA", bc_df$condition),] %>% select(-cor)
-bc_df <- bc_df[bc_df$cor <= 0.85,] %>% select(-cor)
-bc_df <- rbind(bc_df, pDNA)
+bc_df <- bc_df[bc_df$n_bc >= 150 | bc_df$condition == "pDNA_1" | bc_df$condition == "pDNA_2" ,] %>% dplyr::select(-n_bc)
 
 # Remove all non-matching reads
 bc_df <- bc_df[!is.na(bc_df$TF),]
@@ -466,33 +451,18 @@ bc_df <- bc_df[!is.na(bc_df$TF),]
 Divide cDNA barcode counts through pDNA barcode counts to get activity
 ```{r normalization, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Normalize data using pDNA data
-## Compute activity by dividing through pDNA data
- n <- 0
- for (i in unique(bc_df$barcode)) {
-    # Take pDNA data for each barcode
-    pDNA_1 <- bc_df$rpm[bc_df$barcode == i & bc_df$condition == "pDNA_1"]
-    pDNA_2 <- bc_df$rpm[bc_df$barcode == i & bc_df$condition == "pDNA_2"]
-    pDNA <- (pDNA_1+pDNA_2)/2
-    
-    # cDNA data for each barcode
-    cDNA <- bc_df$rpm[bc_df$barcode == i]
-  
-    # Compute activity by dividing cDNA rpm data by mean pDNA rpm data 
-    if (pDNA >= 10){
-      bc_df$activity[bc_df$barcode == i] <- cDNA / pDNA
-      }
-    else {
-      bc_df$activity[bc_df$barcode == i] <- NA
-      }
-    
-    # Keep track of the progress
-    n <- n + length(i)
-    percent <- round((n / length(unique(bc_df$barcode)))*100,2)
-    progress <- paste("progress:", percent, "%")
-    if (percent %% 1 == 0) {
-    print(progress)
-  }
- }
+## Add pDNA data as separate column
+pDNA <- bc_df[grep("pDNA", bc_df$condition),] %>% dplyr::select(barcode, condition, rpm) %>% unique() %>%
+  dcast(barcode ~ condition) %>%
+  mutate(pDNA_counts_rpm = (pDNA_1 + pDNA_2) / 2) %>%
+  dplyr::select(barcode, pDNA_counts_rpm)
+bc_df <- merge(pDNA, bc_df)
+
+## Compute activity by dividing cDNA bc counts through pDNA bc counts
+bc_df$activity <- bc_df$rpm / bc_df$pDNA_counts_rpm
+
+## Remove all activities that were computed with low pDNA bc counts, this keeps the noise level in the data low
+bc_df$activity[bc_df$pDNA_counts_rpm <= 1] <- NA
 ```
 
 
@@ -525,7 +495,7 @@ bc_df_cDNA$high_outlier <- bc_df_cDNA$upper_activity - bc_df_cDNA$activity
 
 ## Plot effect of highest outlier bc -> SNP in minP promoter
 outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "Zfp42_5bp_21bp_minP_3",] %>% 
-  select(Barcode, activity) %>%
+  dplyr::select(Barcode, activity) %>%
   unique()
 
 ggplot(outlier, aes(x = Barcode, y = activity)) +
@@ -538,7 +508,7 @@ ggplot(outlier, aes(x = Barcode, y = activity)) +
 
 ## Plot effect of highest outlier bc -> Elk1 outlier
 outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "Elk1_5bp_21bp_mCMV_2",] %>% 
-  select(Barcode, activity) %>%
+  dplyr::select(Barcode, activity) %>%
   unique()
 
 ggplot(outlier, aes(x = Barcode, y = activity)) +
@@ -551,7 +521,7 @@ ggplot(outlier, aes(x = Barcode, y = activity)) +
 
 ## Plot effect of highest outlier bc -> Elk1 outlier
 outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "Tcf7l2_5bp_10bp_hBGm_3",] %>% 
-  select(Barcode, activity) %>%
+  dplyr::select(Barcode, activity) %>%
   unique()
 
 ggplot(outlier, aes(x = Barcode, y = activity)) +
@@ -579,11 +549,11 @@ bc_df_cDNA_filt$sd_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$rep
 
 ```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE}
 # # Remove barcodes with multiple inserts attached
-# bc_exclude <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/pDNA_insert_seq/results/bc_exclude.csv") %>% select(-X) %>% setnames("x", "barcode")
+# bc_exclude <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/pDNA_insert_seq/results/bc_exclude.csv") %>% dplyr::select(-X) %>% setnames("x", "barcode")
 # exclude <- bc_df_cDNA_filt[!bc_df_cDNA_filt$barcode %in% bc_exclude$barcode,]
 # 
 # # Reassign barcodes with wrong inserts attached
-# bc_replace <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/pDNA_insert_seq/results/bc_replace.csv") %>% select(-X, -bc.match)
+# bc_replace <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/pDNA_insert_seq/results/bc_replace.csv") %>% dplyr::select(-X, -bc.match)
 # change.df <- exclude[exclude$barcode %in% bc_replace$barcode,]
 # exclude <- exclude[!exclude$barcode %in% bc_replace$barcode,]
 # 
@@ -599,7 +569,7 @@ bc_df_cDNA_filt$sd_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$rep
 #          spacing = gsub(".*_s-([0-9]{1,2}bp)_.*", "\\1", insert.match),
 #          background = gsub(".*([0-9]{1}$)", "\\1", insert.match),
 #          reporter_id = paste(TF, spacing, distance, promoter, background, sep = "_"))
-# change.df <- change.df %>% select(-insert.match)
+# change.df <- change.df %>% dplyr::select(-insert.match)
 # 
 # change.df.e <- change.df.e %>%
 #   mutate(TF = gsub("(.*?)_(minP|mCMV|hBGm|Random)$", "\\1", insert.match),
@@ -608,7 +578,7 @@ bc_df_cDNA_filt$sd_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$rep
 #          distance = "",
 #          background = "",
 #          reporter_id = paste(TF, promoter, sep ="_"))
-# change.df.e <- change.df.e %>% select(-insert.match)
+# change.df.e <- change.df.e %>% dplyr::select(-insert.match)
 # 
 # 
 # exclude$reporter_id <- gsub("___", "_", exclude$reporter_id)
@@ -623,28 +593,15 @@ bc_df_cDNA_filt$sd_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$rep
 
 
 
-```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
-# Add pDNA data
-pDNA <- bc_df[grep("pDNA", bc_df$condition),] %>% 
-  select(barcode, rpm) %>% unique() %>%
-  setnames("rpm", "pDNA_counts_rpm") %>%
-  mutate(pDNA_counts_rpm = ave(pDNA_counts_rpm, barcode, FUN = function(x) mean(x))) %>%
-  unique()
-bc_df_cDNA_filt <- merge(pDNA, bc_df_cDNA_filt, all = T)
-bc_df_cDNA_filt <- bc_df_cDNA_filt[!is.na(bc_df_cDNA_filt$condition),]
-```
-
-
-
-
 
 ```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
 # Scale data to 1 for negative controls
-mean_neg_ctrl <- mean(bc_df_cDNA_filt$activity[bc_df_cDNA_filt$neg_ctrls == "Yes"])
+mean_neg_ctrl <- mean(bc_df_cDNA_filt$activity[bc_df_cDNA_filt$neg_ctrls == "Yes"], na.rm = T)
 bc_df_cDNA_filt$activity <- bc_df_cDNA_filt$activity / mean_neg_ctrl
 bc_df_cDNA_filt$mean_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id, 
                                 bc_df_cDNA_filt$condition, FUN =
                                   function(x) mean(x))
+bc_df_cDNA_filt <- bc_df_cDNA_filt[!is.na(bc_df_cDNA_filt$condition),]
 ```
 
 
@@ -654,15 +611,15 @@ bc_df_cDNA_filt$mean_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$r
 ## Combine replicates in 8 different columns
 bc_df_rep <- bc_df_cDNA_filt[bc_df_cDNA_filt$hPGK == "No" & bc_df_cDNA_filt$native_enhancer == "No" &
                           bc_df_cDNA_filt$rand_promoter == "No",] %>% 
-  select(Barcode, activity, condition, reporter_id)
-rep1 <- bc_df_rep[bc_df_rep$Barcode == 1,] %>% select(-Barcode)
-rep2 <- bc_df_rep[bc_df_rep$Barcode == 2,] %>% select(-Barcode)
-rep3 <- bc_df_rep[bc_df_rep$Barcode == 3,] %>% select(-Barcode)
-rep4 <- bc_df_rep[bc_df_rep$Barcode == 4,] %>% select(-Barcode)
-rep5 <- bc_df_rep[bc_df_rep$Barcode == 5,] %>% select(-Barcode)
-rep6 <- bc_df_rep[bc_df_rep$Barcode == 6,] %>% select(-Barcode)
-rep7 <- bc_df_rep[bc_df_rep$Barcode == 7,] %>% select(-Barcode)
-rep8 <- bc_df_rep[bc_df_rep$Barcode == 8,] %>% select(-Barcode)
+  dplyr::select(Barcode, activity, condition, reporter_id)
+rep1 <- bc_df_rep[bc_df_rep$Barcode == 1,] %>% dplyr::select(-Barcode)
+rep2 <- bc_df_rep[bc_df_rep$Barcode == 2,] %>% dplyr::select(-Barcode)
+rep3 <- bc_df_rep[bc_df_rep$Barcode == 3,] %>% dplyr::select(-Barcode)
+rep4 <- bc_df_rep[bc_df_rep$Barcode == 4,] %>% dplyr::select(-Barcode)
+rep5 <- bc_df_rep[bc_df_rep$Barcode == 5,] %>% dplyr::select(-Barcode)
+rep6 <- bc_df_rep[bc_df_rep$Barcode == 6,] %>% dplyr::select(-Barcode)
+rep7 <- bc_df_rep[bc_df_rep$Barcode == 7,] %>% dplyr::select(-Barcode)
+rep8 <- bc_df_rep[bc_df_rep$Barcode == 8,] %>% dplyr::select(-Barcode)
 
 
 setnames(rep1, "activity", "bc1")
@@ -691,7 +648,7 @@ bc_df_rep <- bc_df_rep[rowSums(is.na(bc_df_rep)) != ncol(bc_df_rep), ]
 # Correlation matrix plot
 n <- sample(1:nrow(bc_df_rep), 5000)
 boundaries <- seq(from = 0.8, by = 0.05, length.out = 4)
-plt <- ggpairs(bc_df_rep %>% select(bc1, bc2, bc3, bc4, bc5, bc6, bc7, bc8),
+plt <- ggpairs(bc_df_rep %>% dplyr::select(bc1, bc2, bc3, bc4, bc5, bc6, bc7, bc8),
                upper = list(continuous = corColor),
                lower = list(continuous = function(data, mapping, ...) {
                    ggally_points(data = data[n, ], mapping = mapping, alpha = 0.1, size = 0.5) +
@@ -715,14 +672,14 @@ print(plt)
 ```{r correlations_3, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
 # Correlation plots of the replicates
 ## Combine replicates of normalized data in 3 different columns
-bc_df_rep <- bc_df_cDNA_filt %>% select(rep, mean_activity, reporter_id, condition) %>% unique()
+bc_df_rep <- bc_df_cDNA_filt %>% dplyr::select(rep, mean_activity, reporter_id, condition) %>% unique()
 bc_df_rep$condition <- gsub("(.*?)_r[1-3]$", "\\1", bc_df_rep$condition)
 rep1 <- bc_df_rep[bc_df_rep$rep == 1,]
 rep2 <- bc_df_rep[bc_df_rep$rep == 2,]
 rep3 <- bc_df_rep[bc_df_rep$rep == 3,]
-rep1 <- rep1 %>% select(-rep)
-rep2 <- rep2 %>% select(-rep)
-rep3 <- rep3 %>% select(-rep)
+rep1 <- rep1 %>% dplyr::select(-rep)
+rep2 <- rep2 %>% dplyr::select(-rep)
+rep3 <- rep3 %>% dplyr::select(-rep)
 
 names(rep1) <- c("rep1", "reporter", "condition")
 names(rep2) <- c("rep2", "reporter", "condition")
@@ -786,7 +743,7 @@ bc_df_cDNA_filt$reporter_activity_sd <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA
 ```{r data export, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Polish export dataframe
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>% 
-  select(-upper_activity, -lower_activity, 
+  dplyr::select(-upper_activity, -lower_activity, 
          -high_outlier, -low_outlier,) %>% 
   setnames(old = c("mean_activity", "sd_activity"), 
            new = c("replicate_activity", "replicate_activity_sd")) %>% 

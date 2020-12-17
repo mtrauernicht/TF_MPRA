@@ -145,12 +145,12 @@ get_pwm_feature_matrix <- function(motif_meta_fn, fimo_fn, db = 2) {
       # extract tf symbol from motif id (Cognate_TF unsafe, it can be empty) and replace :: occurrences
       mutate(tf_symbol = str_remove(ID, '_[0-9]*'),
              tf_symbol = str_replace(tf_symbol, '::', '_')) %>%
-      select(motif_id = `PWM ID`, tf_symbol)
+      dplyr::select(motif_id = `PWM ID`, tf_symbol)
 
     # load fimo results
     tib_fimo <- read_tsv(fimo_fn) %>%
       # extract motif id, sequence id and p-value
-      select(motif_id, sequence_name, pval = `p-value`)
+      dplyr::select(motif_id, sequence_name, pval = `p-value`)
 
     # add tf symbol to fimo results
     tib_fimo <- tib_fimo %>%
@@ -167,12 +167,12 @@ get_pwm_feature_matrix <- function(motif_meta_fn, fimo_fn, db = 2) {
     # spread into feature matrix
     tib_fimo <- tib_fimo %>%
       mutate(pval = -1 * log10(pval)) %>%
-      select(-motif_id) %>%
+      dplyr::select(-motif_id) %>%
       spread(key = tf_symbol, value = pval, fill = 0, drop = TRUE) %>%
       # perform cosmetics on the id
       mutate(id = sequence_name) %>%
-      select(-c(sequence_name)) %>%
-      select(id, everything())
+      dplyr::select(-c(sequence_name)) %>%
+      dplyr::select(id, everything())
 
   }
 
@@ -185,7 +185,7 @@ get_pwm_feature_matrix <- function(motif_meta_fn, fimo_fn, db = 2) {
 
 ```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 # Import processed bc counts from the preprocessing step
-cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/results/mt20201125_reporter_activity_filt.csv", header = T)
+cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/results/mt20201209_reporter_activity_filt.csv", header = T)
 cDNA_df$background <- as.character(cDNA_df$background)
 cDNA_df$background[is.na(cDNA_df$background)] <- ""
 cDNA_df$TF <- revalue(cDNA_df$TF, c("Tcfcp2l1" = "Tfcp2l1", "Tcfcp2l1_neg" = "Tfcp2l1_neg"))
@@ -200,106 +200,100 @@ cDNA_df$reporter_id <- gsub("Tcfcp2l1", "Tfcp2l1", cDNA_df$reporter_id)
 colors <- c("#1B998B", "#2D3047", "#FF9B71")
 
 ## reporter activity distribution for each experiment individually
-ggplot(data = cDNA_df, aes(x = log_activity)) + 
-  geom_density(fill = "#3D9F83") + xlab("log2(cDNA/pDNA)") + 
-  labs(title = "reporter activity distribution") +
-  xlim(-5,5) + theme_classic() + facet_wrap(vars(condition))
-
-fill <- c("2i_neg_LIF" = "#CACDD3", 
-            "2i_pos_LIF" = "#CACDD3",
-            "LIF_pos_CH" = "#CACDD3",
-            "LIF_pos_PD" = "#CACDD3",
-            "N2B27" = "#CACDD3",
-            "NPC" = "#1B998B",
-            "vitA" = "#CACDD3"
-            )
-
-ggplot(data = cDNA_df, aes(x = log_activity, fill = condition, alpha = 0.1)) + 
-  geom_density() + xlab("log2(cDNA/pDNA)") + 
-  labs(title = "reporter activity distribution: NPC vs. mESCs") +
-  scale_fill_manual(values = fill)+
-  xlim(0,5) + theme_classic() +
-  theme(text = element_text(size = 12))
-
-## reporter activity distribution for each experiment individually
-ggplot(data = cDNA_df, aes(x = log_activity, color = condition)) + 
-  stat_ecdf() + xlab("log2(cDNA/pDNA)") + 
-  labs(title = "reporter activity distribution") + ylab("fraction") +
-  xlim(-5,5) + theme_classic() +
-  theme(text = element_text(size = 12))
-
+ggplot(data = cDNA_df %>% dplyr::select(condition, log_reporter_activity, reporter_id) %>% unique(), aes(y = log_reporter_activity, x = "x")) + 
+  geom_quasirandom(alpha = 0.4) + xlab("log2(cDNA/pDNA)") + 
+  labs(title = "reporter activity distribution per condition") + theme_bw() + facet_wrap(vars(condition))
 
 ## reporter activity distribution - highlight negative motif controls
 ggplot(cDNA_df[cDNA_df$hPGK == "No",], aes(x = log_activity, fill = neg_ctrls, alpha = 0.4)) + 
   geom_density() + xlab("log2(cDNA/pDNA)") + 
-  labs(title = "reporter activity distribution - negative ctrls") +
-  scale_fill_manual(values = colors) +
-  xlim(-5,5) + theme_classic()+
+  scale_fill_manual(values = colors)+
+  labs(title = "reporter activity distribution - negative ctrls", subtitle = "Green = TF-mediated activity") +
+  xlim(-10,10) + theme_bw()+
   theme(text = element_text(size = 12))
 
-
-## reporter activity distribution - highlight positive hPGK control
-ggplot(cDNA_df, aes(x = log_activity, fill = hPGK, alpha = 0.4)) + 
-  geom_density() + xlab("log2(cDNA/pDNA)") + 
-  labs(title = "reporter activity distribution - hPGK") +
-  scale_fill_manual(values = colors) +
-  xlim(-5,5) + theme_classic()
-
 ## reporter activity distribution - highlight Miguels enhancer control
-ggplot(cDNA_df, aes(x = log_activity, fill = native_enhancer, alpha = 0.4)) + 
-  geom_density() + xlab("log2(cDNA/pDNA)") + 
+ggplot(data = cDNA_df %>% dplyr::select(condition, log_reporter_activity, reporter_id, native_enhancer) %>% unique(), 
+       aes(y = log_reporter_activity, x = native_enhancer, color = native_enhancer, alpha = 0.4)) + 
+  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - native enhancers") +
-  scale_fill_manual(values = colors) +
-  xlim(0,5) + theme_classic()+ facet_wrap(vars(condition))
+  scale_color_manual(values = colors) +
+  theme_bw()+ facet_wrap(vars(condition))
 
 
 ## reporter activity distribution - highlight different promoters
-ggplot(cDNA_df, aes(x = log_activity, fill = promoter, alpha = 0.4)) + 
-  geom_density() + xlab("log2(cDNA/pDNA)") + 
-  labs(title = "reporter activity distribution - promoters") +
-  scale_fill_brewer("Dark2") +
-  xlim(-5,5) + theme_classic()
+ggplot(data = cDNA_df %>% dplyr::select(log_reporter_activity, reporter_id, promoter) %>% unique(), 
+       aes(y = log_reporter_activity, x = promoter, color = promoter, alpha = 0.4)) + 
+  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
+  labs(title = "reporter activity distribution - different promoters") +
+  scale_color_brewer(palette = "Set2") +
+  theme_bw()
 
-## reporter activity distribution - highlight random promoters
-ggplot(cDNA_df, aes(x = log_activity, fill = rand_promoter, alpha = 0.4)) + 
-  geom_density() + xlab("log2(cDNA/pDNA)") + 
-  labs(title = "reporter activity distribution - random promoter") +
-  scale_fill_manual(values = colors) +
-  xlim(-5,5) + theme_classic()
+## reporter activity distribution - highlight different promoters - and negative controls (does the activity actually come from the TFs or from the promoter itself?)
+ggplot(cDNA_df[cDNA_df$promoter != "hPGK",] %>% dplyr::select(reporter_id, log_reporter_activity, neg_ctrls, promoter) %>% unique(), aes(y = log_reporter_activity, x = neg_ctrls, color = neg_ctrls, alpha = 0.4)) + 
+  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
+  labs(title = "reporter activity distribution - promoters") +
+  scale_color_brewer(palette = "Set2") +
+  theme_bw() + facet_wrap(~promoter)
 
 ## reporter activity distribution - highlight different distances
-ggplot(cDNA_df[cDNA_df$distance != "",], 
-       aes(x = log_activity, fill = distance, alpha = 0.4)) + 
-  geom_density() + xlab("log2(cDNA/pDNA)") + 
+ggplot(data = cDNA_df[cDNA_df$distance != "",] %>% dplyr::select(log_reporter_activity, reporter_id, distance) %>% unique(), 
+       aes(y = log_reporter_activity, x = distance, color = distance, alpha = 0.4)) + 
+  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - distances") +
-  scale_fill_manual(values = colors) +
-  xlim(-5,5) + theme_classic()
+  scale_color_brewer(palette = "Set2") +
+  theme_bw()
 
 ## reporter activity distribution - highlight different spacings
-ggplot(cDNA_df[cDNA_df$spacing != "",], aes(x = log_activity, fill = spacing, alpha = 0.4)) + 
-  geom_density() + xlab("log2(cDNA/pDNA)") + 
+ggplot(data = cDNA_df[cDNA_df$spacing != "",] %>% dplyr::select(log_reporter_activity, reporter_id, spacing, TF) %>% unique(), 
+       aes(y = log_reporter_activity, x = spacing, color = spacing, alpha = 0.4)) + 
+  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - spacings") +
-  scale_fill_manual(values = colors) +
-  xlim(-5,5) + theme_classic()
+  scale_color_brewer(palette = "Set2") +
+  theme_bw() + facet_wrap(~TF)
+ggplot(data = cDNA_df[cDNA_df$spacing != "" & cDNA_df$TF == "Trp53",] %>% dplyr::select(log_reporter_activity, reporter_id, spacing, TF, condition) %>% unique(), 
+       aes(y = log_reporter_activity, x = spacing, color = spacing, alpha = 0.4)) + 
+  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
+  labs(title = "reporter activity distribution - spacings") +
+  scale_color_brewer(palette = "Set2") +
+  theme_bw()+ facet_wrap(~condition)
+ggplot(data = cDNA_df[cDNA_df$spacing != "",] %>% dplyr::select(log_reporter_activity, reporter_id, spacing, TF, condition) %>% unique(), 
+       aes(y = log_reporter_activity, x = spacing, color = spacing, alpha = 0.4)) + 
+  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
+  labs(title = "reporter activity distribution - spacings") +
+  scale_color_brewer(palette = "Set2") +
+  theme_bw()
 
 ## reporter activity distribution - highlight different backgrounds
-ggplot(cDNA_df[cDNA_df$background != "",], aes(x = log_activity, fill = background, alpha = 0.4)) + 
-  geom_density() + xlab("log2(cDNA/pDNA)") + 
+ggplot(data = cDNA_df[cDNA_df$background != "",] %>% dplyr::select(log_reporter_activity, reporter_id, background, condition) %>% unique(), 
+       aes(y = log_reporter_activity, x = background, color = background, alpha = 0.4)) + 
+  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - backgrounds") +
-  scale_fill_manual(values = colors) +
-  xlim(-5,5) + theme_classic()
+  scale_color_brewer(palette = "Set2") +
+  theme_bw()
+ggplot(data = cDNA_df[cDNA_df$background != "" & cDNA_df$TF == "Stat3",] %>% dplyr::select(log_reporter_activity, reporter_id, background, condition) %>% unique(), 
+       aes(y = log_reporter_activity, x = background, color = background, alpha = 0.4)) + 
+  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
+  labs(title = "reporter activity distribution - backgrounds") +
+  scale_color_brewer(palette = "Set2") +
+  theme_bw() + facet_wrap(~condition)
 
-## normalized bc-counts for each TF - comparing to original pDNA counts
-ggplot(cDNA_df[cDNA_df$native_enhancer == "No" &
-               cDNA_df$neg_ctrls  == "No" &
-               cDNA_df$hPGK == "No" &
-               cDNA_df$rand_promoter == "No",]) + 
-  geom_density(aes(x = rpm, fill = "#1B998B", alpha = 0.4)) + 
-  geom_density(aes(x = pDNA_counts_rpm, fill = "#2D3047", alpha = 0.4)) + 
-  xlab("bc-counts per million") + 
-  labs(title = "bc-count distribution cDNA (green) vs. pDNA (blue)") +
-  scale_fill_manual(values = colors) +
-  xlim(0,200) + theme_classic() +
+## reporter activity distribution - highlight different tfs - and negative controls
+ggplot(cDNA_df[cDNA_df$native_enhancer == "No" & cDNA_df$promoter != "hPGK",]%>% dplyr::select(reporter_id, log_reporter_activity, neg_ctrls, TF) %>% unique() %>% mutate(TF = gsub("_neg", "", TF)), 
+       aes(y = log_reporter_activity, x = neg_ctrls, color = neg_ctrls, alpha = 0.4)) + 
+  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
+  labs(title = "reporter activity distribution - tfs") +
+  scale_color_brewer(palette = "Set2") +
+  theme_bw() + facet_wrap(~TF)
+
+## reporter activity distribution - highlight different tfs - and negative controls
+ggplot(cDNA_df[cDNA_df$native_enhancer == "No" & cDNA_df$promoter != "hPGK" & cDNA_df$neg_ctrls == "No",]%>% dplyr::select(reporter_id, log_reporter_activity, condition, TF) %>% 
+         unique() %>% mutate(TF = gsub("_neg", "", TF)), 
+       aes(y = log_reporter_activity, x = condition, alpha = 0.4)) + 
+  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
+  labs(title = "reporter activity distribution - tfs") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 9)) +
   facet_wrap(~TF)
 
 ## correlation bc-counts pDNA vs. cDNA
@@ -327,7 +321,7 @@ sp <- ggscatter(cDNA_df[cDNA_df$native_enhancer == "No" &
           ylab = "log2 reporter activity",
           xlab = "pDNA counts per million",
           facet.by = "TF")
-sp + xlim(0,200) + ylim(-5,5) + scale_color_manual(values = fill) +
+sp + xlim(0,200) + ylim(-5,5) +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
           axis.text.y = element_text(size = 10)) +
   theme(text = element_text(size = 12))
@@ -378,9 +372,9 @@ cDNA_df$group[grep(paste(pos, collapse = "|"), cDNA_df$TF)] <- "Control"
   
 tf_activity_heatmap <- cDNA_df[cDNA_df$neg_ctrls == "No" & cDNA_df$hPGK == "No" &
                                cDNA_df$native_enhancer == "No" & cDNA_df$rand_promoter == "No",] %>% 
-  select(TF, condition, tf_activity) %>% unique()
+  dplyr::select(TF, condition, tf_activity) %>% unique()
 tf_activity_heatmap <- dcast(tf_activity_heatmap, TF ~ condition, value.var="tf_activity")
-group <- cDNA_df %>% select(TF, group) %>% unique()
+group <- cDNA_df %>% dplyr::select(TF, group) %>% unique()
 tf_activity_heatmap <- merge(tf_activity_heatmap, group)
 
 tf_activity_heatmap <- tf_activity_heatmap %>% 
@@ -415,7 +409,7 @@ for (i in unique(tf_activity_heatmap$group)) {
 ## Prepare dataframe
 # Caculate mean TF activity per condition
 tf_activity_heatmap <- cDNA_df[cDNA_df$native_enhancer == "Yes",] %>% 
-  select(TF, condition, tf_activity) %>% unique()
+  dplyr::select(TF, condition, tf_activity) %>% unique()
 tf_activity_heatmap <- dcast(tf_activity_heatmap, condition ~ TF, value.var="tf_activity")
 
 tf_activity_heatmap <- tf_activity_heatmap %>% 
@@ -460,7 +454,7 @@ promoters <- c("TAGAGGGTATATAATGGAAGCTCGACTTCCAG",
                "GGGCTGGGCATAAAAGTCAGGGCAGAGCCATCTATTGCTTACATTTGCTTCT",
                "GGTTAGCGATCCAATTCAGCTAGATTTTAAGC")
 
-cDNA_df_native <- cDNA_df[cDNA_df$native_enhancer == "Yes",] %>% select(TF, seq) %>%
+cDNA_df_native <- cDNA_df[cDNA_df$native_enhancer == "Yes",] %>% dplyr::select(TF, seq) %>%
   mutate(seq = gsub("CACGACGCTCTTCCGATCT.*", "", seq)) %>% 
   mutate(seq = gsub(paste(promoters, collapse = "|"), "", seq)) %>%
   unique()
@@ -506,7 +500,7 @@ cDNA_df_native <- rbind(cDNA_df_native, promoters) %>%
 # 
 # # Take mean of 2i expression
 # tib_fpkm_joshi <- tib_fpkm_joshi %>%
-#   select(-contains('serum')) %>%
+#   dplyr::select(-contains('serum')) %>%
 #   rowwise() %>%
 #   mutate(expr_mean = mean(c(twoi_1, twoi_2))) %>%
 #   ungroup()
@@ -527,7 +521,7 @@ cDNA_df_native <- rbind(cDNA_df_native, promoters) %>%
 # # remove columns with only 0s and plot heatmap for each native enhancer individually
 # for (i in unique(tib_pwm_native_enhancer_ES$group)) {
 #   data <- tib_pwm_native_enhancer_ES[tib_pwm_native_enhancer_ES$group == i,] %>% 
-#     column_to_rownames("id") %>% select(-group)
+#     column_to_rownames("id") %>% dplyr::select(-group)
 #   p <- pheatmap(as.matrix(data[, colSums(data != 0) > 0]),
 #                 color = colorRampPalette(brewer.pal(n = 7, name = "Oranges"))(100),
 #                 border_color = "black",
@@ -545,8 +539,8 @@ cDNA_df_native <- rbind(cDNA_df_native, promoters) %>%
 # tib_pwm_native_enhancer_ES <- tib_pwm_native_enhancer_ES[-grep(paste(promoters$TF, collapse = "|"), tib_pwm_native_enhancer_ES$id),]
 # 
 # data <- tib_pwm_native_enhancer_ES %>%
-#   select(KLF4, POU5F1, SOX2, TCF7, TFCP2L1, CTCF, ZIC2,id, group) %>% 
-#   column_to_rownames("id") %>% select(-group)
+#   dplyr::select(KLF4, POU5F1, SOX2, TCF7, TFCP2L1, CTCF, ZIC2,id, group) %>% 
+#   column_to_rownames("id") %>% dplyr::select(-group)
 # 
 # pheatmap(as.matrix(t(data[, colSums(data != 0) > 0])),
 #                 color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100),
@@ -559,7 +553,7 @@ cDNA_df_native <- rbind(cDNA_df_native, promoters) %>%
 ```{r fimo_model, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 # # Subselect interesting TFs
 # tib_pwm_native_enhancer_ES <- tib_pwm_native_enhancer_ES %>%
-#   select(KLF4, POU5F1, SOX2, TCF7, TFCP2L1, CTCF, ZIC2,id, group)
+#   dplyr::select(KLF4, POU5F1, SOX2, TCF7, TFCP2L1, CTCF, ZIC2,id, group)
 # 
 # # Transform to binary
 # tib_pwm_native_enhancer_ES <- tib_pwm_native_enhancer_ES %>% mutate_if(is.numeric, function(x) ifelse((x==0 | is.na(x)),"No","Yes"))
@@ -569,7 +563,7 @@ cDNA_df_native <- rbind(cDNA_df_native, promoters) %>%
 #   melt(id.vars = "condition", variable.name = "id", value.name = "expression")
 # 
 # tib_pwm_native_enhancer_ES_merge <- merge(tib_pwm_native_enhancer_ES, native_expression, all = T) %>%
-#   select(-group)
+#   dplyr::select(-group)
 # 
 # 
 # 
@@ -605,7 +599,7 @@ cDNA_df_native <- rbind(cDNA_df_native, promoters) %>%
 #   
 #   x <- anova(x) %>% rownames_to_column("feature") %>%
 #     setnames("Sum Sq", "sum_sq") %>%
-#     select(feature, sum_sq) %>%
+#     dplyr::select(feature, sum_sq) %>%
 #     mutate(sum = sum(sum_sq)) %>%
 #     mutate(rel_sum_sq = (sum_sq/sum)*100) %>%
 #     setnames("rel_sum_sq", i)
@@ -620,8 +614,8 @@ cDNA_df_native <- rbind(cDNA_df_native, promoters) %>%
 # exp_variance <- melt(exp_variance, variable.name = "id")
 # exp_variance$group <- "no residual"
 # exp_variance$group[grep("Residual", exp_variance$feature)] <- "residual"
-# prediction <- prediction %>% select(-id) %>% melt(variable.name = "id") %>% na.omit() %>%
-#   select(-id) %>% setnames("value", "activity_predicted")
+# prediction <- prediction %>% dplyr::select(-id) %>% melt(variable.name = "id") %>% na.omit() %>%
+#   dplyr::select(-id) %>% setnames("value", "activity_predicted")
 # tib_pwm_native_enhancer_ES_merge <- merge(tib_pwm_native_enhancer_ES_merge, prediction)
 # weight <- weight %>% filter(feature != "(Intercept)")
 # weight <- melt(weight, variable.name = "id")
@@ -726,7 +720,7 @@ cDNA_df$tf_design_activity <- ave(cDNA_df$log_activity,
 tf_activity_heatmap <- cDNA_df[cDNA_df$native_enhancer == "No" & 
                                  cDNA_df$rand_promoter == "No" &
                                  cDNA_df$hPGK == "No",] %>% 
-  select(reporter, condition, tf_design_activity) %>% unique()
+  dplyr::select(reporter, condition, tf_design_activity) %>% unique()
 
 tf_activity_heatmap$tf_design_activity[!is.finite(tf_activity_heatmap$tf_design_activity)] <- 0
 tf_activity_heatmap <- dcast(tf_activity_heatmap, reporter ~ condition,
@@ -772,7 +766,7 @@ for(i in unique(tf_activity_heatmap$TF)){
 tf_activity_heatmap <- cDNA_df[cDNA_df$native_enhancer == "No" & 
                                  cDNA_df$hPGK == "No" &
                                  cDNA_df$neg_ctrls == "No",] %>% 
-  select(reporter, condition, tf_design_activity) %>% unique()
+  dplyr::select(reporter, condition, tf_design_activity) %>% unique()
 
 tf_activity_heatmap$tf_design_activity[!is.finite(tf_activity_heatmap$tf_design_activity)] <- 0
 tf_activity_heatmap <- dcast(tf_activity_heatmap, reporter ~ condition,
@@ -802,7 +796,7 @@ cDNA_df_ctrl <- cDNA_df[cDNA_df$native_enhancer == "No" &
                           cDNA_df$hPGK == "No" & cDNA_df$TF != "Random1" &
                           cDNA_df$TF != "Random2" & cDNA_df$TF != "Random3",] %>% 
   mutate(reporter_2 = gsub("_neg", "", reporter_id)) %>%
-  select(reporter_2, condition, reporter_activity, neg_ctrls) %>% 
+  dplyr::select(reporter_2, condition, reporter_activity, neg_ctrls) %>% 
   mutate(reporter_activity = ave(reporter_activity, reporter_2, condition,
                                  neg_ctrls, FUN = function(x) mean(x))) %>%
   unique()
@@ -847,8 +841,8 @@ cDNA_df_ctrl$TF <- gsub("(^.*?)_[0-9]{1,2}bp.*", "\\1", cDNA_df_ctrl$reporter_2)
 ## Generate heatmaps with relative log2 activities 
 # Caculate mean TF activity per condition
 tf_activity_heatmap <- cDNA_df_ctrl[cDNA_df_ctrl$neg_ctrls == "No",] %>% 
-  select(reporter_2, TF, condition, log_reporter_activity_relative) %>% unique()
-tf_activity_heatmap2 <- tf_activity_heatmap %>% select(-reporter_2) %>%
+  dplyr::select(reporter_2, TF, condition, log_reporter_activity_relative) %>% unique()
+tf_activity_heatmap2 <- tf_activity_heatmap %>% dplyr::select(-reporter_2) %>%
   mutate(log_reporter_activity_relative = 
            ave(log_reporter_activity_relative, condition, TF, FUN = function(x) mean(x))) %>%
   unique()
@@ -893,7 +887,7 @@ for(i in unique(tf_activity_heatmap$TF)){
 # # Plot for each tf-activity per condition per biological replicate the techical replicate distribution and means
 # ## Compute relevant mean and sd values
 # activity_mean <- cDNA_df %>% 
-#   select(activity, condition, rep, TF, promoter, neg_ctrls, hPGK, native_enhancer, rand_promoter) %>% 
+#   dplyr::select(activity, condition, rep, TF, promoter, neg_ctrls, hPGK, native_enhancer, rand_promoter) %>% 
 #   group_by(condition, rep, TF, promoter) %>% 
 #   mutate(activity = mean(activity))
 # 
@@ -1048,7 +1042,7 @@ for(i in unique(tf_activity_heatmap$TF)){
 # 
 # ## Compute relevant mean and sd values
 # activity_mean <- cDNA_df %>% 
-#   select(activity, condition, rep, TF, promoter, neg_ctrls, 
+#   dplyr::select(activity, condition, rep, TF, promoter, neg_ctrls, 
 #          hPGK, native_enhancer, rand_promoter, reporter_id, spacing, 
 #          distance, background) %>% 
 #   group_by(condition, rep, reporter_id) %>% 
@@ -1118,7 +1112,7 @@ for(i in unique(tf_activity_heatmap$TF)){
 # ### Spacing and distance
 # cDNA_df2 <- cDNA_df %>% 
 #   mutate(space_dist = paste(spacing, distance)) %>% 
-#   select(activity, condition, TF, space_dist, neg_ctrls, native_enhancer, promoter) 
+#   dplyr::select(activity, condition, TF, space_dist, neg_ctrls, native_enhancer, promoter) 
 # 
 # cDNA_df2 <- cDNA_df2[cDNA_df2$neg_ctrls == "No" &
 #                        cDNA_df2$native_enhancer == "No" & 
@@ -1149,7 +1143,7 @@ for(i in unique(tf_activity_heatmap$TF)){
 # 
 # ### Background
 # cDNA_df2 <- cDNA_df %>% 
-#   select(activity, condition, TF, background, neg_ctrls, native_enhancer, promoter) 
+#   dplyr::select(activity, condition, TF, background, neg_ctrls, native_enhancer, promoter) 
 # 
 # 
 # cDNA_df2 <- cDNA_df2[cDNA_df2$neg_ctrls == "No" &
@@ -1180,7 +1174,7 @@ for(i in unique(tf_activity_heatmap$TF)){
 # 
 # ### Promoter
 # cDNA_df2 <- cDNA_df %>% 
-#   select(activity, condition, TF, promoter, neg_ctrls, native_enhancer, promoter) 
+#   dplyr::select(activity, condition, TF, promoter, neg_ctrls, native_enhancer, promoter) 
 # 
 # 
 # cDNA_df2 <- cDNA_df2[cDNA_df2$neg_ctrls == "No" &
@@ -1210,7 +1204,7 @@ for(i in unique(tf_activity_heatmap$TF)){
 # 
 # ### Promoter - native enhancers
 # cDNA_df2 <- cDNA_df %>% 
-#   select(activity, condition, TF, background, neg_ctrls, native_enhancer, promoter) 
+#   dplyr::select(activity, condition, TF, background, neg_ctrls, native_enhancer, promoter) 
 # 
 # 
 # cDNA_df2 <- cDNA_df2[cDNA_df2$neg_ctrls == "No" &
@@ -1255,7 +1249,7 @@ cDNA_df_TF <- cDNA_df[cDNA_df$native_enhancer == "No" &
                         cDNA_df$TF != "Random2"&
                         cDNA_df$TF != "Random3",] %>% 
   mutate(log_reporter_activity = ave(log_reporter_activity, reporter_id, condition, FUN = function(x) mean(x))) %>%
-  select(log_reporter_activity, TF, condition, promoter, spacing, distance, background) %>%
+  dplyr::select(log_reporter_activity, TF, condition, promoter, spacing, distance, background) %>%
   unique()
 
 cDNA_df_rel <- cDNA_df_ctrl[cDNA_df_ctrl$neg_ctrls == "No",] %>% 
@@ -1264,7 +1258,7 @@ cDNA_df_rel <- cDNA_df_ctrl[cDNA_df_ctrl$neg_ctrls == "No",] %>%
          distance = gsub(".*_([0-9]{1,2}bp)_.*", "\\1", reporter_2),
          spacing = gsub(".*_([0-9]{1,2}bp)_[0-9]{1,2}bp_.*", "\\1", reporter_2),
          background = gsub(".*([0-9]{1}$)", "\\1", reporter_2)) %>%
-  select(condition, log_reporter_activity_relative, TF, promoter, distance, spacing, background)
+  dplyr::select(condition, log_reporter_activity_relative, TF, promoter, distance, spacing, background)
 
 cDNA_df_TF <- merge(cDNA_df_TF, cDNA_df_rel, all = T)
 
@@ -1285,7 +1279,7 @@ names(weight) <- "feature"
 cDNA_df_TF$row <- rownames(cDNA_df_TF)
 
 
-for (i in unique(cDNA_df_TF$TF[cDNA_df_TF$TF != "Homez" & cDNA_df_TF$TF != "Irx3"])) {
+for (i in unique(cDNA_df_TF$TF[cDNA_df_TF$TF != "Homez" & cDNA_df_TF$TF != "Irx3" & cDNA_df_TF$TF != "Nr3c1(GR)"])) {
   x <- lm(log_reporter_activity_relative ~ condition + 
                        promoter + spacing + distance + background, 
                      cDNA_df_TF[cDNA_df_TF$TF == i,])
@@ -1302,7 +1296,7 @@ for (i in unique(cDNA_df_TF$TF[cDNA_df_TF$TF != "Homez" & cDNA_df_TF$TF != "Irx3
   
   x <- anova(x) %>% rownames_to_column("feature") %>%
     setnames("Sum Sq", "sum_sq") %>%
-    select(feature, sum_sq) %>%
+    dplyr::select(feature, sum_sq) %>%
     mutate(sum = sum(sum_sq)) %>%
     mutate(rel_sum_sq = (sum_sq/sum)*100) %>%
     setnames("rel_sum_sq", i)
@@ -1316,8 +1310,8 @@ for (i in unique(cDNA_df_TF$TF[cDNA_df_TF$TF != "Homez" & cDNA_df_TF$TF != "Irx3
 exp_variance <- melt(exp_variance, variable.name = "TF")
 exp_variance$group <- "no residual"
 exp_variance$group[grep("Residual", exp_variance$feature)] <- "residual"
-prediction <- prediction %>% select(-id) %>% melt(variable.name = "TF") %>% na.omit() %>%
-  select(-TF) %>% setnames("value", "activity_predicted")
+prediction <- prediction %>% dplyr::select(-id) %>% melt(variable.name = "TF") %>% na.omit() %>%
+  dplyr::select(-TF) %>% setnames("value", "activity_predicted")
 cDNA_df_TF <- merge(cDNA_df_TF, prediction)
 weight <- weight %>% filter(feature != "(Intercept)")
 weight <- melt(weight, variable.name = "TF")
@@ -1434,7 +1428,7 @@ cDNA_df_TF <- cDNA_df[cDNA_df$native_enhancer == "No" &
                         cDNA_df$TF != "Random2"&
                         cDNA_df$TF != "Random3",] %>% 
   mutate(log_reporter_activity = ave(log_reporter_activity, reporter_id, FUN = function(x) mean(x))) %>%
-  select(log_reporter_activity, TF, promoter, spacing, distance, background) %>%
+  dplyr::select(log_reporter_activity, TF, promoter, spacing, distance, background) %>%
   unique()
 
 cDNA_df_rel <- cDNA_df_ctrl[cDNA_df_ctrl$neg_ctrls == "No",] %>% 
@@ -1443,7 +1437,7 @@ cDNA_df_rel <- cDNA_df_ctrl[cDNA_df_ctrl$neg_ctrls == "No",] %>%
          distance = gsub(".*_([0-9]{1,2}bp)_.*", "\\1", reporter_2),
          spacing = gsub(".*_([0-9]{1,2}bp)_[0-9]{1,2}bp_.*", "\\1", reporter_2),
          background = gsub(".*([0-9]{1}$)", "\\1", reporter_2)) %>%
-  select(log_reporter_activity_relative, TF, promoter, distance, spacing, background) %>% unique() %>%
+  dplyr::select(log_reporter_activity_relative, TF, promoter, distance, spacing, background) %>% unique() %>%
   mutate(log_reporter_activity_relative = ave(log_reporter_activity_relative, 
                                               TF, promoter, distance, spacing, background, 
                                               FUN = function(x) mean(x)))
@@ -1464,8 +1458,8 @@ names(weight) <- "feature"
 
 cDNA_df_TF$row <- rownames(cDNA_df_TF)
 
-for (i in unique(cDNA_df_TF$TF[cDNA_df_TF$TF != "Homez" & cDNA_df_TF$TF != "Irx3"])) {
-  cDNA_df_TF_2 <- cDNA_df_TF[cDNA_df_TF$TF != "Homez" & cDNA_df_TF$TF != "Irx3",]
+for (i in unique(cDNA_df_TF$TF[cDNA_df_TF$TF != "Homez" & cDNA_df_TF$TF != "Irx3" & cDNA_df_TF$TF != "Nr3c1(GR)"])) {
+  cDNA_df_TF_2 <- cDNA_df_TF[cDNA_df_TF$TF != "Homez" & cDNA_df_TF$TF != "Irx3" & cDNA_df_TF$TF != "Nr3c1(GR)",]
   x <- lm(log_reporter_activity ~ promoter + spacing + distance + background, 
                      cDNA_df_TF[cDNA_df_TF$TF == i,])
   y <- data.frame(x$fitted.values) %>% rownames_to_column()
@@ -1479,7 +1473,7 @@ for (i in unique(cDNA_df_TF$TF[cDNA_df_TF$TF != "Homez" & cDNA_df_TF$TF != "Irx3
   
   x <- anova(x) %>% rownames_to_column("feature") %>%
     setnames("Sum Sq", "sum_sq") %>%
-    select(feature, sum_sq) %>%
+    dplyr::select(feature, sum_sq) %>%
     mutate(sum = sum(sum_sq)) %>%
     mutate(rel_sum_sq = (sum_sq/sum)*100) %>%
     setnames("rel_sum_sq", i)
@@ -1493,8 +1487,8 @@ for (i in unique(cDNA_df_TF$TF[cDNA_df_TF$TF != "Homez" & cDNA_df_TF$TF != "Irx3
 exp_variance <- melt(exp_variance, variable.name = "TF")
 exp_variance$group <- "no residual"
 exp_variance$group[grep("Residual", exp_variance$feature)] <- "residual"
-prediction <- prediction %>% select(-id) %>% melt(variable.name = "TF") %>% na.omit() %>%
-  select(-TF) %>% setnames("value", "activity_predicted")
+prediction <- prediction %>% dplyr::select(-id) %>% melt(variable.name = "TF") %>% na.omit() %>%
+  dplyr::select(-TF) %>% setnames("value", "activity_predicted")
 cDNA_df_TF <- merge(cDNA_df_TF, prediction)
 weight <- weight %>% filter(feature != "(Intercept)")
 weight <- melt(weight, variable.name = "TF")
@@ -1503,7 +1497,7 @@ categorie <- c("mutated", "condition", "promoter",
 weight$features <- gsub(paste(categorie, collapse="|"), "",weight$feature)
 feature <- weight$features
 weight$condition <- gsub(paste(feature, collapse="|"), "", weight$feature)
-weight <- weight %>% select(-feature)
+weight <- weight %>% dplyr::select(-feature)
 
 
 
@@ -1586,7 +1580,7 @@ for (i in unique(cDNA_df_TF$TF)) {
 ```{r tf-properties, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 # # Import tf properties dataframe
 # tf_properties <- read.csv2("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/SuRE_TF_1/tf_properties.csv", header = T)
-# tf_properties_lamb <- read.csv2("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/complete_TF_motif_space/lambert_filt.csv", header = T) %>% setnames("Name", "TF") %>% select(TF, DBD)
+# tf_properties_lamb <- read.csv2("/DATA/usr/m.trauernicht/projects/tf_activity_reporter/data/complete_TF_motif_space/lambert_filt.csv", header = T) %>% setnames("Name", "TF") %>% dplyr::select(TF, DBD)
 # 
 # tf_properties <- merge(tf_properties, tf_properties_lamb)
 # 
@@ -1599,9 +1593,9 @@ for (i in unique(cDNA_df_TF$TF)) {
 # 
 # tf_properties <- tf_properties[tf_properties$TF %in% cDNA_df$TF,]
 # 
-# variance <- exp_variance[exp_variance$feature == "total",] %>% select(TF, value) %>% unique()
+# variance <- exp_variance[exp_variance$feature == "total",] %>% dplyr::select(TF, value) %>% unique()
 # 
-# expression <- cDNA_df_TF %>% select(log_reporter_activity_relative, TF) %>% 
+# expression <- cDNA_df_TF %>% dplyr::select(log_reporter_activity_relative, TF) %>% 
 #   mutate(log_reporter_activity_relative = ave(log_reporter_activity_relative, TF, FUN = function(x) mean(x))) %>%
 #   unique()
 # 
@@ -1713,7 +1707,7 @@ cDNA_df_TF <- cDNA_df[cDNA_df$native_enhancer == "No" &
                         cDNA_df$TF != "Random3",] %>% 
   mutate(log_reporter_activity = ave(log_reporter_activity, reporter_id, condition, FUN = function(x) mean(x)),
          TF = paste(TF, condition, sep = "_")) %>%
-  select(log_reporter_activity, TF, promoter, spacing, distance, background) %>%
+  dplyr::select(log_reporter_activity, TF, promoter, spacing, distance, background) %>%
   unique()
 
 cDNA_df_rel <- cDNA_df_ctrl[cDNA_df_ctrl$neg_ctrls == "No",] %>% 
@@ -1723,7 +1717,7 @@ cDNA_df_rel <- cDNA_df_ctrl[cDNA_df_ctrl$neg_ctrls == "No",] %>%
          distance = gsub(".*_([0-9]{1,2}bp)_.*", "\\1", reporter_2),
          spacing = gsub(".*_([0-9]{1,2}bp)_[0-9]{1,2}bp_.*", "\\1", reporter_2),
          background = gsub(".*([0-9]{1}$)", "\\1", reporter_2)) %>%
-  select(log_reporter_activity_relative, tf, promoter, distance, spacing, background) %>% unique() %>%
+  dplyr::select(log_reporter_activity_relative, tf, promoter, distance, spacing, background) %>% unique() %>%
   mutate(log_reporter_activity_relative = ave(log_reporter_activity_relative, 
                                               tf, promoter, distance, spacing, background, 
                                               FUN = function(x) mean(x)))%>%
@@ -1745,8 +1739,8 @@ names(weight) <- "feature"
 
 cDNA_df_TF$row <- rownames(cDNA_df_TF)
 
-for (i in unique(cDNA_df_TF$TF[-grep("Irx3|Homez", cDNA_df_TF$TF)])) {
-  cDNA_df_TF_2 <- cDNA_df_TF[-grep("Irx3|Homez", cDNA_df_TF$TF),]
+for (i in unique(cDNA_df_TF$TF[-grep("Irx3|Homez|Nr3c1(GR)", cDNA_df_TF$TF)])) {
+  cDNA_df_TF_2 <- cDNA_df_TF[-grep("Irx3|Homez|Nr3c1(GR)", cDNA_df_TF$TF),]
   x <- lm(log_reporter_activity ~ promoter + spacing + distance + background, 
                      cDNA_df_TF[cDNA_df_TF$TF == i,])
   y <- data.frame(x$fitted.values) %>% rownames_to_column()
@@ -1760,7 +1754,7 @@ for (i in unique(cDNA_df_TF$TF[-grep("Irx3|Homez", cDNA_df_TF$TF)])) {
   
   x <- anova(x) %>% rownames_to_column("feature") %>%
     setnames("Sum Sq", "sum_sq") %>%
-    select(feature, sum_sq) %>%
+    dplyr::select(feature, sum_sq) %>%
     mutate(sum = sum(sum_sq)) %>%
     mutate(rel_sum_sq = (sum_sq/sum)*100) %>%
     setnames("rel_sum_sq", i)
@@ -1774,8 +1768,8 @@ for (i in unique(cDNA_df_TF$TF[-grep("Irx3|Homez", cDNA_df_TF$TF)])) {
 exp_variance <- melt(exp_variance, variable.name = "TF")
 exp_variance$group <- "no residual"
 exp_variance$group[grep("Residual", exp_variance$feature)] <- "residual"
-prediction <- prediction %>% select(-id) %>% melt(variable.name = "TF") %>% na.omit() %>%
-  select(-TF) %>% setnames("value", "activity_predicted")
+prediction <- prediction %>% dplyr::select(-id) %>% melt(variable.name = "TF") %>% na.omit() %>%
+  dplyr::select(-TF) %>% setnames("value", "activity_predicted")
 cDNA_df_TF <- merge(cDNA_df_TF, prediction)
 weight <- weight %>% filter(feature != "(Intercept)")
 weight <- melt(weight, variable.name = "TF")
@@ -1785,7 +1779,7 @@ weight$features <- gsub(paste(categorie, collapse="|"), "",weight$feature)
 ml <- length(weight$features)
 feature <- weight$features
 weight$condition <- gsub(paste(head(feature, n = ml/2), collapse = "|"), "", weight$feature)
-weight <- weight %>% select(-feature)
+weight <- weight %>% dplyr::select(-feature)
 
 
 
