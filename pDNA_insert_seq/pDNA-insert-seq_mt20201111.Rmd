@@ -162,12 +162,12 @@ get_pwm_feature_matrix <- function(motif_meta_fn, fimo_fn, db = 2) {
       # extract tf symbol from motif id (Cognate_TF unsafe, it can be empty) and replace :: occurrences
       mutate(tf_symbol = str_remove(ID, '_[0-9]*'),
              tf_symbol = str_replace(tf_symbol, '::', '_')) %>%
-      select(motif_id = `PWM ID`, tf_symbol)
+      dplyr::select(motif_id = `PWM ID`, tf_symbol)
 
     # load fimo results
     tib_fimo <- read_tsv(fimo_fn) %>%
       # extract motif id, sequence id and p-value
-      select(motif_id, sequence_name, pval = `p-value`)
+      dplyr::select(motif_id, sequence_name, pval = `p-value`)
 
     # add tf symbol to fimo results
     tib_fimo <- tib_fimo %>%
@@ -184,12 +184,12 @@ get_pwm_feature_matrix <- function(motif_meta_fn, fimo_fn, db = 2) {
     # spread into feature matrix
     tib_fimo <- tib_fimo %>%
       mutate(pval = -1 * log10(pval)) %>%
-      select(-motif_id) %>%
+      dplyr::select(-motif_id) %>%
       spread(key = tf_symbol, value = pval, fill = 0, drop = TRUE) %>%
       # perform cosmetics on the id
       mutate(id = sequence_name) %>%
-      select(-c(sequence_name)) %>%
-      select(id, everything())
+      dplyr::select(-c(sequence_name)) %>%
+      dplyr::select(id, everything())
 
   }
 
@@ -224,12 +224,12 @@ pDNA_seq$insert <- gsub("(.*)[A-Z]{12}$", "\\1", pDNA_seq$sequence)
 ## Match barcodes
 ```{r, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Match barcodes with original data
-pDNA_seq$rpm <- ave(pDNA_seq$number, FUN = function(x) x/sum(x) *1e6)
-pDNA_seq_bc <- pDNA_seq %>% select(barcode, rpm) %>% unique() %>% mutate(id = "pDNA")
+pDNA_seq$rpm <- ave(pDNA_seq$number, FUN = function(x) ((x+1)/sum(x)) *1e6)
+pDNA_seq_bc <- pDNA_seq %>% dplyr::select(barcode, rpm) %>% unique() %>% mutate(id = "pDNA")
 # Only keep highest barcode values - a bit of cheating here
 pDNA_seq_bc <- pDNA_seq_bc[order(pDNA_seq_bc$barcode, -abs(pDNA_seq_bc$rpm) ), ]
 pDNA_seq_bc <- pDNA_seq_bc[ !duplicated(pDNA_seq_bc$barcode), ] 
-ref_seq_bc <- ref_seq %>% select(name, barcode)
+ref_seq_bc <- ref_seq %>% dplyr::select(name, barcode)
 match_bc <- merge(ref_seq_bc, pDNA_seq_bc, by = "barcode", all = T)
 match_bc <- match_bc[!is.na(match_bc$rpm),]
 ```
@@ -280,8 +280,8 @@ plot_ly(data = gc, x = ~GC.content, y = ~rpm, color = ~count, colors =  "Oranges
 ## Match barcodes
 ```{r, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Match barcodes with original data
-ref_seq_bc <- ref_seq %>% select(name, barcode)
-pDNA_seq_bc <- pDNA_seq %>% select(barcode) %>% unique() %>% mutate(id = "pDNA")
+ref_seq_bc <- ref_seq %>% dplyr::select(name, barcode)
+pDNA_seq_bc <- pDNA_seq %>% dplyr::select(barcode) %>% unique() %>% mutate(id = "pDNA")
 match_bc <- merge(ref_seq_bc, pDNA_seq_bc, by = "barcode", all = T)
 ```
 
@@ -290,9 +290,9 @@ match_bc <- merge(ref_seq_bc, pDNA_seq_bc, by = "barcode", all = T)
 ## Plot how many barcodes are found in pDNA data
 ```{r, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Match barcodes with original data
-ref_seq_bc <- ref_seq %>% select(name, barcode)
+ref_seq_bc <- ref_seq %>% dplyr::select(name, barcode)
 ref_seq_bc$TF <- gsub("_.*", "\\1", ref_seq_bc$name)
-pDNA_seq_bc <- pDNA_seq %>% select(barcode, rpm) %>% unique() 
+pDNA_seq_bc <- pDNA_seq %>% dplyr::select(barcode, rpm) %>% unique() 
 
 ## Identify the unmapped fraction
 bc_fraction <- data.frame("bc_fraction" = 0)
@@ -321,11 +321,11 @@ bc_rep_df <- data.frame(bc_rep_df,
 # pDNA_seq_insert <- pDNA_seq[pDNA_seq$barcode %in% ref_seq$barcode,]
 # 
 # # Add bc-id to the barcodes found in pDNA
-# ref_seq_insert <- ref_seq %>% select(barcode, name) %>% setnames("name", "bc-match")
+# ref_seq_insert <- ref_seq %>% dplyr::select(barcode, name) %>% setnames("name", "bc-match")
 # pDNA_seq_insert <- merge(pDNA_seq_insert, ref_seq_insert)
 # 
 # # Add insert-id to the inserts found in pDNA
-# ref_seq_insert <- ref_seq %>% select(insert, name) %>% setnames("name", "insert-match")
+# ref_seq_insert <- ref_seq %>% dplyr::select(insert, name) %>% setnames("name", "insert-match")
 # ref_seq_insert$`insert-match` <- gsub("(.*)_bc-[0-9]$", "\\1", ref_seq_insert$`insert-match`)
 # pDNA_seq_insert <- merge(pDNA_seq_insert, ref_seq_insert)
 # 
@@ -371,8 +371,8 @@ plot_ly(bc_rep_df, x = ~rpm) %>%
 ## How many raw complete sequences match with the design?
 ```{r, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Match barcodes with original data
-ref_seq_seq <- ref_seq %>% select(name, sequence)
-pDNA_seq_seq <- pDNA_seq %>% select(sequence,rpm) %>% unique()
+ref_seq_seq <- ref_seq %>% dplyr::select(name, sequence)
+pDNA_seq_seq <- pDNA_seq %>% dplyr::select(sequence,rpm) %>% unique()
 
 ## Identify the unmapped fraction
 seq_fraction <- data.frame("seq_fraction" = 0)
@@ -421,10 +421,10 @@ Clearly wrongly assigned barcodes can be assigned to the correct insert
 Barcodes that are attached to a mixed population of inserts should to be excluded from any analysis where this plasmid library was used
 
 ```{r, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
-# mismatch_df <- pDNA_seq_insert[pDNA_seq_insert$match == F,] %>% select(barcode, number) %>% unique()
+# mismatch_df <- pDNA_seq_insert[pDNA_seq_insert$match == F,] %>% dplyr::select(barcode, number) %>% unique()
 # mismatch_df <- ddply(mismatch_df,~barcode, summarise, number = sum(number))
 # 
-# match_df <- pDNA_seq_insert[pDNA_seq_insert$match == T,]  %>% select(barcode, number) %>% unique()
+# match_df <- pDNA_seq_insert[pDNA_seq_insert$match == T,]  %>% dplyr::select(barcode, number) %>% unique()
 # match_df <- ddply(match_df,~barcode, summarise, number = sum(number))
 # setnames(match_df, "number", "match")
 # setnames(mismatch_df, "number", "mismatch")
@@ -552,9 +552,9 @@ Barcodes that are attached to a mixed population of inserts should to be exclude
 # ## Only select barcodes from design in pDNA data
 # matching_df_correct <- matching_df[matching_df$ratio > 2,]
 # pDNA_seq_insert <- pDNA_seq[pDNA_seq$barcode %in% matching_df$barcode,] %>% 
-#   select(barcode, insert, number) %>%
+#   dplyr::select(barcode, insert, number) %>%
 #   setnames("insert", "pDNA")
-# ref_seq_insert <- ref_seq %>% select(barcode, insert) %>% setnames("insert", "ref")
+# ref_seq_insert <- ref_seq %>% dplyr::select(barcode, insert) %>% setnames("insert", "ref")
 # match_insert <- merge(pDNA_seq_insert, ref_seq_insert, by = "barcode")
 # match_insert$lv <- levenshtein.distance(match_insert$pDNA, match_insert$ref)
 # 
@@ -574,11 +574,11 @@ Barcodes that are attached to a mixed population of inserts should to be exclude
 # ## Only select barcodes from design in pDNA data
 # matching_df_correct <- matching_df[matching_df$ratio > 2,]
 # pDNA_seq_insert <- pDNA_seq[pDNA_seq$barcode %in% matching_df$barcode,] %>% 
-#   select(barcode, insert, number) %>%
+#   dplyr::select(barcode, insert, number) %>%
 #   setnames("insert", "pDNA")
 # p53_bc <- ref_seq$barcode[grep("Trp53", ref_seq$name)]
 # pDNA_seq_insert <- pDNA_seq_insert[pDNA_seq_insert$barcode %in% p53_bc,]
-# ref_seq_insert <- ref_seq %>% select(barcode, insert) %>% setnames("insert", "ref")
+# ref_seq_insert <- ref_seq %>% dplyr::select(barcode, insert) %>% setnames("insert", "ref")
 # match_insert <- merge(pDNA_seq_insert, ref_seq_insert, by = "barcode")
 # match_insert$lv <- levenshtein.distance(match_insert$pDNA, match_insert$ref)
 # 
@@ -601,7 +601,7 @@ Barcodes that are attached to a mixed population of inserts should to be exclude
 # write.csv(bc_exclude, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/pDNA_insert_seq/bc_exclude.csv")
 # 
 # # Export barcodes that are attached to the wrong insert
-# bc_replace <- pDNA_seq_incorrect %>% select(barcode, `bc-match`, `insert-match`) %>% unique()
+# bc_replace <- pDNA_seq_incorrect %>% dplyr::select(barcode, `bc-match`, `insert-match`) %>% unique()
 # write.csv(bc_replace, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/pDNA_insert_seq/bc_replace.csv")
 ```
 
