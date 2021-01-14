@@ -316,7 +316,8 @@ ggplot(data = cDNA_df %>% dplyr::select(condition, log_reporter_activity, report
 
 
 ## reporter activity distribution - highlight different promoters
-ggplot(data = cDNA_df %>% dplyr::select(log_reporter_activity, reporter_id, Promoter) %>% unique(), 
+ggplot(data = cDNA_df %>% 
+         dplyr::select(log_reporter_activity, reporter_id, Promoter) %>% unique(), 
        aes(y = log_reporter_activity, x = Promoter, color = Promoter, alpha = 0.4)) + 
   geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - promoters") +
@@ -324,14 +325,16 @@ ggplot(data = cDNA_df %>% dplyr::select(log_reporter_activity, reporter_id, Prom
   theme_bw()
 
 ## reporter activity distribution - highlight different promoters - and negative controls (does the activity actually come from the TFs or from the promoter itself?)
-ggplot(cDNA_df[cDNA_df$Promoter != "hPGK",] %>% dplyr::select(reporter_id, log_reporter_activity, neg_ctrls, Promoter) %>% unique(), aes(y = log_reporter_activity, x = neg_ctrls, color = neg_ctrls, alpha = 0.4)) + 
+ggplot(cDNA_df[cDNA_df$Promoter != "hPGK",] %>% 
+         dplyr::select(reporter_id, log_reporter_activity, neg_ctrls, Promoter) %>% unique(), aes(y = log_reporter_activity, x = neg_ctrls, color = neg_ctrls, alpha = 0.4)) + 
   geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - promoters") +
   scale_color_brewer(palette = "Set2") +
   theme_bw() + facet_wrap(~Promoter)
 
 ## reporter activity distribution - highlight different distances
-ggplot(data = cDNA_df[cDNA_df$Distance != "",] %>% dplyr::select(log_reporter_activity, reporter_id, Distance) %>% unique(), 
+ggplot(data = cDNA_df[cDNA_df$Distance != "",] %>% 
+         dplyr::select(log_reporter_activity, reporter_id, Distance) %>% unique(), 
        aes(y = log_reporter_activity, x = Distance, color = Distance, alpha = 0.4)) + 
   geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - distances") +
@@ -339,13 +342,16 @@ ggplot(data = cDNA_df[cDNA_df$Distance != "",] %>% dplyr::select(log_reporter_ac
   theme_bw()
 
 ## reporter activity distribution - highlight different spacings
-ggplot(data = cDNA_df[cDNA_df$Spacing != "",] %>% dplyr::select(log_reporter_activity, reporter_id, Spacing, TF) %>% unique(), 
+ggplot(data = cDNA_df[cDNA_df$Spacing != "",] %>% 
+         dplyr::select(log_reporter_activity, reporter_id, Spacing, TF) %>% unique(), 
        aes(y = log_reporter_activity, x = Spacing, color = Spacing, alpha = 0.4)) + 
   geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - spacings") +
   scale_color_brewer(palette = "Set2") +
   theme_bw() + facet_wrap(~TF)
-ggplot(data = cDNA_df[cDNA_df$Spacing != "",] %>% dplyr::select(log_reporter_activity, reporter_id, Spacing, TF) %>% unique(), 
+
+ggplot(data = cDNA_df[cDNA_df$Spacing != "",] %>% 
+         dplyr::select(log_reporter_activity, reporter_id, Spacing, TF) %>% unique(), 
        aes(y = log_reporter_activity, x = Spacing, color = Spacing, alpha = 0.4)) + 
   geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - spacings") +
@@ -353,7 +359,8 @@ ggplot(data = cDNA_df[cDNA_df$Spacing != "",] %>% dplyr::select(log_reporter_act
   theme_bw()
 
 ## reporter activity distribution - highlight different backgrounds
-ggplot(data = cDNA_df[cDNA_df$Background != "",] %>% dplyr::select(log_reporter_activity, reporter_id, Background, condition) %>% unique(), 
+ggplot(data = cDNA_df[cDNA_df$Background != "",] %>% 
+         dplyr::select(log_reporter_activity, reporter_id, Background, condition) %>% unique(), 
        aes(y = log_reporter_activity, x = Background, color = Background, alpha = 0.4)) + 
   geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - backgrounds") +
@@ -361,18 +368,20 @@ ggplot(data = cDNA_df[cDNA_df$Background != "",] %>% dplyr::select(log_reporter_
   theme_bw()
 
 ## reporter activity distribution - highlight different tfs - and negative controls
-ggplot(cDNA_df[cDNA_df$native_enhancer == "No" & cDNA_df$Promoter != "hPGK",]%>% dplyr::select(reporter_id, log_reporter_activity, neg_ctrls, TF) %>% unique() %>% mutate(TF = gsub("_neg", "", TF)), 
+ggplot(cDNA_df[cDNA_df$native_enhancer == "No" & cDNA_df$Promoter != "hPGK",]%>% 
+         dplyr::select(reporter_id, log_reporter_activity, neg_ctrls, TF) %>% unique() %>% mutate(TF = gsub("_neg", "", TF)), 
        aes(y = log_reporter_activity, x = neg_ctrls, color = neg_ctrls, alpha = 0.4)) + 
-  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
+  geom_quasirandom() + 
   labs(title = "reporter activity distribution - tfs") +
   scale_color_brewer(palette = "Set2") +
   theme_bw() + facet_wrap(~TF)
 
 ## reporter activity distribution - highlight different tfs - and negative controls
-ggplot(cDNA_df[cDNA_df$native_enhancer == "No" & cDNA_df$Promoter != "hPGK" & cDNA_df$neg_ctrls == "No",]%>% dplyr::select(reporter_id, log_reporter_activity, condition, TF) %>% 
+ggplot(cDNA_df[cDNA_df$native_enhancer == "No" & cDNA_df$Promoter != "hPGK" & cDNA_df$neg_ctrls == "No",]%>% 
+         dplyr::select(reporter_id, log_reporter_activity, condition, TF) %>% 
          unique() %>% mutate(TF = gsub("_neg", "", TF)), 
        aes(y = log_reporter_activity, x = condition, alpha = 0.4)) + 
-  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
+  geom_quasirandom() + 
   labs(title = "reporter activity distribution - tfs") +
   theme_bw() + 
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 9)) +
@@ -407,7 +416,7 @@ tf_activity_heatmap <- merge(tf_activity_heatmap, group)
 tf_activity_heatmap <- tf_activity_heatmap %>% 
   remove_rownames %>% column_to_rownames(var="TF")
 # Keeping the scale in the pheatmap function
-myBreaks1 <- seq(-0.5,5,0.055)
+myBreaks1 <- seq(-1,4,0.05)
 
 
 # pheatmap function

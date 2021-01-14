@@ -114,6 +114,22 @@ bc_annotation <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library
   dplyr::select(barcode, TF, Spacing, Distance, Barcode, Promoter, Background)
 ```
 
+
+```{r data import, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+# Import pDNA data from gcf6301
+bc_files = list.files('/DATA/usr/m.trauernicht/projects/SuRE_deep_scan_trp53_gr/data/gcf6301/results_pMT02_d1',
+                       full.names=T, pattern='*_barcode_counts.tsv')
+bc_list_2 <- lapply(bc_files, fread, header = FALSE)
+names(bc_list_2)<- gsub('.*//6301_[0-9]{1,2}_(.*?)_[CGAT]{6}.*_barcode_counts.tsv', 
+                                    '\\1', 
+                                    bc_files)
+bc_list[25] <- bc_list_2[10]
+```
+
+
+
+
+
 ## Analysis
 ```{r cluster_compare, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
 # Generate long dfs
@@ -132,13 +148,18 @@ for (i in 1:length(bc_list)) {
   bc_df <- merge(bc_df, bc_df_i, all = T)
   }
 }
+bc_df <- bc_df %>%
+  setnames("Var.2", "pDNA")
 
 # Import pDNA data from stimulation 1 sequencing data
 bc_df_pDNA <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/results/mt20200504_bc_df_levenshtein.csv", header = T) %>% 
   dplyr::select(pDNA_1, pDNA_2, barcode) %>%
   mutate(pDNA = (pDNA_1 + pDNA_2) / 2) %>%
-  dplyr::select(barcode, pDNA) 
-bc_df <- merge(bc_df, bc_df_pDNA, all = T)
+  dplyr::select(barcode, 'pDNA_old' = pDNA) 
+
+bc_df <- merge(bc_df, bc_df_pDNA, all = T) %>%
+  mutate(pDNA = (pDNA + pDNA_old)/2) %>%
+  dplyr::select(-pDNA_old)
 
 # Match designed barcodes
 bc_df <- merge(bc_df, bc_annotation, all = T)
@@ -292,7 +313,6 @@ ggplot(bc_df_2, aes(x = pDNA, y = rpm)) +
   theme_bw()+
   facet_wrap(~condition)
 
-
 cor <- data.frame("condition" = unique(bc_df_2$condition), "cor" = "", stringsAsFactors = F)
 
 for (i in unique(bc_df_2$condition)) {
@@ -409,14 +429,14 @@ Divide cDNA barcode counts through pDNA barcode counts to get activity
 ```{r normalization, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
 # Normalize data using pDNA data
 ## Add pDNA data as separate column
-pDNA <- bc_df[bc_df$condition == "pDNA",] %>% dplyr::select(barcode, rpm) %>% unique() %>% setnames("rpm", "pDNA_counts_rpm")
+pDNA <- bc_df[bc_df$condition == "pDNA",] %>% 
+  dplyr::select(barcode, `pDNA_counts_rpm` = rpm) %>% 
+  unique()
+
 bc_df <- merge(pDNA, bc_df, by ="barcode")
 
 ## Compute activity by dividing cDNA bc counts through pDNA bc counts
 bc_df$activity <- bc_df$rpm / bc_df$pDNA_counts_rpm
-
-## Remove all activities that were computed with low pDNA bc counts, this keeps the noise level in the data low
-bc_df$activity[bc_df$pDNA_counts_rpm <= 1] <- NA
 ```
 
 
@@ -562,38 +582,48 @@ bc_df_cDNA_filt <- bc_df_cDNA_filt[!is.na(bc_df_cDNA_filt$condition),]
 ## Combine replicates in 8 different columns
 bc_df_rep <- bc_df_cDNA_filt[bc_df_cDNA_filt$hPGK == "No" & bc_df_cDNA_filt$native_enhancer == "No" &
                           bc_df_cDNA_filt$rand_promoter == "No",] %>% 
-  dplyr::select(Barcode, activity, condition, reporter_id)
-rep1 <- bc_df_rep[bc_df_rep$Barcode == 1,] %>% dplyr::select(-Barcode)
-rep2 <- bc_df_rep[bc_df_rep$Barcode == 2,] %>% dplyr::select(-Barcode)
-rep3 <- bc_df_rep[bc_df_rep$Barcode == 3,] %>% dplyr::select(-Barcode)
-rep4 <- bc_df_rep[bc_df_rep$Barcode == 4,] %>% dplyr::select(-Barcode)
-rep5 <- bc_df_rep[bc_df_rep$Barcode == 5,] %>% dplyr::select(-Barcode)
-rep6 <- bc_df_rep[bc_df_rep$Barcode == 6,] %>% dplyr::select(-Barcode)
-rep7 <- bc_df_rep[bc_df_rep$Barcode == 7,] %>% dplyr::select(-Barcode)
-rep8 <- bc_df_rep[bc_df_rep$Barcode == 8,] %>% dplyr::select(-Barcode)
+  dplyr::select(Barcode, activity, TF, condition, reporter_id, pDNA_counts_rpm) %>%
+  mutate(pDNA_counts_rpm = ave(pDNA_counts_rpm, reporter_id, FUN = function(x) min(x))) %>% unique()
+
+rep1 <- bc_df_rep[bc_df_rep$Barcode == 1,] %>% dplyr::select(-Barcode) %>% setnames("activity", "bc1")
+rep2 <- bc_df_rep[bc_df_rep$Barcode == 2,] %>% dplyr::select(-Barcode) %>% setnames("activity", "bc2")
+rep3 <- bc_df_rep[bc_df_rep$Barcode == 3,] %>% dplyr::select(-Barcode) %>% setnames("activity", "bc3")
+rep4 <- bc_df_rep[bc_df_rep$Barcode == 4,] %>% dplyr::select(-Barcode) %>% setnames("activity", "bc4")
+rep5 <- bc_df_rep[bc_df_rep$Barcode == 5,] %>% dplyr::select(-Barcode) %>% setnames("activity", "bc5")
+rep6 <- bc_df_rep[bc_df_rep$Barcode == 6,] %>% dplyr::select(-Barcode) %>% setnames("activity", "bc6")
+rep7 <- bc_df_rep[bc_df_rep$Barcode == 7,] %>% dplyr::select(-Barcode) %>% setnames("activity", "bc7")
+rep8 <- bc_df_rep[bc_df_rep$Barcode == 8,] %>% dplyr::select(-Barcode) %>% setnames("activity", "bc8")
+
+bc_df_rep <-  Reduce(function(x, y) merge(x, y, all=TRUE), list(rep1, rep2, rep3, rep4, rep5, rep6, rep7, rep8))
+bc_df_rep <- bc_df_rep[rowSums(is.na(bc_df_rep)) != ncol(bc_df_rep), ]
 
 
-setnames(rep1, "activity", "bc1")
-setnames(rep2, "activity", "bc2")
-setnames(rep3, "activity", "bc3")
-setnames(rep4, "activity", "bc4")
-setnames(rep5, "activity", "bc5")
-setnames(rep6, "activity", "bc6")
-setnames(rep7, "activity", "bc7")
-setnames(rep8, "activity", "bc8")
 
+## Compute the correlation between two technical replicates for each pDNA cutoff, separately for each TF
+cor_df <- data.frame("rpm_cutoff"  = seq(0,100,1), "cor" = "", stringsAsFactors=FALSE)
+cor_df <- merge(unique(bc_df_rep$TF), cor_df)
 
-bc_df_rep <- merge(rep1, rep2, all = T)
-bc_df_rep <- bc_df_rep[rowSums(is.na(bc_df_rep)) != ncol(bc_df_rep), ]
-bc_df_rep <- merge(bc_df_rep, rep3, all = T)
-bc_df_rep <- merge(bc_df_rep, rep4, all = T)
-bc_df_rep <- bc_df_rep[rowSums(is.na(bc_df_rep)) != ncol(bc_df_rep), ]
-bc_df_rep <- merge(bc_df_rep, rep5, all = T)
-bc_df_rep <- merge(bc_df_rep, rep6, all = T)
-bc_df_rep <- bc_df_rep[rowSums(is.na(bc_df_rep)) != ncol(bc_df_rep), ]
-bc_df_rep <- merge(bc_df_rep, rep7, all = T)
-bc_df_rep <- merge(bc_df_rep, rep8, all = T)
-bc_df_rep <- bc_df_rep[rowSums(is.na(bc_df_rep)) != ncol(bc_df_rep), ]
+for (i in unique(cor_df$rpm_cutoff)) {
+  for (j in unique(cor_df$x)) {
+    x <- bc_df_rep[bc_df_rep$pDNA_counts_rpm > i & bc_df_rep$TF == j,]
+    if (nrow(x) == 0) {
+      cor_df$cor[cor_df$rpm_cutoff == i & cor_df$x == j] <- NA
+    } else {
+      cor_df$cor[cor_df$rpm_cutoff == i & cor_df$x == j] <- cor(x$bc2, x$bc4, use = "pairwise.complete.obs", method = "spearman")
+    }
+  }
+}
+
+ggplot(cor_df) +
+  geom_point(aes(x = rpm_cutoff, y = as.numeric(cor))) +
+  theme_bw() +
+  ylim(0,1) +
+  facet_wrap(~x)
+
+## Remove all activities that were computed with low pDNA bc counts, this keeps the noise level in the data low
+bc_df_cDNA_filt <- bc_df_cDNA_filt$activity[bc_df_cDNA_filt$pDNA_counts_rpm >= 1] <- NA
+bc_df_rep <- bc_df_rep[bc_df_rep$pDNA_counts_rpm >= 1,]
+
 
 
 # Correlation matrix plot
