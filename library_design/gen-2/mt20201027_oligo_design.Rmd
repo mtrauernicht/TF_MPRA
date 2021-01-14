@@ -165,7 +165,7 @@ get_pwm_feature_matrix <- function(motif_meta_fn, fimo_fn, db = 2) {
     # load fimo results
     tib_fimo <- read_tsv(fimo_fn) %>%
       # extract motif id, sequence id and p-value
-      select(motif_id, sequence_name, pval = `p-value`)
+      dplyr::select(motif_id, sequence_name, pval = `p-value`)
 
     # add tf symbol to fimo results
     tib_fimo <- tib_fimo %>%
@@ -320,10 +320,15 @@ plot_ly(data=clusters_sel_df %>% dplyr::select(TF.Family, total_count, motif_cou
 # Final selection TFs
 # Add selected composite motifs
 composite_motifs <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/composite_motifs.csv", header = T)
+# Add AHR & JUN because they're interesting (but not unique - keep this in mind)
+special_motifs <- data.frame(TF = c("AHR:ARNT", "FOS::JUN", "FOXA1", "FOXO1"),
+                             motif_id = c("MA0006.1.jaspar","MA0099.3.jaspar", "M09569_1.94d.txt", "M05738_1.94d.txt"))
 tfs_selected_filt <- tfs_selected_filt %>% dplyr::select(TF, CIS.BP.ID) %>%
   setnames(c("TF", "motif_id")) %>%
   mutate(motif_id = paste(motif_id, ".txt", sep = "")) %>%
-  rbind(composite_motifs) 
+  rbind(composite_motifs) %>%
+  rbind(special_motifs)
+
 
 
 # Visualize all motifs
@@ -357,7 +362,7 @@ for(i in 1:nrow(tfs_selected_filt)) {
 names(seq_logos) <- tfs_selected_filt$TF
 
 # Create sequence plot of all pwms
-ggseqlogo(seq_logos, ncol = 6, scales = "free") + theme_bw()+ theme(strip.background =element_rect(fill="#E6A08A"))
+ggseqlogo(seq_logos, ncol = 8, scales = "free") + theme_bw()+ theme(strip.background =element_rect(fill="#E6A08A"))
 ```
 
 
@@ -445,7 +450,27 @@ plot_ly(x = ~density$x, y = ~density$y, type = 'scatter', mode = 'lines', fill =
          yaxis = list(title = 'Density'))
 ```
 
+### Uniqueness of chosen TFs vs all TFs?
+```{r out.width= "80%", fig.align= "center", echo = FALSE, warning = FALSE, message=FALSE}
+tf_selected <- tf_motifs %>%
+  mutate(seq.name = gsub("::.*", "", seq.name),
+         seq.name = gsub(":.*", "", seq.name)) %>%
+  setnames("seq.name","TF") %>%
+  dplyr::select(TF) %>%
+  mutate(design = "yes")
+tf_selected$TF[tf_selected$TF == "RAR"] <- "RARA"
+tf_unique <- merge(tf_clusters, tf_selected, all = T)
+tf_unique$design[is.na(tf_unique$design)] <- "no"
+tf_unique <- tf_unique[!is.na(tf_unique$TF.Family),]
+tf_unique <- tf_unique[-grep("^FO", tf_unique$TF),]
 
+ggplot(tf_unique, aes(x = design, y = count,)) +
+  geom_quasirandom(color =  "#2D3047") +
+  geom_boxplot(alpha = 0.4) +
+  xlab("chosen?")+
+  ylab("#TFs in motif cluster")+
+  theme_bw()
+```
 
 
 
@@ -457,66 +482,77 @@ plot_ly(x = ~density$x, y = ~density$y, type = 'scatter', mode = 'lines', fill =
 #                  file_accession = "ENCFF627QMV")
 # downloadEncode(x)
 
-# Load RNA-seq data from different cell lines
-hepg2_rna <- read_tsv("/DATA/usr/m.trauernicht/data/RNA_seq/HepG2/ENCFF649AHO.tsv") %>% 
-  dplyr::select(gene_id, FPKM) %>%
-  filter(grepl("ENSG", gene_id)) %>%
-  mutate(gene_id = gsub(".[0-9]+$", "", gene_id))
+# # Load RNA-seq data from different cell lines
+# hepg2_rna <- read_tsv("/DATA/usr/m.trauernicht/data/RNA_seq/HepG2/ENCFF649AHO.tsv") %>%
+#   dplyr::select(gene_id, FPKM) %>%
+#   filter(grepl("ENSG", gene_id)) %>%
+#   mutate(gene_id = gsub(".[0-9]+$", "", gene_id))
+# load('/DATA/usr/m.martinez.ara/GitLab/gurten/gurten/data/fc181121_epsure_tadec_rnaseq_expr_joshi.RData')
+# mES_rna <- tib_fpkm_joshi %>% dplyr::select(symbol, twoi_1)
+# K562_rna <- read_tsv("/DATA/usr/m.trauernicht/data/RNA_seq/K562/ENCFF201HGA.tsv") %>%
+#   dplyr::select(gene_id, FPKM) %>%
+#   filter(grepl("ENSG", gene_id)) %>%
+#   mutate(gene_id = gsub(".[0-9]+$", "", gene_id))
+# MCF7_rna <- read_tsv("/DATA/usr/m.trauernicht/data/RNA_seq/MCF-7/ENCFF009GDJ.tsv") %>%
+#   dplyr::select(gene_id, FPKM) %>%
+#   filter(grepl("ENSG", gene_id)) %>%
+#   mutate(gene_id = gsub(".[0-9]+$", "", gene_id))
+# A549_rna <- read_tsv("/DATA/usr/m.trauernicht/data/RNA_seq/A549/ENCFF627QMV.tsv") %>%
+#   dplyr::select(gene_id, FPKM) %>%
+#   filter(grepl("ENSG", gene_id)) %>%
+#   mutate(gene_id = gsub(".[0-9]+$", "", gene_id))
+
+# # Annotate RNA-seq data
+# ensembl <- useMart("ensembl")
+# mart <- useDataset("hsapiens_gene_ensembl", mart = ensembl)
+# genes <- hepg2_rna$gene_id
+# G_list <- getBM(filters= "ensembl_gene_id", attributes= c("ensembl_gene_id","hgnc_symbol"),values=genes,mart= mart)
+# hepg2_rna <- merge(hepg2_rna,G_list,by.x="gene_id",by.y="ensembl_gene_id")
+# 
+# # Extract interesting HepG2 genes
+# top_genes <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/top100pubmedGenes.csv")
+# hepg2_top_genes <- hepg2_rna[hepg2_rna$FPKM >= 10,]
+# hepg2_top_genes <- hepg2_top_genes[hepg2_top_genes$hgnc_symbol %in% top_genes$SYMBOL,]
+# 
+# genes <- K562_rna$gene_id
+# G_list <- getBM(filters= "ensembl_gene_id", attributes= c("ensembl_gene_id","hgnc_symbol"),values=genes,mart= mart)
+# K562_rna <- merge(K562_rna,G_list,by.x="gene_id",by.y="ensembl_gene_id")
+# 
+# genes <- MCF7_rna$gene_id
+# G_list <- getBM(filters= "ensembl_gene_id", attributes= c("ensembl_gene_id","hgnc_symbol"),values=genes,mart= mart)
+# MCF7_rna <- merge(MCF7_rna,G_list,by.x="gene_id",by.y="ensembl_gene_id")
+# 
+# genes <- A549_rna$gene_id
+# G_list <- getBM(filters= "ensembl_gene_id", attributes= c("ensembl_gene_id","hgnc_symbol"),values=genes,mart= mart)
+# A549_rna <- merge(A549_rna,G_list,by.x="gene_id",by.y="ensembl_gene_id")
+# 
+# Only keep TFs (with SELEX-seq motif)
+# hepg2_rna <- hepg2_rna %>%
+#   setnames("FPKM", "HepG2") %>%
+#   filter(hepg2_rna$hgnc_symbol %in% tfs_selected$TF)
+# K562_rna <- K562_rna %>%
+#   setnames("FPKM", "K562") %>%
+#   filter(K562_rna$hgnc_symbol %in% tfs_selected$TF)
+# mES_rna <- mES_rna %>%
+#   setnames(c("symbol", "twoi_1"), c("hgnc_symbol", "mES")) %>%
+#   filter(mES_rna$hgnc_symbol %in% tfs_selected$TF)
+# MCF7_rna <- MCF7_rna %>%
+#   setnames("FPKM", "MCF-7") %>%
+#   filter(MCF7_rna$hgnc_symbol %in% tfs_selected$TF)
+# A549_rna <- A549_rna %>%
+#   setnames("FPKM", "A549") %>%
+#   filter(A549_rna$hgnc_symbol %in% tfs_selected$TF)
+
+# Load in previously created RNA-seq data
 load('/DATA/usr/m.martinez.ara/GitLab/gurten/gurten/data/fc181121_epsure_tadec_rnaseq_expr_joshi.RData')
 mES_rna <- tib_fpkm_joshi %>% dplyr::select(symbol, twoi_1)
-K562_rna <- read_tsv("/DATA/usr/m.trauernicht/data/RNA_seq/K562/ENCFF201HGA.tsv") %>%
-  dplyr::select(gene_id, FPKM) %>%
-  filter(grepl("ENSG", gene_id)) %>%
-  mutate(gene_id = gsub(".[0-9]+$", "", gene_id))
-MCF7_rna <- read_tsv("/DATA/usr/m.trauernicht/data/RNA_seq/MCF-7/ENCFF009GDJ.tsv") %>%
-  dplyr::select(gene_id, FPKM) %>%
-  filter(grepl("ENSG", gene_id)) %>%
-  mutate(gene_id = gsub(".[0-9]+$", "", gene_id))
-A549_rna <- read_tsv("/DATA/usr/m.trauernicht/data/RNA_seq/A549/ENCFF627QMV.tsv") %>%
-  dplyr::select(gene_id, FPKM) %>%
-  filter(grepl("ENSG", gene_id)) %>%
-  mutate(gene_id = gsub(".[0-9]+$", "", gene_id))
-
-# Annotate RNA-seq data
-ensembl <- useMart("ensembl")
-mart <- useDataset("hsapiens_gene_ensembl", mart = ensembl)
-genes <- hepg2_rna$gene_id
-G_list <- getBM(filters= "ensembl_gene_id", attributes= c("ensembl_gene_id","hgnc_symbol"),values=genes,mart= mart)
-hepg2_rna <- merge(hepg2_rna,G_list,by.x="gene_id",by.y="ensembl_gene_id")
-
-# Extract interesting HepG2 genes
-top_genes <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/top100pubmedGenes.csv")
-hepg2_top_genes <- hepg2_rna[hepg2_rna$FPKM >= 10,]
-hepg2_top_genes <- hepg2_top_genes[hepg2_top_genes$hgnc_symbol %in% top_genes$SYMBOL,]
-
-genes <- K562_rna$gene_id
-G_list <- getBM(filters= "ensembl_gene_id", attributes= c("ensembl_gene_id","hgnc_symbol"),values=genes,mart= mart)
-K562_rna <- merge(K562_rna,G_list,by.x="gene_id",by.y="ensembl_gene_id")
-
-genes <- MCF7_rna$gene_id
-G_list <- getBM(filters= "ensembl_gene_id", attributes= c("ensembl_gene_id","hgnc_symbol"),values=genes,mart= mart)
-MCF7_rna <- merge(MCF7_rna,G_list,by.x="gene_id",by.y="ensembl_gene_id")
-
-genes <- A549_rna$gene_id
-G_list <- getBM(filters= "ensembl_gene_id", attributes= c("ensembl_gene_id","hgnc_symbol"),values=genes,mart= mart)
-A549_rna <- merge(A549_rna,G_list,by.x="gene_id",by.y="ensembl_gene_id")
-
-# Only keep TFs (with SELEX-seq motif)
-hepg2_rna <- hepg2_rna %>%
-  setnames("FPKM", "HepG2") %>%
-  filter(hepg2_rna$hgnc_symbol %in% tfs_selected$TF) 
-K562_rna <- K562_rna %>%
-  setnames("FPKM", "K562") %>%
-  filter(K562_rna$hgnc_symbol %in% tfs_selected$TF)
 mES_rna <- mES_rna %>%
-  setnames(c("symbol", "twoi_1"), c("hgnc_symbol", "mES")) %>% 
+  setnames(c("symbol", "twoi_1"), c("hgnc_symbol", "mES")) %>%
   filter(mES_rna$hgnc_symbol %in% tfs_selected$TF)
-MCF7_rna <- MCF7_rna %>%
-  setnames("FPKM", "MCF-7") %>%
-  filter(MCF7_rna$hgnc_symbol %in% tfs_selected$TF)
-A549_rna <- A549_rna %>%
-  setnames("FPKM", "A549") %>%
-  filter(A549_rna$hgnc_symbol %in% tfs_selected$TF)
+load("/DATA/usr/m.trauernicht/data/RNA_seq/HepG2/hepg2_rna.Rdata")
+load("/DATA/usr/m.trauernicht/data/RNA_seq/K562/K562_rna.Rdata")
+load("/DATA/usr/m.trauernicht/data/RNA_seq/A549/A549_rna.Rdata")
+load("/DATA/usr/m.trauernicht/data/RNA_seq/MCF-7/MCF7_rna.Rdata")
 
 # Combine all data frames and add motif counts
 tf_rna <- Reduce(function(x,y) merge(x,y,all=T), list(hepg2_rna, K562_rna, mES_rna, MCF7_rna, A549_rna))
@@ -534,7 +570,7 @@ tf_rna$expressed[tf_rna$FPKM < 10] <- "Low"
 tf_rna <- na.omit(tf_rna)
 
 # Plot distribution of unique TF expression per cell type
-ggplot(tf_rna[tf_rna$unique == "Yes",], aes(color=cell_type, x = cell_type, y=FPKM, alpha = 0.4)) + 
+ggplot(tf_rna[tf_rna$unique == "Yes",], aes(color=cell_type, x = cell_type, y=FPKM, alpha = 0.4)) +
   geom_quasirandom() + theme_bw() +
   scale_color_brewer(palette = "Set2")+
   labs(title = "Expression of TFs with unique motifs per cell type")+
@@ -544,7 +580,7 @@ ggplot(tf_rna[tf_rna$unique == "Yes",], aes(color=cell_type, x = cell_type, y=FP
 for (i in unique(tf_rna$cell_type)) {
   for (j in unique(tf_rna$unique)) {
     for (k in unique(tf_rna$expressed)) {
-      tf_rna$n_tfs[tf_rna$cell_type == i & tf_rna$unique == j & tf_rna$expressed == k] <- 
+      tf_rna$n_tfs[tf_rna$cell_type == i & tf_rna$unique == j & tf_rna$expressed == k] <-
         nrow(tf_rna[tf_rna$cell_type == i & tf_rna$unique == j & tf_rna$expressed == k,])
     }
   }
@@ -565,18 +601,19 @@ tf_selected <- tf_motifs %>%
   setnames("seq.name","TF") %>%
   dplyr::select(TF) %>%
   mutate(design = "yes")
+
 tf_rna <- merge(tf_rna, tf_selected, all =T)
 tf_rna$design[is.na(tf_rna$design)] <- "no"
 
 ggplot(tf_rna[!is.na(tf_rna$cell_type),], aes(y = FPKM, x = design, color = design, alpha = 0.4)) +
   geom_boxplot()+
   geom_quasirandom() +
-  labs(title = "TF expression per cell type", subtitle = "All TFs vs. selected unique TFs")+
+  labs(title = "TF expression per cell type", subtitle = "All interesting candidate TFs vs. unique candidate TFs")+
   scale_color_brewer(palette = "Set2") +
   theme_bw() +
-  geom_hline(yintercept = 10, linetype = "dashed", color = "red") +
+  #geom_hline(yintercept = 10, linetype = "dashed", color = "red") +
   ylim(0,100) +
-  facet_wrap(~cell_type)
+  facet_wrap(~cell_type, nrow = 1)
 
 
 ggplot(tf_rna[!is.na(tf_rna$cell_type) & tf_rna$design == "yes",], aes(y = FPKM, x = "TF", color = cell_type, alpha = 0.4)) +
@@ -601,7 +638,7 @@ These are motifs of the selected TFs with 2-4 essential nucleotides mutated to a
 ```{r out.width= "80%", fig.align= "center", echo = FALSE, warning = FALSE, message=FALSE}
 tf.df <- tf_motifs %>% setnames(c("TF", "motif"))
 
-# Add mutated controls
+# Add mutated controls - this is done manually by just mutating core bases in the motif based on the energy logos
 tf.df.neg <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/TF_negative_controls.csv") %>%
   dplyr::select(-motif) %>%
   mutate(TF = paste(TF, "neg", sep = "_")) %>%
@@ -646,7 +683,7 @@ neg_ctrl <- neg_ctrl %>% column_to_rownames("id")
 neg_ctrl <- neg_ctrl[, -(which(colSums(neg_ctrl %>% dplyr::select(, -ctrl)) ==0))]
 heatmaply(as.matrix(neg_ctrl %>% dplyr::select(-ctrl)))
 ```
-
+*It looks like the negative control bind relatively few important TFs - they should be able to serve as negative controls*
 
 
 ### Adding dimensions to the DF - sequences will be added in later stages
@@ -656,7 +693,7 @@ heatmaply(as.matrix(neg_ctrl %>% dplyr::select(-ctrl)))
 spacings <- data.frame("spacing" = c("5bp", "10bp"))
 distances <- data.frame("distance" = c("10bp", "21bp"))
 promoters <- data.frame("promoter" = c("minP", "mCMV"))
-barcodes <- data.frame("barcode" = 1:5)
+barcodes <- data.frame("n_barcode" = 1:5)
 background <- data.frame("background" = 1:3)
 tf.df <- tf.df %>% setnames(c("TF", "motif"))
 tf.df <- Reduce(function(x, y) merge(x, y, all=TRUE), list(tf.df, spacings, distances,
@@ -800,6 +837,7 @@ tib_pwm_5bp_spacer_binary_top <- tib_pwm_5bp_spacer_binary_top %>%
 space_id <- unique(tib_pwm_5bp_spacer_binary_top$space)
 sel_id <- unique(motif_5bp$y)
 space_nohit <- sel_id[!sel_id %in% space_id]
+ecori_nhei <- c("GAATTC","GCTAGC")
 remove_5bp <- motif_5bp[grep(paste(ecori_nhei, collapse = "|"), motif_5bp$seq.text),]
 remove_5bp <- unique(remove_5bp$y)
 space_nohit <- space_nohit[!space_nohit %in% remove_5bp]
@@ -931,7 +969,7 @@ tib_pwm_10bp_spacer_binary_select <- tib_pwm_10bp_spacer_binary[tib_pwm_10bp_spa
 
 
 # convert to matrix - leave out id
-tib_pwm_10bp_spacer_binaryMatrix <- as.matrix(select(tib_pwm_10bp_spacer_binary_select,-id))
+tib_pwm_10bp_spacer_binaryMatrix <- as.matrix(dplyr::select(tib_pwm_10bp_spacer_binary_select,-id))
 
 # assign ids as rownames of matrix
 rownames(tib_pwm_10bp_spacer_binaryMatrix) <- tib_pwm_10bp_spacer_binary_select$id
@@ -941,14 +979,17 @@ rownames(tib_pwm_10bp_spacer_binaryMatrix) <- tib_pwm_10bp_spacer_binary_select$
 #remove columns with only 0s and plot heatmap
 heatmaply(tib_pwm_10bp_spacer_binaryMatrix[, colSums(tib_pwm_10bp_spacer_binaryMatrix != 0) > 0])
 ```
+*There's still some TF binding even to the most neutral backgrounds, but I cannot fully prevent this with that many different motifs in the library*
+
 
 ### Make final selection for 10bp spacers
 ```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Based on the heatmap above the following spacer IDs were chosen: 
-spacers_10bp_selected <- tib_pwm_10bp_spacer_binary_top$space[1:9]
+spacers_10bp_selected <- tib_pwm_10bp_spacer_binary_top$space[1:10]
 
 # Select sequences from original file
 spacers_10bp_selected <- unique(motif_10bp$space1[motif_10bp$y %in% spacers_10bp_selected])
+spacers_10bp_selected <- spacers_10bp_selected[-grep(paste(ecori_nhei, collapse = "|"), spacers_10bp_selected)]
 
 # Add to tf.df
 for (i in unique(tf.df$background)) {
@@ -1062,6 +1103,7 @@ spacers_selected_promoter_1 <- space_nohit[1:3]
 
 # Select sequences from original file
 spacers_selected_promoter_1 <- unique(motif_promoter_space[motif_promoter_space$y %in% spacers_selected_promoter_1,4])
+spacers_selected_promoter_1 <- subset(spacers_selected_promoter_1, !(spacers_selected_promoter_1 %in% ecori_nhei))
 
 # Add to tf.df
 for (i in unique(tf.df$background)) {
@@ -1178,7 +1220,7 @@ tib_pwm_promoter_spacer_binary_select <- tib_pwm_promoter_spacer_binary[tib_pwm_
 
 
 # convert to matrix - leave out id
-tib_pwm_promoter_spacer_binaryMatrix <- as.matrix(select(tib_pwm_promoter_spacer_binary_select,-id))
+tib_pwm_promoter_spacer_binaryMatrix <- as.matrix(dplyr::select(tib_pwm_promoter_spacer_binary_select,-id))
 
 # assign ids as rownames of matrix
 rownames(tib_pwm_promoter_spacer_binaryMatrix) <- tib_pwm_promoter_spacer_binary_select$id
@@ -1196,7 +1238,8 @@ heatmaply(tib_pwm_promoter_spacer_binaryMatrix[, colSums(tib_pwm_promoter_spacer
 promoters_selected <- tib_pwm_promoter_spacer_binary_top$space[3:5]
 
 # Select sequences from original file
-promoters_selected <- motif_promoter_space_2$dist1[motif_promoter_space_2$y %in% promoters_selected]
+promoters_selected <- motif_promoter_space_2$dist1[motif_promoter_space_2$y %in% promoters_selected] %>% unique()
+promoters_selected <- subset(promoters_selected, !(promoters_selected %in% ecori_nhei))
 
 # Add to tf.df
 for (i in unique(tf.df$background)) {
@@ -1206,10 +1249,204 @@ for (i in unique(tf.df$background)) {
 
 
 
+### Include positive control (chunk of the hPGK promoter)
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# Import sequence from previous library
+pgk <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/output/mt20200416_pgk.csv")
+colnames(pgk) <- colnames(tf.df)
+tf.df <- rbind(tf.df, pgk)
+```
 
-### Add random motifs (so that this library can also be sampled separately)
+
+### Include all previously published reporters for the selected TFs (from which I found sequences) - I also included some other reporter sequences for non-selected TFs
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+published_reporters <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018//mt20210111_published_reporter_sequences.csv")
+published_reporters_long <- published_reporters[grep("long", published_reporters$TF),]
+published_reporters <- published_reporters[-grep("long", published_reporters$TF),]
+tf.df.pub <- tf.df[tf.df$TF == "AR" & tf.df$spacing == "5bp" & tf.df$background == "3",] %>%
+  mutate(TF = "",
+         spacing = "",
+         background = "",
+         motif = "",
+         motif1 = "",
+         space1 = "",
+         motif2 = "",
+         space2 = "",
+         motif3 = "",
+         space3 = "",
+         motif4 = "")
+tf.df.pub <- merge(tf.df.pub, published_reporters$TF) %>%
+  mutate(TF = y) %>%
+  dplyr::select(-y) 
+tf.df.pub <- merge(tf.df.pub, published_reporters) %>%
+  mutate(motif2 = sequence) %>%
+  dplyr::select(-sequence) 
+
+tf.df.pub_long <- tf.df[tf.df$TF == "AR" & tf.df$spacing == "5bp" & tf.df$background == "3" & tf.df$distance == "10bp",] %>%
+  mutate(TF = "",
+         spacing = "",
+         background = "",
+         motif = "",
+         motif1 = "",
+         space1 = "",
+         motif2 = "",
+         space2 = "",
+         motif3 = "",
+         space3 = "",
+         motif4 = "",
+         distance_seq = "")
+tf.df.pub_long <- merge(tf.df.pub_long, published_reporters_long$TF) %>%
+  mutate(TF = y) %>%
+  dplyr::select(-y) 
+tf.df.pub_long <- merge(tf.df.pub_long, published_reporters_long) %>%
+  mutate(motif2 = sequence) %>%
+  dplyr::select(-sequence) 
+
+# Include background sequence in front of RE sequence to have similar oligo lengths (to prevent PCR biases)
+tf.df.pub$nchar_add <- 208 - nchar(paste(tf.df.pub$primer1_seq, tf.df.pub$motif2, tf.df.pub$distance_seq, 
+                                         tf.df.pub$promoter_sequence, tf.df.pub$S1_primer, tf.df.pub$primer2_seq, sep = ""))
+tf.df.pub$nchar_add[tf.df.pub$nchar_add < 0] <- 0
+tf.df.pub$space_add <- "GCTAACTTACTAGTGACCGCACTGTAGGTAGGTCTTCATGTATAACCCAGCCCAACCATTGGGTTCCGTCCTGTACAAAGGCGGTTCCATAAGCAGCCTGTGCGAAGTGGAGTACCAATA" # inactive spacer from pMT06
+tf.df.pub$space1 <- substr(tf.df.pub$space_add, 1, tf.df.pub$nchar_add)
+tf.df.pub <- tf.df.pub %>%
+  dplyr::select(-nchar_add, -space_add)
+
+tf.df <- rbind(tf.df, tf.df.pub, tf.df.pub_long)
+```
 
 
+
+
+
+
+### Include from each TF from pMT02 the 5 most robust reporters (in case I want to probe this library alone - this can be handy to have more TF reporter data)
+```{r out.width= "100%", fig.align= "center", echo=FALSE}
+pMT02_reporter <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/results/mt20201209_reporter_activity_filt.csv") %>%
+  dplyr::filter(neg_ctrls == "No",
+                hPGK == "No",
+                native_enhancer == "No",
+                rand_promoter == "No",
+                condition == "2i_pos_LIF",
+                promoter != "hBGm") %>%
+  dplyr::select(TF, reporter_id, reporter_activity) %>%
+  unique()
+
+# Select top 2 reporters for each TF
+pMT02_reporter <- pMT02_reporter %>%
+  dplyr::arrange(desc(reporter_activity)) %>%
+  dplyr::group_by(TF) %>%
+  dplyr::slice(1:2)
+
+# Also include negative controls
+pMT02_reporter_neg <- pMT02_reporter %>%
+  mutate(reporter_id = gsub("^([^_]+)", "_neg", reporter_id),
+         reporter_id = paste(TF, reporter_id, sep = ""))
+pMT02_reporter <- rbind(pMT02_reporter, pMT02_reporter_neg)
+
+# Extract sequences
+pMT02_reporter_seq <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/output/mt20210111_tf-array.csv") %>%
+  mutate(reporter_id = paste(TF, Spacing, Distance, Promoter, Background, sep = "_"))
+pMT02_reporter_seq <- pMT02_reporter_seq[pMT02_reporter_seq$reporter_id %in% pMT02_reporter$reporter_id,] %>%
+  dplyr::select(-reporter_id) %>%
+  filter(Barcode <= 5)
+colnames(pMT02_reporter_seq) <- colnames(tf.df)
+
+tf.df <- rbind(tf.df, pMT02_reporter_seq)
+```
+
+
+
+
+
+
+
+## Add barcodes
+```{r out.width= "100%", fig.align= "center", echo=FALSE}
+## Randomizing barcodes
+barcode_list <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/parameter_files/barc_selected.csv") %>%
+  dplyr::select(barcode = x)
+barcode_list <- barcode_list[-grep("GCTAG", barcode_list$barcode),]
+set.seed(123)
+barcode_list <- sample(barcode_list)
+tf.df$barcode <- barcode_list[1:nrow(tf.df)]
+
+# Check if there are any duplicate barcodes
+paste("duplicate barcodes: ", nrow(tf.df[duplicated(tf.df$barcode),]), sep ="")
+
+# Save for later export
+tf.df.long.export <- tf.df
+```
+
+
+
+
+# Check-up & Visualizations
+```{r out.width= "100%", fig.align= "center", echo=FALSE}
+# Length distribution
+# Save intermediate df for later purpose
+tf.array <- tf.df
+tf.df[is.na(tf.df)] <- ""
+tf.df$seq.text <- paste(tf.df$primer1_seq, tf.df$motif1, tf.df$space1, tf.df$motif2,
+                    tf.df$space2, tf.df$motif3, tf.df$space3, tf.df$motif4, 
+                    tf.df$distance_seq, tf.df$promoter_sequence, tf.df$S1_primer,
+                    tf.df$barcode, tf.df$primer2_seq, sep = "")
+print(nrow(tf.df[grep(paste(ecori_nhei, collapse = "|"),tf.df$seq.text),]))
+
+
+tf.df$nchar <- nchar(tf.df$seq.text)
+
+ggplot(tf.df, aes(x = nchar)) +
+   geom_histogram(aes(y=..count..), colour="black", fill="#E69F00", binwidth = 5)+ 
+  xlab("Length Oligo (binwidth = 5)") + ylab("Frequency") +
+    labs(title = "Overview of oligo lengths in pool", 
+         subtitle = paste("Total oligos =", nrow(tf.df), "|",
+                          "max oligo length =", max(nchar(tf.df$seq.text)), "|",
+                          "min oligo length = ", min(nchar(tf.df$seq.text)), "|",
+                          "mean oligo length = ", round(mean(nchar(tf.df$seq.text))))) +
+  theme_classic()
+```
+
+
+
+## Exporting potential data. 
+```{r}
+## Exporting
+tf.df$seq.name <- paste(tf.df$TF, "_s-", tf.df$spacing, "_d-", tf.df$distance, "_bg-", tf.df$background,
+                        "_", tf.df$promoter, "_bc-", tf.df$n_barcode, sep = "")
+tf.df.export <- tf.df %>% dplyr::select(seq.name, seq.text) %>% unique() %>%
+  mutate(seq.name = gsub("s-NA_", "", seq.name),
+         seq.name = gsub("d-NA_", "", seq.name),
+         seq.name = gsub("bg-NA_", "", seq.name),
+         seq.name = gsub("bg-_", "", seq.name),
+         seq.name = gsub("s-_", "", seq.name))
+
+paste("duplicate sequence names: ", nrow(tf.df.export[duplicated(tf.df.export$seq.name),]), sep ="")
+paste("duplicate sequences: ", nrow(tf.df.export[duplicated(tf.df.export$seq.text),]), sep ="")
+
+
+# Compute GC-content of complete sequences
+tf_df_fasta <- tf.df.export
+dat2fasta(tf_df_fasta, outfile = "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/output/gen-2_tf_df_fasta.fasta") 
+tf_df_fasta <- seqinr::read.fasta("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/output/gen-2_tf_df_fasta.fasta")
+gc <- compute_GC(tf_df_fasta)
+
+# Plot gc distribution
+density <- density(gc$GC.content)
+
+plot_ly(x = ~density$x, y = ~density$y, type = 'scatter', mode = 'lines', fill = 'tozeroy') %>% 
+  layout(xaxis = list(title = 'GC content'),
+         yaxis = list(title = 'Density'))
+
+# Write csv file
+filename <- SetFileName("_oligo_pool_gen2", "mt")
+setwd("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/")
+write.csv(tf.df.export, file = paste(filename,".csv", sep = ""), row.names = F)
+
+# Write fasta file
+setwd("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/")
+dat2fasta(tf.df.export, outfile = paste(filename,".fasta", sep = ""))  
+
+```
 
 
 
