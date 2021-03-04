@@ -1077,8 +1077,21 @@ bc_df_cDNA_filt$sd_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$rep
 
 ```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Scale data to 1 for negative controls
-mean_neg_ctrl <- mean(bc_df_cDNA_filt$activity[bc_df_cDNA_filt$neg_ctrls == "Yes"], na.rm = T)
-bc_df_cDNA_filt$activity <- bc_df_cDNA_filt$activity / mean_neg_ctrl
+bc_df_cDNA_filt_neg <- bc_df_cDNA_filt %>%
+  dplyr::select(condition, activity, reporter_id, neg_ctrls, rand_promoter) %>%
+  filter(neg_ctrls == "Yes", rand_promoter == "Yes") %>%
+  unique() %>% 
+  group_by(condition) %>%
+  mutate(activity = mean(activity)) %>%
+  ungroup() %>%
+  dplyr::select(-reporter_id) %>%
+  unique() %>%
+  dplyr::select("background_activity" = activity, condition) 
+
+bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, bc_df_cDNA_filt_neg)
+bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
+  mutate(activity = activity / background_activity)
+
 bc_df_cDNA_filt$mean_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id, 
                                 bc_df_cDNA_filt$condition, FUN =
                                   function(x) mean(x))
@@ -1181,7 +1194,7 @@ sp1 <- ggscatter(bc_df_rep, x = "rep1", y = "rep2",
    conf.int = TRUE, ylab = "rep2", xlab = "rep1") + 
   stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
   geom_abline(linetype = "dashed") +
-  xlim(0,10) + ylim(0,10) +
+  xlim(0,50) + ylim(0,50) +
   scale_color_manual(values = colors)
 
 sp2 <- ggscatter(bc_df_rep, x = "rep1", y = "rep3",
@@ -1192,7 +1205,7 @@ sp2 <- ggscatter(bc_df_rep, x = "rep1", y = "rep3",
    conf.int = TRUE, ylab = "rep3", xlab = "rep1") + 
   stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
   geom_abline(linetype = "dashed")+
-  xlim(0,10) + ylim(0,10) +
+  xlim(0,50) + ylim(0,50) +
   scale_color_manual(values = colors)
 
 sp3 <- ggscatter(bc_df_rep, x = "rep3", y = "rep2",
@@ -1203,7 +1216,7 @@ sp3 <- ggscatter(bc_df_rep, x = "rep3", y = "rep2",
    conf.int = TRUE, ylab = "rep2", xlab = "rep3") + 
   stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
   geom_abline(linetype = "dashed")+
-  xlim(0,10) + ylim(0,10) +
+  xlim(0,50) + ylim(0,50) +
   scale_color_manual(values = colors)
 
 
