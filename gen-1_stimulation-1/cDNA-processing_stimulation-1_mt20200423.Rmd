@@ -185,7 +185,7 @@ get_pwm_feature_matrix <- function(motif_meta_fn, fimo_fn, db = 2) {
 
 ```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 # Import processed bc counts from the preprocessing step
-cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/results/mt20201209_reporter_activity_filt.csv", header = T)
+cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/results/mt20210121_reporter_activity_filt.csv", header = T)
 cDNA_df$background <- as.character(cDNA_df$background)
 cDNA_df$background[is.na(cDNA_df$background)] <- ""
 cDNA_df$TF <- revalue(cDNA_df$TF, c("Tcfcp2l1" = "Tfcp2l1", "Tcfcp2l1_neg" = "Tfcp2l1_neg"))
@@ -212,13 +212,16 @@ ggplot(cDNA_df[cDNA_df$hPGK == "No",], aes(x = log_activity, fill = neg_ctrls, a
   xlim(-10,10) + theme_bw()+
   theme(text = element_text(size = 12))
 
-## reporter activity distribution - highlight Miguels enhancer control
-ggplot(data = cDNA_df %>% dplyr::select(condition, log_reporter_activity, reporter_id, native_enhancer) %>% unique(), 
-       aes(y = log_reporter_activity, x = native_enhancer, color = native_enhancer, alpha = 0.4)) + 
-  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
-  labs(title = "reporter activity distribution - native enhancers") +
+## reporter activity distribution - highlight Miguels enhancer control vs negative controls
+ggplot(data = cDNA_df %>% 
+         filter(native_enhancer == "Yes" | neg_ctrls == "Yes", condition == "2i_pos_LIF") %>%
+         dplyr::select(condition, log_reporter_activity, reporter_id, native_enhancer, promoter) %>% unique(), 
+       aes(y = log_reporter_activity, x = promoter, color = native_enhancer, alpha = 0.4)) + 
+  geom_quasirandom(dodge.width = .75) + xlab("minimal promoter") + 
+  labs(title = "enhancer chunks (green), shuffled") +
   scale_color_manual(values = colors) +
-  theme_bw()+ facet_wrap(vars(condition))
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1)) 
 
 
 ## reporter activity distribution - highlight different promoters
@@ -230,39 +233,54 @@ ggplot(data = cDNA_df %>% dplyr::select(log_reporter_activity, reporter_id, prom
   theme_bw()
 
 ## reporter activity distribution - highlight different promoters - and negative controls (does the activity actually come from the TFs or from the promoter itself?)
-ggplot(cDNA_df[cDNA_df$promoter != "hPGK",] %>% dplyr::select(reporter_id, log_reporter_activity, neg_ctrls, promoter) %>% unique(), aes(y = log_reporter_activity, x = neg_ctrls, color = neg_ctrls, alpha = 0.4)) + 
-  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
+ggplot(cDNA_df %>% 
+         filter(promoter != "hPGK") %>%
+         mutate(TF = gsub("_neg", "", TF)) %>%
+         dplyr::select(reporter_id, log_reporter_activity, neg_ctrls, promoter, TF) %>% 
+         unique(), aes(y = log_reporter_activity, x = neg_ctrls, color = promoter, alpha = 0.4)) + 
+  geom_quasirandom(dodge.width = 0.75) + xlab("mutated motif?") + 
   labs(title = "reporter activity distribution - promoters") +
   scale_color_brewer(palette = "Set2") +
-  theme_bw() + facet_wrap(~promoter)
+  theme_bw() + facet_wrap(~TF)
 
-## reporter activity distribution - highlight different distances
-ggplot(data = cDNA_df[cDNA_df$distance != "",] %>% dplyr::select(log_reporter_activity, reporter_id, distance) %>% unique(), 
+## reporter activity distribution - highlight different distances individually per TF
+ggplot(data = cDNA_df[cDNA_df$distance != "",] %>% 
+         filter(neg_ctrls == "No", hPGK == "No", rand_promoter == "No") %>%
+         dplyr::select(log_reporter_activity, reporter_id, distance, TF) %>% unique(), 
        aes(y = log_reporter_activity, x = distance, color = distance, alpha = 0.4)) + 
-  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
+  geom_quasirandom() + ylab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - distances") +
   scale_color_brewer(palette = "Set2") +
-  theme_bw()
+  theme_bw()+ facet_wrap(~TF)
 
-## reporter activity distribution - highlight different spacings
-ggplot(data = cDNA_df[cDNA_df$spacing != "",] %>% dplyr::select(log_reporter_activity, reporter_id, spacing, TF) %>% unique(), 
-       aes(y = log_reporter_activity, x = spacing, color = spacing, alpha = 0.4)) + 
-  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
+## reporter activity distribution - highlight different spacings individually per TF
+ggplot(data = cDNA_df[cDNA_df$spacing != "",] %>% 
+         filter(neg_ctrls == "No", hPGK == "No", rand_promoter == "No") %>%
+         dplyr::select(log_reporter_activity, reporter_id, spacing, TF, condition) %>% 
+         unique(), 
+       aes(y = log_reporter_activity, x = condition, color = spacing, alpha = 0.4)) + 
+  geom_quasirandom(dodge.width = 0.75) + ylab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - spacings") +
-  scale_color_brewer(palette = "Set2") +
-  theme_bw() + facet_wrap(~TF)
-ggplot(data = cDNA_df[cDNA_df$spacing != "" & cDNA_df$TF == "Trp53",] %>% dplyr::select(log_reporter_activity, reporter_id, spacing, TF, condition) %>% unique(), 
-       aes(y = log_reporter_activity, x = spacing, color = spacing, alpha = 0.4)) + 
-  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
+  theme_bw() + facet_wrap(~TF) +
+  scale_color_manual(values = colors)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1)) 
+
+
+## highlight spacings for p53 in different conditions
+ggplot(data = cDNA_df[cDNA_df$spacing != "" & cDNA_df$TF == "Trp53",] %>% 
+         filter(neg_ctrls == "No", promoter == "mCMV", rand_promoter == "No", str_detect(condition, "2i_pos_LIF|NPC")) %>%
+         dplyr::select(log_activity, reporter_id, spacing, TF, condition) %>% 
+         unique(), 
+       aes(y = log_activity, x = condition, color = spacing, alpha = 0.4)) + 
+  geom_quasirandom(dodge.width = 0.75) + 
+  geom_boxplot(position = position_dodge(0.75)) +
+  ylab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - spacings") +
-  scale_color_brewer(palette = "Set2") +
-  theme_bw()+ facet_wrap(~condition)
-ggplot(data = cDNA_df[cDNA_df$spacing != "",] %>% dplyr::select(log_reporter_activity, reporter_id, spacing, TF, condition) %>% unique(), 
-       aes(y = log_reporter_activity, x = spacing, color = spacing, alpha = 0.4)) + 
-  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
-  labs(title = "reporter activity distribution - spacings") +
-  scale_color_brewer(palette = "Set2") +
-  theme_bw()
+  scale_color_manual(values = colors)+
+  theme_bw() +
+  ylim(-1,5)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1)) 
+
 
 ## reporter activity distribution - highlight different backgrounds
 ggplot(data = cDNA_df[cDNA_df$background != "",] %>% dplyr::select(log_reporter_activity, reporter_id, background, condition) %>% unique(), 
@@ -271,30 +289,34 @@ ggplot(data = cDNA_df[cDNA_df$background != "",] %>% dplyr::select(log_reporter_
   labs(title = "reporter activity distribution - backgrounds") +
   scale_color_brewer(palette = "Set2") +
   theme_bw()
-ggplot(data = cDNA_df[cDNA_df$background != "" & cDNA_df$TF == "Stat3",] %>% dplyr::select(log_reporter_activity, reporter_id, background, condition) %>% unique(), 
-       aes(y = log_reporter_activity, x = background, color = background, alpha = 0.4)) + 
-  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
+
+## reporter activity distribution - highlight different backgrounds - each TF and each condition
+ggplot(data = cDNA_df[cDNA_df$spacing != "",] %>% 
+         filter(neg_ctrls == "No", hPGK == "No", rand_promoter == "No") %>%
+         dplyr::select(log_reporter_activity, reporter_id, background, TF, condition) %>% 
+         unique(), 
+       aes(y = log_reporter_activity, x = condition, color = background, alpha = 0.4)) + 
+  geom_quasirandom(dodge.width = 0.75) + ylab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - backgrounds") +
-  scale_color_brewer(palette = "Set2") +
-  theme_bw() + facet_wrap(~condition)
+  theme_bw() + facet_wrap(~TF) +
+  scale_color_manual(values = colors)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1)) 
 
-## reporter activity distribution - highlight different tfs - and negative controls
-ggplot(cDNA_df[cDNA_df$native_enhancer == "No" & cDNA_df$promoter != "hPGK",]%>% dplyr::select(reporter_id, log_reporter_activity, neg_ctrls, TF) %>% unique() %>% mutate(TF = gsub("_neg", "", TF)), 
-       aes(y = log_reporter_activity, x = neg_ctrls, color = neg_ctrls, alpha = 0.4)) + 
-  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
-  labs(title = "reporter activity distribution - tfs") +
-  scale_color_brewer(palette = "Set2") +
-  theme_bw() + facet_wrap(~TF)
+## reporter activity distribution - highlight different backgrounds - zooming in on Stat3
+ggplot(data = cDNA_df[cDNA_df$background != "" & cDNA_df$TF == "Stat3",] %>% 
+         filter(neg_ctrls == "No", rand_promoter == "No") %>%
+         dplyr::select(log_activity, reporter_id, background, TF, condition) %>% 
+         unique(), 
+       aes(y = log_activity, x = condition, color = background, alpha = 0.4)) + 
+  geom_quasirandom(dodge.width = 0.75) + 
+  geom_boxplot(position = position_dodge(0.75)) +
+  ylab("log2(cDNA/pDNA)") + 
+  labs(title = "reporter activity distribution - backgrounds") +
+  scale_color_manual(values = colors)+
+  theme_bw() +
+  ylim(-1,5)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1)) 
 
-## reporter activity distribution - highlight different tfs - and negative controls
-ggplot(cDNA_df[cDNA_df$native_enhancer == "No" & cDNA_df$promoter != "hPGK" & cDNA_df$neg_ctrls == "No",]%>% dplyr::select(reporter_id, log_reporter_activity, condition, TF) %>% 
-         unique() %>% mutate(TF = gsub("_neg", "", TF)), 
-       aes(y = log_reporter_activity, x = condition, alpha = 0.4)) + 
-  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
-  labs(title = "reporter activity distribution - tfs") +
-  theme_bw() + 
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 9)) +
-  facet_wrap(~TF)
 
 ## correlation bc-counts pDNA vs. cDNA
 sp <- ggscatter(cDNA_df[cDNA_df$native_enhancer == "No" &
