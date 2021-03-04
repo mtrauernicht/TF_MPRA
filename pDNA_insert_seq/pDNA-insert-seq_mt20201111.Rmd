@@ -269,12 +269,53 @@ plot_ly(data = gc, x = ~GC.content, y = ~rpm, color = ~count, colors =  "Oranges
 ```
 
 
-# Filter data
+
+## Match complete sequences using vMatch
 ```{r, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
-# Filter pDNA data - we should have at least 10 rpm - we want to be sure that we're looking at relevant things
-# Calculate reads per million
-#pDNA_seq <- pDNA_seq[pDNA_seq$rpm >= 1,]
+## Adapted from Noud: Use vmatchPattern to match all sequenced sequences to designed sequences
+pDNA_seq_filt <- pDNA_seq[pDNA_seq$rpm > 3,]
+
+count <- 0
+### Iterate for every unique sequence
+for (i in unique(pDNA_seq_filt$sequence)) {
+
+  ### Match each sequence against the designed sequence, allowing for 2 mismatches
+  match <-
+    vmatchPattern(pattern = pDNA_seq_filt$sequence[pDNA_seq_filt$sequence == i], subject = ref_seq$sequence,
+                  max.mismatch = 2, with.indels = FALSE)
+
+  ### Save the matched sequence row
+  match_length <- which(elementNROWS(match) == 1)
+
+  ### Copy the row to the dataframe
+  if (length(match_length) == 1){
+    pDNA_seq_filt$match[pDNA_seq_filt$sequence == i] <- match_length
+    }
+  
+  ### Keep track of the progress
+  count <- count + length(i)
+  percentage <- round(100*(count/length(unique(pDNA_seq_filt$sequence))),3)
+  
+  if (percentage %% 1 == 0) {
+    print(paste(percentage, "% progress", sep = ""))
+  }
+}
+
+pDNA_seq_filt$match_id <- "Yes"
+pDNA_seq_filt$match_id[is.na(pDNA_seq_filt$match)] <- "No"
+
+# Plot the distribution of sequences that match vs. don't match
+ggplot(pDNA_seq_filt, aes(y = rpm, x = match_id, color = match_id)) +
+  geom_quasirandom() +
+  geom_boxplot(alpha = 0.4) +
+  scale_color_brewer(palette = "Dark2") +
+  theme_bw()
 ```
+
+
+
+
+
 
 
 ## Match barcodes

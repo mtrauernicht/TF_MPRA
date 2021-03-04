@@ -224,11 +224,11 @@ pDNA_seq$insert <- gsub("(.*)[A-Z]{12}$", "\\1", pDNA_seq$sequence)
 ```{r, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Match barcodes with original data
 pDNA_seq$rpm <- ave(pDNA_seq$number, FUN = function(x) x/sum(x) *1e6)
-pDNA_seq_bc <- pDNA_seq %>% select(barcode, rpm) %>% unique() %>% mutate(id = "pDNA")
+pDNA_seq_bc <- pDNA_seq %>% dplyr::select(barcode, rpm) %>% unique() %>% mutate(id = "pDNA")
 # Only keep highest barcode values - a bit of cheating here
 pDNA_seq_bc <- pDNA_seq_bc[order(pDNA_seq_bc$barcode, -abs(pDNA_seq_bc$rpm) ), ]
 pDNA_seq_bc <- pDNA_seq_bc[ !duplicated(pDNA_seq_bc$barcode), ] 
-ref_seq_bc <- ref_seq %>% select(name, barcode)
+ref_seq_bc <- ref_seq %>% dplyr::select(name, barcode)
 match_bc <- merge(ref_seq_bc, pDNA_seq_bc, by = "barcode", all = T)
 match_bc <- match_bc[!is.na(match_bc$rpm),]
 ```
@@ -271,8 +271,8 @@ pDNA_seq <- pDNA_seq[pDNA_seq$rpm >= 1,]
 ## Match barcodes
 ```{r, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Match barcodes with original data
-ref_seq_bc <- ref_seq %>% select(name, barcode)
-pDNA_seq_bc <- pDNA_seq %>% select(barcode) %>% unique() %>% mutate(id = "pDNA")
+ref_seq_bc <- ref_seq %>% dplyr::select(name, barcode)
+pDNA_seq_bc <- pDNA_seq %>% dplyr::select(barcode) %>% unique() %>% mutate(id = "pDNA")
 match_bc <- merge(ref_seq_bc, pDNA_seq_bc, by = "barcode", all = T)
 ```
 
@@ -329,7 +329,7 @@ ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
 ## Plot how many reads match to designed barcodes
 ```{r, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Match barcodes with original data
-pDNA_seq_bc <- pDNA_seq %>% select(barcode, number) %>% unique() %>% mutate(id = "pDNA")
+pDNA_seq_bc <- pDNA_seq %>% dplyr::select(barcode, number) %>% unique() %>% mutate(id = "pDNA")
 match_bc <- merge(ref_seq_bc, pDNA_seq_bc, by = "barcode", all = T)
 
 ## Identify the unmapped fraction
@@ -382,8 +382,8 @@ ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
 ## How many raw complete sequences match with the design?
 ```{r, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Match barcodes with original data
-ref_seq_seq <- ref_seq %>% select(name, sequence)
-pDNA_seq_seq <- pDNA_seq %>% select(sequence) %>% unique() %>% mutate(id = "pDNA")
+ref_seq_seq <- ref_seq %>% dplyr::select(name, sequence)
+pDNA_seq_seq <- pDNA_seq %>% dplyr::select(sequence) %>% unique() %>% mutate(id = "pDNA")
 match_seq <- merge(ref_seq_seq, pDNA_seq_seq, by = "sequence", all = T)
 
 ## Identify the unmapped fraction
@@ -437,8 +437,8 @@ ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
 ## Now we want to know the read distribution of matched/unmatched sequences
 ```{r, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 ## Only select barcodes from design in pDNA data
-pDNA_seq_insert <- pDNA_seq[pDNA_seq$barcode %in% ref_seq$barcode,] %>% select(sequence, number)
-ref_seq_insert <- ref_seq %>% select(name, sequence)
+pDNA_seq_insert <- pDNA_seq[pDNA_seq$barcode %in% ref_seq$barcode,] %>% dplyr::select(sequence, number)
+ref_seq_insert <- ref_seq %>% dplyr::select(name, sequence)
 match_insert <- merge(pDNA_seq_insert, ref_seq_insert, by = "sequence", all = T)
 
 ## Identify the unmapped fraction
@@ -504,11 +504,11 @@ ggplot(match_df_reads, aes(x=number, color=match)) +
 pDNA_seq_insert <- pDNA_seq[pDNA_seq$barcode %in% ref_seq$barcode,]
 
 # Add bc-id to the barcodes found in pDNA
-ref_seq_insert <- ref_seq %>% select(barcode, name) %>% setnames("name", "bc-match")
+ref_seq_insert <- ref_seq %>% dplyr::select(barcode, name) %>% setnames("name", "bc-match")
 pDNA_seq_insert <- merge(pDNA_seq_insert, ref_seq_insert)
 
 # Add insert-id to the inserts found in pDNA
-ref_seq_insert <- ref_seq %>% select(insert, name) %>% setnames("name", "insert-match")
+ref_seq_insert <- ref_seq %>% dplyr::select(insert, name) %>% setnames("name", "insert-match")
 ref_seq_insert$`insert-match` <- gsub("(.*)_bc-[0-9]$", "\\1", ref_seq_insert$`insert-match`)
 pDNA_seq_insert <- merge(pDNA_seq_insert, ref_seq_insert)
 
@@ -582,10 +582,10 @@ Clearly wrongly assigned barcodes can be assigned to the correct insert
 Barcodes that are attached to a mixed population of inserts should to be excluded from any analysis where this plasmid library was used
 
 ```{r, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
-mismatch_df <- pDNA_seq_insert[pDNA_seq_insert$match == F,] %>% select(barcode, number) %>% unique()
+mismatch_df <- pDNA_seq_insert[pDNA_seq_insert$match == F & pDNA_seq_insert$rpm >= 6,] %>% dplyr::select(barcode, number) %>% unique()
 mismatch_df <- ddply(mismatch_df,~barcode, summarise, number = sum(number))
 
-match_df <- pDNA_seq_insert[pDNA_seq_insert$match == T,]  %>% select(barcode, number) %>% unique()
+match_df <- pDNA_seq_insert[pDNA_seq_insert$match == T,]  %>% dplyr::select(barcode, number) %>% unique()
 match_df <- ddply(match_df,~barcode, summarise, number = sum(number))
 setnames(match_df, "number", "match")
 setnames(mismatch_df, "number", "mismatch")
@@ -596,8 +596,8 @@ matching_df$mismatch[is.na(matching_df$mismatch)] <- 0.1
 # Calculate match/mismatch ratio
 matching_df$ratio <- matching_df$match / matching_df$mismatch
 matching_df$type <- "good matching"
-matching_df$type[log2(matching_df$ratio) < 5 & log2(matching_df$ratio) >= -5] <- "unclear matching"
-matching_df$type[log2(matching_df$ratio) < -5] <- "incorrect matching"
+matching_df$type[matching_df$ratio < 5 & matching_df$ratio >= 0.2] <- "unclear matching"
+matching_df$type[matching_df$ratio < 0.2] <- "incorrect matching"
 
 # Plot match/mismatch distribution
 ggplot(matching_df, 
@@ -610,19 +610,20 @@ ggplot(matching_df,
   theme_bw() + theme(legend.position = c(.8, .8))
 
 
-ggplot(matching_df, aes(x = "match/mismatch ratio", y = log2(ratio), colour = type), alpha = 0.5) +
-  geom_quasirandom() + theme_bw() + ylim(-10,15) + 
+ggplot(matching_df, aes(x = "match/mismatch ratio", y = ratio, colour = type), alpha = 0.5) +
+  geom_quasirandom() + theme_bw() + ylim(0,40) + 
   scale_color_manual(values = c("#1B998B", "#2D3047", "#FF9B71")) +
   theme(legend.position = c(.8, .8))
 
 # Fraction of barcodes with match/mismatch
-n_match <- nrow(matching_df[matching_df$mismatch == 0.1,])
-n_nomatch <- nrow(matching_df[matching_df$mismatch > 0.1,])
+n_match <- nrow(matching_df[matching_df$type == "incorrect matching",])
+n_nomatch <- nrow(matching_df[matching_df$type == "good matching",])
+n_unclear <- nrow(matching_df[matching_df$type == "unclear matching",])
 
 # Create donut chart
 data <- data.frame(
-  lbls=c("matched:", "unmatched:"),
-  count=c(n_match, n_nomatch)
+  lbls=c("unmatched:", "matched:", "unclear:"),
+  count=c(n_match, n_nomatch, n_unclear)
 )
  
 # Compute percentages
@@ -650,13 +651,24 @@ data$label <- paste0(data$lbls, "\n", round(data$percentage), "%")
 ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=lbls)) +
   geom_rect() +
   geom_text(x=2, aes(y=labelPosition, label=label, color=lbls), size=5) + # x here controls label position (inner / outer)
-  scale_fill_manual(values = c("#1B998B", "#2D3047")) +
-  scale_color_manual(values = c("#1B998B", "#2D3047")) +
-  labs(title = "percentage at least 1 bc wrongly attached to its insert") +
+  scale_fill_manual(values = c("#1B998B", "#2D3047", "#FF9B71")) +
+  scale_color_manual(values = c("#1B998B", "#2D3047", "#FF9B71")) +
+  labs(title = "percentage of barcodes attached to correct insert") +
   coord_polar(theta="y") +
   xlim(c(0, 4)) +
   theme_void() +
   theme(legend.position = "none")
+
+# Plot histogram for match_ratios
+matching_df_2 <- matching_df
+matching_df_2$ratio[matching_df_2$ratio > 10] <- 10
+ggplot(matching_df_2 %>%
+         mutate(), aes(x = ratio)) +
+  geom_histogram(binwidth = 1, fill = "#1B998B") +
+  ylab("barcode count (14,854 barcodes with >= 6 rpm)")+
+  xlab("ratio (correct/incorrect) barcode-reporter association")+
+  theme_bw()
+  
 ```
 
 
@@ -715,7 +727,7 @@ matching_df_correct <- matching_df[matching_df$ratio > 2,]
 pDNA_seq_insert <- pDNA_seq[pDNA_seq$barcode %in% matching_df$barcode,] %>% 
   select(barcode, insert, number) %>%
   setnames("insert", "pDNA")
-ref_seq_insert <- ref_seq %>% select(barcode, insert) %>% setnames("insert", "ref")
+ref_seq_insert <- ref_seq %>% dplyr::select(barcode, insert) %>% setnames("insert", "ref")
 match_insert <- merge(pDNA_seq_insert, ref_seq_insert, by = "barcode")
 match_insert$lv <- levenshtein.distance(match_insert$pDNA, match_insert$ref)
 
@@ -739,7 +751,7 @@ pDNA_seq_insert <- pDNA_seq[pDNA_seq$barcode %in% matching_df$barcode,] %>%
   setnames("insert", "pDNA")
 p53_bc <- ref_seq$barcode[grep("Trp53", ref_seq$name)]
 pDNA_seq_insert <- pDNA_seq_insert[pDNA_seq_insert$barcode %in% p53_bc,]
-ref_seq_insert <- ref_seq %>% select(barcode, insert) %>% setnames("insert", "ref")
+ref_seq_insert <- ref_seq %>% dplyr::select(barcode, insert) %>% setnames("insert", "ref")
 match_insert <- merge(pDNA_seq_insert, ref_seq_insert, by = "barcode")
 match_insert$lv <- levenshtein.distance(match_insert$pDNA, match_insert$ref)
 
@@ -762,7 +774,7 @@ bc_exclude <- matching_df_exclude$barcode %>% unique()
 write.csv(bc_exclude, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/pDNA_insert_seq/bc_exclude.csv")
 
 # Export barcodes that are attached to the wrong insert
-bc_replace <- pDNA_seq_incorrect %>% select(barcode, `bc-match`, `insert-match`) %>% unique()
+bc_replace <- pDNA_seq_incorrect %>% dplyr::select(barcode, `bc-match`, `insert-match`) %>% unique()
 write.csv(bc_replace, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/pDNA_insert_seq/bc_replace.csv")
 ```
 
