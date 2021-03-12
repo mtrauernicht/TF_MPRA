@@ -1,0 +1,38 @@
+Building DAG of jobs...
+Provided cores: 6
+Rules claiming more threads will be scaled down.
+Job counts:
+	count	jobs
+	1	all
+	1	cluster_ecn_barcodes
+	1	extract_barcodes_from_fq
+	3
+
+rule extract_barcodes_from_fq:
+    input: /DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6371_K562/raw/6371_2_SuRE_cDNA_pMT02_BR1_CGATGT_S20_R1_001.fastq.gz
+    output: results/6371_2_SuRE_cDNA_pMT02_BR1_CGATGT_S20_barcodes.tsv
+    log: logs/6371_2_SuRE_cDNA_pMT02_BR1_CGATGT_S20_extract_barcodes_from_fq.log
+    jobid: 2
+    wildcards: ecn=6371_2_SuRE_cDNA_pMT02_BR1_CGATGT_S20
+
+Finished job 2.
+1 of 3 steps (33%) done
+
+rule cluster_ecn_barcodes:
+    input: results/6371_2_SuRE_cDNA_pMT02_BR1_CGATGT_S20_barcodes.tsv
+    output: results/6371_2_SuRE_cDNA_pMT02_BR1_CGATGT_S20_barcode_counts.tsv
+    log: logs/6371_2_SuRE_cDNA_pMT02_BR1_CGATGT_S20_cluster_ecn_barcodes.log
+    jobid: 1
+    wildcards: ecn=6371_2_SuRE_cDNA_pMT02_BR1_CGATGT_S20
+    threads: 6
+
+Finished job 1.
+2 of 3 steps (67%) done
+
+localrule all:
+    input: results/6371_2_SuRE_cDNA_pMT02_BR1_CGATGT_S20_barcode_counts.tsv
+    jobid: 0
+
+Finished job 0.
+3 of 3 steps (100%) done
+Complete log: /DATA/usr/m.trauernicht/projects/SuRE-TF/gen-1_K562/raw-data-analysis/.snakemake/log/2021-03-12T092042.293578.snakemake.log
