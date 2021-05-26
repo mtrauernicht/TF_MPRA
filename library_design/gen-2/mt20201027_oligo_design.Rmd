@@ -1319,7 +1319,7 @@ tf.df <- rbind(tf.df, tf.df.pub, tf.df.pub_long)
 
 
 
-### Include from each TF from pMT02 the 5 most robust reporters (in case I want to probe this library alone - this can be handy to have more TF reporter data)
+### Include from each TF from pMT02 the 2 most robust reporters (in case I want to probe this library alone - this can be handy to have more TF reporter data)
 ```{r out.width= "100%", fig.align= "center", echo=FALSE}
 pMT02_reporter <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/results/mt20201209_reporter_activity_filt.csv") %>%
   dplyr::filter(neg_ctrls == "No",
@@ -1350,6 +1350,9 @@ pMT02_reporter_seq <- pMT02_reporter_seq[pMT02_reporter_seq$reporter_id %in% pMT
   dplyr::select(-reporter_id) %>%
   filter(Barcode <= 5)
 colnames(pMT02_reporter_seq) <- colnames(tf.df)
+pMT02_reporter_seq$TF <- str_to_upper(pMT02_reporter_seq$TF)
+pMT02_reporter_seq$TF <- gsub("NEG", "neg", pMT02_reporter_seq$TF)
+pMT02_reporter_seq$TF <- gsub("^", "pMT02-", pMT02_reporter_seq$TF)
 
 tf.df <- rbind(tf.df, pMT02_reporter_seq)
 ```

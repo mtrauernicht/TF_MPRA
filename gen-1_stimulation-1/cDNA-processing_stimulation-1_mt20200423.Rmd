@@ -780,6 +780,51 @@ for(i in unique(tf_activity_heatmap$TF)){
 ```
 
 
+### Plotting quasirandom plots instead of heatmaps
+```{r}
+# Plot activity per reporter
+tf_activity_df <- tf_activity_heatmap %>%
+  rownames_to_column(var = "reporter") %>%
+  dplyr::select(`2i_pos_LIF`, TF, reporter)
+
+tf_activity_df <- tf_activity_df %>%
+  mutate(mean = ave(`2i_pos_LIF`, TF, FUN = function(x) mean(x)),
+         sd = ave(`2i_pos_LIF`, TF, FUN = function(x) sd(x)))
+
+ggplot(tf_activity_df, aes(x = reorder(TF, -sd), y = `2i_pos_LIF`, color = `2i_pos_LIF`)) +
+  geom_quasirandom() +
+  theme_bw() +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  ylab("reporter activity (log2)") +
+  coord_flip() +
+  scale_color_viridis()
+
+ggplot(tf_activity_df, aes(x = reorder(TF, -mean), y = `2i_pos_LIF`)) +
+  geom_bar(data = tf_activity_df %>% dplyr::select(TF, mean, sd) %>% unique(), 
+           mapping = aes(x = reorder(TF, -sd), y = sd), stat = "identity", alpha = 0.5) +
+  theme_bw() +
+  ylim(0,4) +
+  ylab("SD reporter activity") +
+  coord_flip()
+
+ggplot(tf_activity_df %>% filter(TF == "Stat3"), aes(x = TF, y = `2i_pos_LIF`, color = `2i_pos_LIF`)) +
+  geom_quasirandom(width = 0.1) +
+  theme_bw() +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  ylab("reporter activity (log2)") +
+  coord_flip() +
+  scale_color_viridis()
+
+
+
+# Plot mean activity per TF vs SD within reporters
+ggplot(tf_activity_df, aes(x = mean, y = sd)) +
+  geom_point() +
+  theme_bw()
+```
+
+
+
 
 ### Heatmap per TF - only WT TF activities
 ```{r heatmap_5, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
@@ -1538,7 +1583,7 @@ ggplot(exp_variance,
   theme(text = element_text(size = 12)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12), 
         axis.text.y = element_text(size = 10)) +
-  facet_wrap(~TF)
+  facet_wrap(~TF, ncol = 6)
 
 
 
