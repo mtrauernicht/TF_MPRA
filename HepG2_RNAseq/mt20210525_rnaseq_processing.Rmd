@@ -280,7 +280,8 @@ plt <- plotPCA(rnaseq_dds_norm, intgroup = c("condition"), ntop = 100)
 
 plt + 
   theme_bw() +
-  theme(aspect.ratio = 1)
+  theme(aspect.ratio = 1) +
+  scale_shape_manual()
 
 ```
 
@@ -400,14 +401,14 @@ ggmaplot(diff_results, main = expression("DMSO" %->% "LXR"),
    font.label = c("bold", 11),
    font.legend = "bold",
    font.main = "bold",
-   ggtheme = ggplot2::theme_bw())
+   ggtheme = ggpubr::theme_pubr())
 
 
 # Extract hits from all stimulations
 df_changed_LXR <- data.frame("gene" = rownames(diff_results),
                          "basal_exp" = diff_results$baseMean,
                          "lfc" = diff_results$log2FoldChange, 
-                         "p_value" = diff_results$padj,
+                         "p_value" = diff_results$pvalue,
                          "NR" = "LXR")
 
 
@@ -427,7 +428,7 @@ ggmaplot(diff_results_PPARa, main = expression("DMSO" %->% "PPARa"),
 df_changed_PPARa <- data.frame("gene" = rownames(diff_results_PPARa),
                          "basal_exp" = diff_results_PPARa$baseMean,
                          "lfc" = diff_results_PPARa$log2FoldChange, 
-                         "p_value" = diff_results_PPARa$padj,
+                         "p_value" = diff_results_PPARa$pvalue,
                          "NR" = "PPARa")
 
 diff_results_SXR <- results(rnaseq_dds,
@@ -446,7 +447,7 @@ ggmaplot(diff_results_SXR, main = expression("DMSO" %->% "SXR"),
 df_changed_SXR <- data.frame("gene" = rownames(diff_results_SXR),
                          "basal_exp" = diff_results_SXR$baseMean,
                          "lfc" = diff_results_SXR$log2FoldChange, 
-                         "p_value" = diff_results_SXR$padj,
+                         "p_value" = diff_results_SXR$pvalue,
                          "NR" = "SXR")
 
 diff_results_FXR <- results(rnaseq_dds,
@@ -465,7 +466,7 @@ ggmaplot(diff_results_FXR, main = expression("DMSO" %->% "FXR"),
 df_changed_FXR <- data.frame("gene" = rownames(diff_results_FXR),
                          "basal_exp" = diff_results_FXR$baseMean,
                          "lfc" = diff_results_FXR$log2FoldChange, 
-                         "p_value" = diff_results_FXR$padj,
+                         "p_value" = diff_results_FXR$pvalue,
                          "NR" = "FXR")
 
 df_changed <- rbind(df_changed_LXR, df_changed_PPARa, df_changed_SXR, df_changed_FXR)
