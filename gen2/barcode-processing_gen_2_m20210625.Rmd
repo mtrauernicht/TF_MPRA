@@ -153,19 +153,11 @@ corColor <- function(data, mapping, color = I("black"), sizeRange = c(1, 3), ...
 ```{r data import, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
 # Import barcode counts per experiment
 ## Do this for the 13 and 12 bp barcodes separately
-bc_files = list.files('/DATA/usr/m.trauernicht/projects/SuRE_deep_scan_trp53_gr/data/gcf6502/results_13/',
+bc_files = list.files('/DATA/usr/m.trauernicht/projects/SuRE_deep_scan_trp53_gr/data/gcf6502/results_b12_d2/',
                        full.names=T, patter='*_barcode_counts.tsv')
 bc_files <- bc_files[-grep("pMT06", bc_files)]
 bc_list_lib_1 <- lapply(bc_files, fread, header = FALSE)
 names(bc_list_lib_1)<- gsub('.*//6502_[0-9]{2}_(.*?)_[CGAT]{6}-[CGAT]{8}.*_barcode_counts.tsv', 
-                                    '\\1', 
-                                    bc_files)
-
-bc_files = list.files('/DATA/usr/m.trauernicht/projects/SuRE_deep_scan_trp53_gr/data/gcf6502/results/',
-                       full.names=T, patter='*_barcode_counts.tsv')
-bc_files <- bc_files[-grep("pMT06", bc_files)]
-bc_list_lib_2 <- lapply(bc_files, fread, header = FALSE)
-names(bc_list_lib_2)<- gsub('.*//6502_[0-9]{2}_(.*?)_[CGAT]{6}-[CGAT]{8}.*_barcode_counts.tsv', 
                                     '\\1', 
                                     bc_files)
 
@@ -192,7 +184,7 @@ bc_annotation_lib_2 <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/l
          library = "2") %>%
   dplyr::select(-seq.name, -seq.text)
 
-#bc_annotation_all <- rbind(bc_annotation_lib_1, bc_annotation_lib_2)
+bc_annotation_all <- rbind(bc_annotation_lib_1, bc_annotation_lib_2)
 ```
 
 
@@ -214,37 +206,15 @@ for (i in 1:length(bc_list_lib_1)) {
   }
 }
 
-bc_df <- merge(bc_df, bc_annotation_lib_1, all = T)
+bc_df$nchar <- nchar(bc_df$barcode)
+bc_df <- bc_df %>%
+  filter(nchar <= 13)
 
-## I need to filter out any barcodes that could come from library 1
-bc_df_3 <- bc_df[bc_annotation_2$barcode %in% bc_df$barcode,]
-
-
-
-for (i in 1:length(bc_list_lib_2)) {
-  if (i == 1) {
-  bc_df_2 <- data.frame(bc_list_lib_2[i])
-  bc_df_2[3] <- names(bc_list_lib_2[i])
-  names(bc_df_2) <- c("barcode", "starcode_counts", "sample")
-  }
-  else {
-  bc_df_2_i <- data.frame(bc_list_lib_2[i])
-  bc_df_2_i[3] <- names(bc_list_lib_2[i])
-  names(bc_df_2_i) <- c("barcode", "starcode_counts", "sample")
-  bc_df_2 <- rbind(bc_df_2, bc_df_2_i)
-  }
-}
-
-bc_df_2 <- merge(bc_df_2, bc_annotation_lib_2, all = T)
+bc_df <- merge(bc_df, bc_annotation_all, all = T)
 
 
-## I need to filter out any barcodes that could come from library 2
-
-
-
-
-
-
+bc_df_filt <- bc_df[!is.na(bc_df$tf),]
+bc_df_unmatched <- bc_df[is.na(bc_df$tf),]
 
 
 bc_df$starcode_counts[is.na(bc_df$starcode_counts)] <- 0
@@ -290,6 +260,20 @@ bc_df <- bc_df %>%
 
 # I want to show the following:
 ## 1: Read distribution of matched barcodes vs. unmatched barcode
+plot_ly(bc_df[!is.na(bc_df$condition),] %>%
+         mutate(sum_counts = ave(starcode_counts, sample, FUN = function(x) sum(x) / 36000)) %>%
+         dplyr::select(sample, sum_counts) %>%
+         unique(), 
+        x = ~sum_counts, y = ~sample, type = 'bar',
+             marker = list(color = '#D6D5C9',
+                           line = list(color = 'rgb(8,48,107)', width = 1.5))) %>% 
+  layout(title = "Number of reads per barcode per sample",
+         xaxis = list(title = "Expected number of reads per barcode per sample"),
+         yaxis = list(title = "Sample"))
+
+
+
+
 ggplot(bc_df[!is.na(bc_df$condition),] %>%
          filter(library == "2", neg_ctrls == "No", native_enhancer == "No"), aes(x = tf, y = rpm)) +
   geom_bin2d(bins = 100) +
