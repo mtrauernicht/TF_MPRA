@@ -123,7 +123,7 @@ bc_list_2 <- lapply(bc_files, fread, header = FALSE)
 names(bc_list_2)<- gsub('.*//6301_[0-9]{1,2}_(.*?)_[CGAT]{6}.*_barcode_counts.tsv', 
                                     '\\1', 
                                     bc_files)
-bc_list[25] <- bc_list_2[10]
+bc_list[25] <- bc_list_2[11]
 ```
 
 
@@ -174,6 +174,7 @@ bc_df$starcode_counts[is.na(bc_df$starcode_counts)] <- 0
 # Rename conditions
 bc_df$condition <- gsub("_pMT02", "", bc_df$condition)
 ```
+
 
 
 
