@@ -71,6 +71,12 @@ library(parallel)
 library(RColorBrewer)
 library(gridExtra)
 library(LncFinder)
+library(tidyr)
+library(grr)
+library(viridis)
+library(DESeq2)
+library(PCAtools)
+library(pheatmap)
 ```
 
 
@@ -153,13 +159,22 @@ corColor <- function(data, mapping, color = I("black"), sizeRange = c(1, 3), ...
 ```{r data import, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
 # Import barcode counts per experiment
 ## Do this for the 13 and 12 bp barcodes separately
-bc_files = list.files('/DATA/usr/m.trauernicht/projects/SuRE_deep_scan_trp53_gr/data/gcf6502/results_b12_d2/',
+bc_files = list.files('/DATA/usr/m.trauernicht/projects/SuRE_deep_scan_trp53_gr/data/gcf6502/results_b12_d1/',
                        full.names=T, patter='*_barcode_counts.tsv')
 bc_files <- bc_files[-grep("pMT06", bc_files)]
 bc_list_lib_1 <- lapply(bc_files, fread, header = FALSE)
 names(bc_list_lib_1)<- gsub('.*//6502_[0-9]{2}_(.*?)_[CGAT]{6}-[CGAT]{8}.*_barcode_counts.tsv', 
                                     '\\1', 
                                     bc_files)
+
+# Import pDNA data from gcf6301
+bc_files = list.files('/DATA/usr/m.trauernicht/projects/SuRE_deep_scan_trp53_gr/data/gcf6301/results_pMT02_d1',
+                       full.names=T, pattern='*_barcode_counts.tsv')
+bc_list_2 <- lapply(bc_files, fread, header = FALSE)
+names(bc_list_2)<- gsub('.*//6301_[0-9]{1,2}_(.*?)_[CGAT]{6}.*_barcode_counts.tsv', 
+                                    '\\1', 
+                                    bc_files)
+bc_list_lib_1[21] <- bc_list_2[11]
 
 # Import barcode annotation
 bc_annotation_lib_1 <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/output/mt20191218_oligo_pool.csv", header = T) %>%
@@ -170,7 +185,8 @@ bc_annotation_lib_1 <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/l
          barcode_number = gsub("^.*_bc-(.*)", "\\1", seq.name),
          promoter = gsub("^.*_(.*)_s-.*", "\\1", seq.name),
          background = gsub("^.*_bg-(.*)_.*", "\\1", seq.name),
-         library = "1") %>%
+         library = "1",
+         commercial_reporter = "No") %>%
   dplyr::select(-seq.name, -seq.text)
 
 bc_annotation_lib_2 <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/mt20210326_oligo_pool_gen2.csv", header = T) %>%
@@ -184,7 +200,19 @@ bc_annotation_lib_2 <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/l
          library = "2") %>%
   dplyr::select(-seq.name, -seq.text)
 
+# Annotate positive controls
+bc_annotation_lib_2$commercial_reporter <- "No"
+bc_annotation_lib_2$commercial_reporter[grep("TF-seq|romanov|promega", bc_annotation_lib_2$promoter)] <- "Yes"
+
+bc_annotation_lib_2$tf[bc_annotation_lib_2$commercial_reporter == "Yes"] <- gsub("(^.*_TF-seq|romanov|promega|promega_long)_.*", "\\1",
+                                                                                 bc_annotation_lib_2$tf[bc_annotation_lib_2$commercial_reporter == "Yes"])
+bc_annotation_lib_2$spacing[bc_annotation_lib_2$commercial_reporter == "Yes"] <- ""
+bc_annotation_lib_2$background[bc_annotation_lib_2$commercial_reporter == "Yes"] <- ""
+bc_annotation_lib_2$promoter[bc_annotation_lib_2$commercial_reporter == "Yes"] <- gsub(".*bp_(.*)_bc.*", "\\1", bc_annotation_lib_2$promoter[bc_annotation_lib_2$commercial_reporter == "Yes"])
+
 bc_annotation_all <- rbind(bc_annotation_lib_1, bc_annotation_lib_2)
+
+bc_annotation_all$tf<- gsub("ETS2", "ETS1", bc_annotation_all$tf)
 ```
 
 
@@ -205,6 +233,8 @@ for (i in 1:length(bc_list_lib_1)) {
   bc_df <- rbind(bc_df, bc_df_i)
   }
 }
+bc_df$sample[bc_df$sample == ""] <- "pMT02_pDNA"
+
 
 bc_df$nchar <- nchar(bc_df$barcode)
 bc_df <- bc_df %>%
@@ -213,12 +243,147 @@ bc_df <- bc_df %>%
 bc_df <- merge(bc_df, bc_annotation_all, all = T)
 
 
+bc_df$starcode_counts[is.na(bc_df$starcode_counts)] <- 0
+
+# First compute reads per million to estimate the relative counts in their respective sample
+bc_df <- bc_df %>%
+  mutate(rpm = ave(starcode_counts, sample, FUN = function(x) (x+1) / sum(x) *1e6 ))
+
 bc_df_filt <- bc_df[!is.na(bc_df$tf),]
 bc_df_unmatched <- bc_df[is.na(bc_df$tf),]
-
-
-bc_df$starcode_counts[is.na(bc_df$starcode_counts)] <- 0
 ```
+
+
+### Compare differently clustered pDNA data
+
+```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+# Make dataframe to compare raw counts between conditions
+bc_df_filt <- bc_df_filt[!is.na(bc_df_filt$sample),]
+bc_df_cor <- bc_df_filt %>%
+  dplyr::select(-starcode_counts) %>%
+  filter(tf != "Trp53")
+
+bc_df_cor <- bc_df_cor %>%
+  mutate(rpm = as.integer(rpm)) %>%
+  spread(sample, rpm) 
+
+bc_df_cor[is.na(bc_df_cor)] <- 0
+
+
+## First compare differently processed pDNA sequencing data
+# Compare library 1
+plot(bc_df_cor$pMT09_pMT02_combined[bc_df_cor$library == "1"], bc_df_cor$pMT02_pDNA[bc_df_cor$library == "1"])
+
+# Compare library 2
+plot(bc_df_cor$pMT09_pMT02_combined[bc_df_cor$library == "2"], bc_df_cor$pMT09[bc_df_cor$library == "2"])
+
+
+# Compare different samples
+
+## K562 rep 2 vs rep 3
+plot(bc_df_cor$R3_K562_DMSO[bc_df_cor$library == "1"], bc_df_cor$R2_K562_DMSO[bc_df_cor$library == "1"])
+
+## K562 rep 1 vs rep 2
+plot(bc_df_cor$R1_K562_DMSO[bc_df_cor$library == "1"], bc_df_cor$R2_K562_DMSO[bc_df_cor$library == "1"])
+
+## K562 rep 3 vs HepG2 rep 1
+plot(bc_df_cor$R1_HepG2_DMSO[bc_df_cor$library == "1"], bc_df_cor$R3_K562_DMSO[bc_df_cor$library == "1"])
+
+## HepG2 CDCA R1 vs HepG2 CDCA R2
+plot(bc_df_cor$R1_HepG2_CDCA[bc_df_cor$library == "2"], bc_df_cor$R2_HepG2_CDCA[bc_df_cor$library == "2"])
+
+## HepG2 T090 R1 vs HepG2 T09 R2
+plot(bc_df_cor$R1_HepG2_T090[bc_df_cor$library == "2"], bc_df_cor$R2_HepG2_T090[bc_df_cor$library == "2"])
+
+
+# Correlation matrix plot
+n <- sample(1:nrow(bc_df_cor), 5000)
+boundaries <- seq(from = 0.8, by = 0.05, length.out = 4)
+plt <- ggpairs(bc_df_cor %>% dplyr::select(matches("HepG2|K562")),
+               upper = list(continuous = corColor),
+               lower = list(continuous = function(data, mapping, ...) {
+                   ggally_points(data = data[n, ], mapping = mapping, alpha = 0.1, size = 0.5) +
+                   geom_abline(slope = 1, lty = "dashed", col = "red") +
+                   theme_bw()}),
+               diag = list(continuous = function(data, mapping, ...) {
+                   ggally_densityDiag(data = data, mapping = mapping, alpha = 0.3, fill = "red") +
+                   theme_bw()})) +
+  ggtitle("Correlation Between All Samples") +
+  # theme(text = element_text(size = 20)) +
+  xlab("Counts") +
+  ylab("Counts")
+
+print(plt)
+
+
+
+
+
+# Convert into data.frame with row.names for deseq2
+bc_df_cor2 <- bc_df_cor %>%
+  filter(library == "2") %>%
+  dplyr::select(matches("barcode|HepG2|K562")) %>%
+  column_to_rownames("barcode") %>%
+  dplyr::select(-barcode_number)
+
+
+#######################################
+## Initialize deseq2
+
+# Prepare metadata ready for deseq
+metadata <- data.frame("sample_name" = names(bc_df_cor2)) %>%
+  separate(sample_name, c("replicate", "cell", "condition"), sep = "_", remove = F) %>%
+  mutate(condition = factor(condition, levels = unique(condition)),
+         replicate = factor(replicate, levels = unique(replicate)))
+
+# Initialize
+rnaseq_dds <- DESeqDataSetFromMatrix(countData = bc_df_cor2,
+                                     colData = metadata,
+                                     design= ~ condition)
+
+# Execute deseq2
+rnaseq_dds <- DESeq(rnaseq_dds)
+
+
+#######################################
+## PCA analysis - quality control
+
+# Get the "normalized" values and create PCA plot
+# Note that "normalized" is simply log2 + 0.01 transformed normalized counts!
+rnaseq_dds_norm <- normTransform(rnaseq_dds, pc = 0.01)
+plt <- plotPCA(rnaseq_dds_norm, intgroup = c("cell", "condition"), ntop = 50)
+
+plt + 
+  theme_bw() +
+  theme(aspect.ratio = 1) +
+  scale_shape_manual()
+
+## PCA plot alternative
+rnaseq_dds_norm <- assay(vst(rnaseq_dds))
+p <- pca(bc_df_cor2, metadata = metadata %>% 
+           column_to_rownames("sample_name") %>%
+           mutate(cell = paste(cell, condition, sep = "_")), removeVar = 0.1)
+biplot(p, 
+       colby = "cell", 
+       shape = "replicate", 
+       legendPosition = "right",
+       legendLabSize = 8,
+       legendTitleSize = 8,
+       legendIconSize = 3, 
+       lab = "")
+
+
+## Correlation heatmap
+bc_df_cor2$mean <- rowMeans(bc_df_cor2)
+bc_df_cor2 <- bc_df_cor2 %>%
+  filter(mean > 200) %>%
+  dplyr::select(-mean)
+
+cor_df <- cor(bc_df_cor2, method = "pearson")
+
+pheatmap(cor_df, border_color = "black")
+```
+
 
 
 ### Annotate data frame
@@ -245,7 +410,9 @@ bc_df$rand_promoter[grep("Random", bc_df$promoter)] <- "Yes"
 bc_df$replicate <- gsub("(^R[1-3]).*", "\\1", bc_df$sample)
 bc_df$condition <- gsub("^R[1-3]_(.*)", "\\1", bc_df$sample)
 
-#bc_df <- bc_df[!is.na(bc_df$sample),]
+
+
+bc_df <- bc_df[!is.na(bc_df$sample),]
 ```
 
 
@@ -254,12 +421,10 @@ bc_df$condition <- gsub("^R[1-3]_(.*)", "\\1", bc_df$sample)
 ## Data quality plots
 
 ```{r read count 2, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message= FALSE}
-# First compute reads per million to estimate the relative counts in their respective sample
-bc_df <- bc_df %>%
-  mutate(rpm = ave(starcode_counts, sample, FUN = function(x) (x+1) / sum(x) *1e6 ))
-
 # I want to show the following:
 ## 1: Read distribution of matched barcodes vs. unmatched barcode
+
+### a: total read counts per sample
 plot_ly(bc_df[!is.na(bc_df$condition),] %>%
          mutate(sum_counts = ave(starcode_counts, sample, FUN = function(x) sum(x) / 36000)) %>%
          dplyr::select(sample, sum_counts) %>%
@@ -272,53 +437,59 @@ plot_ly(bc_df[!is.na(bc_df$condition),] %>%
          yaxis = list(title = "Sample"))
 
 
+### b: read counts per TF
+bc_df_filt <- bc_df[!is.na(bc_df$tf),]
+ggplot(bc_df_filt %>%
+         filter(library == "2", neg_ctrls == "No", native_enhancer == "No", commercial_reporter == "No", hPGK == "No", rand_promoter == "No"), aes(x = rpm, y = tf)) +
+  geom_violin() +
+  theme_pubr(border = T) +   
+  theme(axis.text.y = element_text(size = 6)) +
+  xlim(0,5000) +
+  facet_wrap(~condition)
 
+ggplot(bc_df_filt %>%
+         filter(library == "2", neg_ctrls == "No", native_enhancer == "No", commercial_reporter == "No", hPGK == "No", rand_promoter == "No"), aes(x = rpm, y = tf)) +
+  geom_violin() +
+  theme_pubr(border = T) +   
+  theme(axis.text.y = element_text(size = 6)) +
+  xlim(0,1000) +
+  facet_wrap(~condition)
 
-ggplot(bc_df[!is.na(bc_df$condition),] %>%
-         filter(library == "2", neg_ctrls == "No", native_enhancer == "No"), aes(x = tf, y = rpm)) +
-  geom_bin2d(bins = 100) +
-  theme_pubr(border = T) +
-  ylim(0,5000) +
-  theme(axis.text.y = element_text(size = 5)) +
-  facet_wrap(~condition) +
-  coord_flip()
-
-ggplot(bc_df %>%
-         filter(library == "1", neg_ctrls == "No", native_enhancer == "No"), aes(x = tf, y = rpm)) +
-  geom_bin2d(bins = 100) +
-  theme_pubr(border = T) +
-  ylim(0,5000) +
-  theme(axis.text.y = element_text(size = 5)) +
-  facet_wrap(~condition) +
-  coord_flip()
+ggplot(bc_df_filt %>%
+         filter(library == "1", neg_ctrls == "No", native_enhancer == "No", commercial_reporter == "No", hPGK == "No", rand_promoter == "No"), aes(x = rpm, y = tf)) +
+  geom_violin() +
+  theme_pubr(border = T) +   
+  theme(axis.text.y = element_text(size = 6)) +
+  xlim(0,5000) +
+  facet_wrap(~condition)
 
 bc_df_2 <- bc_df[bc_df$rpm <= 250,]
 bc_df_2 <- bc_df_2[bc_df_2$rpm >= 0.5,]
-bc_df_2 <- bc_df_2[!is.na(bc_df_2$TF),]
+bc_df_2 <- bc_df_2[!is.na(bc_df_2$tf),]
 
 ggplot(bc_df_2, aes(x = rpm)) +
   geom_histogram(binwidth = 20) +
   theme_bw() +
   xlim(0,250)+
   ylim(0,6000)+
-  facet_wrap(~condition)+
+  facet_wrap(~sample)+
   theme(strip.background =element_rect(fill="#D6D5C9"))
 
-ggplot(bc_df[bc_df$rpm >= 500 & !is.na(bc_df$TF),], aes(x = rpm)) +
+ggplot(bc_df[bc_df$rpm >= 500 & !is.na(bc_df$tf),], aes(x = rpm)) +
   geom_histogram(binwidth = 20) +
   theme_bw() +
   xlim(250,1000)+
   ylim(0,50)+
-  facet_wrap(~condition)+
+  facet_wrap(~sample)+
   theme(strip.background =element_rect(fill="#D6D5C9"))
 
-n_highly_expressed <- data.frame("condition" = unique(bc_df$condition),
+n_highly_expressed <- data.frame("sample" = unique(bc_df$sample),
                                  "n_bc" = "", stringsAsFactors = F)
-for (i in unique(bc_df$condition)) {
-  n_highly_expressed$n_bc[n_highly_expressed$condition == i] <- length(bc_df$barcode[bc_df$rpm > 500 & bc_df$condition == i])
+for (i in unique(bc_df$sample)) {
+  n_highly_expressed$n_bc[n_highly_expressed$sample == i] <- length(bc_df$barcode[bc_df$rpm > 500 & bc_df$sample == i])
 }
 
-plot_ly(n_highly_expressed, x = ~condition, y = ~as.numeric(n_bc), type = 'bar',
+plot_ly(n_highly_expressed, x = ~sample, y = ~as.numeric(n_bc), type = 'bar',
              marker = list(color = '#D6D5C9',
                            line = list(color = 'rgb(8,48,107)', width = 1.5))) %>% 
   layout(title = "Highly expressed barcodes",
@@ -328,31 +499,42 @@ plot_ly(n_highly_expressed, x = ~condition, y = ~as.numeric(n_bc), type = 'bar',
 
 ## 2: How many barcodes can I find back at which cutoff? + What is the percentage of barcode reads that match the design at which cutoff?
 ## Identify the unmapped fraction
-bc_fraction <- data.frame("condition" = unique(bc_df$condition),
-                          "bcs_found" = "", stringsAsFactors = F)
+bc_fraction <- expand.grid(unique(bc_df$sample[bc_df$sample != "pMT09_pMT02_combined"]), unique(bc_df$library))
+bc_fraction <- na.omit(bc_fraction)
+names(bc_fraction) <- c("sample", "lib")
+bc_fraction$bcs_found <- ""
 rpm_cutoff <- data.frame("cutoff" = seq(0.0001,15,0.5))
 bc_fraction <- merge(bc_fraction, rpm_cutoff)
 
 for (i in unique(bc_fraction$cutoff)) {
-  for (j in unique(bc_df$condition)) {
-    bc_n <- bc_df[bc_df$rpm >= i & bc_df$condition == j,]
-    bc_fraction$bcs_found[bc_fraction$cutoff == i & bc_fraction$condition == j] <- nrow(bc_n[!is.na(bc_n$TF),])/
-      nrow(bc_annotation) *100
+  for (j in unique(bc_df$sample)) {
+    for (k in unique(bc_fraction$lib)) {
+    bc_fraction$bcs_found[bc_fraction$cutoff == i & bc_fraction$sample == j & bc_fraction$lib == k] <- 
+      nrow(bc_df_filt[bc_df_filt$rpm >= i & bc_df_filt$sample == j & bc_df_filt$library == k,])/
+      nrow(bc_annotation_all[bc_annotation_all$library == k,]) *100
+    }
   }
 }
 
 
 
 ## How many reads match to designed barcodes?
-bc_reads <- data.frame("condition" = unique(bc_df$condition),
-                          "bc_reads" = "", stringsAsFactors = F)
+bc_reads <- expand.grid(unique(bc_df$sample[bc_df$sample != "pMT09_pMT02_combined"]), unique(bc_df$library))
+bc_reads <- na.omit(bc_reads)
+names(bc_reads) <- c("sample", "lib")
+bc_reads$bc_reads <- ""
 bc_reads <- merge(bc_reads, rpm_cutoff)
 
+bc_df$match <- "Yes"
+bc_df$match[is.na(bc_df$library)] <- "No"
+
 for (i in unique(bc_reads$cutoff)) {
-  for (j in unique(bc_df$condition)) {
-    bc_n <- bc_df[bc_df$rpm >= i & bc_df$condition == j,]
-    bc_reads$bc_reads[bc_reads$cutoff == i & bc_reads$condition == j] <- sum(bc_n$rpm[!is.na(bc_n$TF)])/
-      sum(bc_n$rpm) *100
+  for (j in unique(bc_df$sample)) {
+    for (k in unique(bc_reads$lib)) {
+      bc_reads$bc_reads[bc_reads$cutoff == i & bc_reads$sample == j & bc_reads$lib == k] <- 
+        sum(na.omit(bc_df_filt$rpm[bc_df_filt$rpm >= i & bc_df_filt$sample == j & bc_df_filt$library == k]))/
+      sum(bc_df$rpm[bc_df$rpm >= i & bc_df$sample == j & (bc_df$library == k | bc_df$match == "No")]) *100
+    }
   }
 }
 
@@ -362,112 +544,160 @@ bc_fraction$bc_reads <- as.numeric(bc_fraction$bc_reads)
 
 #c("#1B998B", "#2D3047", "#FF9B71", "#ECDD7B")
 # Plot to evaluate data quality per cutoff
-ggplot(bc_fraction) +
+for (i in unique(bc_fraction$lib)) {
+p <- ggplot(bc_fraction[bc_fraction$lib == i,]) +
   geom_point(aes(x = cutoff, y = bcs_found), color = '#1B998B', size = 1) +
   geom_line(aes(x = cutoff, y = bcs_found), color = '#1B998B', size = 1) +
   geom_point(aes(x = cutoff, y = bc_reads), color = 'black', size = 1) +
   geom_line(aes(x = cutoff, y = bc_reads), color = 'black', size = 1) +
   theme_bw()+
   xlab("rpm cutoff")+
-  ylab("total barcodes (black) and matched barcode reads (green) detected (%)")+
-  facet_wrap(~condition)+
-  theme(strip.background =element_rect(fill="#D6D5C9"))
+  ylab("total barcodes (green) and matched barcode reads (black) detected (%)")+
+  facet_wrap(~sample)+
+  theme(strip.background =element_rect(fill="#D6D5C9"))+
+  ggtitle(paste("library", i, sep = ": "))
+print(p)
+}
 
 ## 3: What is the correlation of the 24 cDNA bc counts with the pDNA bc counts? 
-pDNA <- data.frame("pDNA" = bc_df$rpm[bc_df$condition == "pDNA_1"],
-                   "barcode"= bc_df$barcode[bc_df$condition == "pDNA_1"], stringsAsFactors = F)
+pDNA <- data.frame("pDNA" = bc_df$rpm[bc_df$sample == "R1_pDNA_TF_v2_08_04"],
+                   "barcode"= bc_df$barcode[bc_df$sample == "R1_pDNA_TF_v2_08_04"], stringsAsFactors = F)
 bc_df_2 <- merge(pDNA, bc_df, all = T)
 
 ggplot(bc_df_2, aes(x = pDNA, y = rpm)) +
-  geom_bin2d(bins = 100)+
-  xlim(0,400) +
-  ylim(0,400)+
+  geom_bin2d(bins = 50)+
+  xlim(0,500) +
+  ylim(0,2000)+
   theme_bw()+
-  facet_wrap(~condition)
+  scale_color_viridis() +
+  facet_wrap(~sample)
 
-cor <- data.frame("condition" = unique(bc_df_2$condition), "cor" = "", stringsAsFactors = F)
+cor <- data.frame("sample" = unique(bc_df_2$sample), "cor" = "", stringsAsFactors = F)
 
-for (i in unique(bc_df_2$condition)) {
-  x <- bc_df_2$rpm[bc_df_2$condition == i]
-  y <- bc_df_2 %>% dplyr::select(barcode, pDNA) %>% unique()
-  cor$cor[cor$condition == i] <- cor(x, y$pDNA)
+for (i in unique(bc_df_2$sample)) {
+  x <- bc_df_2$rpm[bc_df_2$sample == i]
+  y <- bc_df_2[bc_df_2$sample == i,] %>% dplyr::select(barcode, pDNA) %>% unique()
+  cor$cor[cor$sample == i] <- stats::cor(x, y$pDNA, use = "pairwise.complete.obs")
 }
 
-bc_df <- merge(bc_df, cor, by = "condition", all = T)
+bc_df <- merge(bc_df, cor, by = "sample", all = T)
 
 ## 4: Correlation plots of the replicates
 ## Combine replicates of normalized data in 3 different columns
-bc_df$rep <- gsub(".*([1-3]{1}$)","\\1",bc_df$condition)
-bc_df_rep <- bc_df[!is.na(bc_df$TF),] %>% dplyr::select(rep, rpm, barcode, condition) %>% unique()
-bc_df_rep$condition <- gsub("(.*?)_r[1-3]$", "\\1", bc_df_rep$condition)
-rep1 <- bc_df_rep[bc_df_rep$rep == 1,]
-rep2 <- bc_df_rep[bc_df_rep$rep == 2,]
-rep3 <- bc_df_rep[bc_df_rep$rep == 3,]
-rep1 <- rep1 %>% dplyr::select(-rep)
-rep2 <- rep2 %>% dplyr::select(-rep)
-rep3 <- rep3 %>% dplyr::select(-rep)
-
-names(rep1) <- c("rep1", "reporter", "condition")
-names(rep2) <- c("rep2", "reporter", "condition")
-names(rep3) <- c("rep3", "reporter", "condition")
-
-bc_df_rep <- merge(rep1, rep2, all = TRUE)
-bc_df_rep <- merge(bc_df_rep, rep3, all = TRUE)
-bc_df_rep$neg_ctrl <- "No"
-bc_df_rep$neg_ctrl[grep("random", bc_df_rep$reporter)] <- "Yes"
+bc_df_rep <- bc_df[!is.na(bc_df$tf),] %>% 
+  dplyr::select(replicate, rpm, barcode, condition, library, neg_ctrls) %>% 
+  unique() %>%
+  spread(replicate, rpm)
 
 colors <- c("#2D3047", "#1B998B")
 
-ggscatter(bc_df_rep, x = "rep1", y = "rep2",
+for (i in unique(bc_df_rep$library)) {
+p <- ggscatter(bc_df_rep[bc_df_rep$library == i,], x = "R1", y = "R2",
    add = "reg.line",
-   color = "neg_ctrl",
-   size = 0.5,
-   alpha = 0.2,
-   add.params = list(color = "blue", fill = "lightgray"), title = "rep1 vs rep2",
+   color = "neg_ctrls",
+   size = 1,
+   add.params = list(color = "blue", fill = "lightgray"), title = paste("rep1 vs rep2 - library: ", i, sep = ""),
    conf.int = TRUE, ylab = "rep2", xlab = "rep1") + 
   stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
   geom_abline(linetype = "dashed") +
-  xlim(0,10000) + ylim(0,10000) +
-  scale_color_manual(values = colors)+facet_wrap(~condition)
+  xlim(0,4000) + ylim(0,4000) +
+  scale_color_manual(values = colors)+
+  facet_wrap(~condition)
+print(p)
+}
 
-ggscatter(bc_df_rep, x = "rep1", y = "rep3",
+for (i in unique(bc_df_rep$library)) {
+p <- ggscatter(bc_df_rep[bc_df_rep$library == i,], x = "R1", y = "R3",
    add = "reg.line",
-   color = "neg_ctrl",
-   size = 0.5,
-   alpha = 0.2,
-   add.params = list(color = "blue", fill = "lightgray"), title = "rep1 vs rep3",
+   color = "neg_ctrls",
+   size = 1,
+   add.params = list(color = "blue", fill = "lightgray"), title = paste("rep1 vs rep3 - library: ", i, sep = ""),
    conf.int = TRUE, ylab = "rep3", xlab = "rep1") + 
   stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
-  geom_abline(linetype = "dashed")+
-  xlim(0,10000) + ylim(0,10000) +
-  scale_color_manual(values = colors)+facet_wrap(~condition)
+  geom_abline(linetype = "dashed") +
+  xlim(0,4000) + ylim(0,4000) +
+  scale_color_manual(values = colors)+
+  facet_wrap(~condition)
+print(p)
+}
 
-ggscatter(bc_df_rep, x = "rep3", y = "rep2",
+for (i in unique(bc_df_rep$library)) {
+p <- ggscatter(bc_df_rep[bc_df_rep$library == i,], x = "R2", y = "R3",
    add = "reg.line",
-   color = "neg_ctrl",
-   size = 0.5,
-   alpha = 0.2,
-   add.params = list(color = "blue", fill = "lightgray"), title = "rep3 vs rep2",
-   conf.int = TRUE, ylab = "rep2", xlab = "rep3") + 
+   color = "neg_ctrls",
+   size = 1,
+   add.params = list(color = "blue", fill = "lightgray"), title = paste("rep2 vs rep3 - library: ", i, sep = ""),
+   conf.int = TRUE, ylab = "rep3", xlab = "rep2") + 
   stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
-  geom_abline(linetype = "dashed")+
-  xlim(0,10000) + ylim(0,10000) +
-  scale_color_manual(values = colors)+facet_wrap(~condition)
+  geom_abline(linetype = "dashed") +
+  xlim(0,4000) + ylim(0,4000) +
+  scale_color_manual(values = colors)+
+  facet_wrap(~condition)
+print(p)
+}
+
+## Replicate 3 of the K562 have some highly expressed barcodes from library 1 that very lowly expressed in the other two replicates
+
+## I can check now which replicate correlates the best with the other K562 replicate that Noud generated for me previously - based on this I should find out what's going on
+k562_dmso_r0 <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6371_K562/results/mt20210312_reporter_activity_filt.csv") %>%
+  dplyr::select(barcode, 'K562_previous' = rpm)
+
+bc_df_rep_k562 <- bc_df_rep %>%
+  filter(library == "1", condition == "K562_DMSO") %>%
+  dplyr::select(barcode, R1, R2, R3)
+
+bc_df_rep_k562 <- merge(bc_df_rep_k562, k562_dmso_r0, all = T)
+
+ggscatter(bc_df_rep_k562, x = "R1", y = "K562_previous",
+   add = "reg.line",
+   size = 1,
+   add.params = list(color = "blue", fill = "lightgray"), title = "rep1 vs previous data",
+   conf.int = TRUE, ylab = "previous data", xlab = "rep1") + 
+  stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
+  geom_abline(linetype = "dashed") +
+  xlim(0,4000) + ylim(0,4000) +
+  scale_color_manual(values = colors)
+
+ggscatter(bc_df_rep_k562, x = "R2", y = "K562_previous",
+   add = "reg.line",
+   size = 1,
+   add.params = list(color = "blue", fill = "lightgray"), title = "rep2 vs previous data",
+   conf.int = TRUE, ylab = "previous data", xlab = "rep2") + 
+  stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
+  geom_abline(linetype = "dashed") +
+  xlim(0,4000) + ylim(0,4000) +
+  scale_color_manual(values = colors)
+
+ggscatter(bc_df_rep_k562, x = "R3", y = "K562_previous",
+   add = "reg.line",
+   size = 1,
+   add.params = list(color = "blue", fill = "lightgray"), title = "rep3 vs previous data",
+   conf.int = TRUE, ylab = "previous data", xlab = "rep3") + 
+  stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
+  geom_abline(linetype = "dashed") +
+  xlim(0,4000) + ylim(0,4000) +
+  scale_color_manual(values = colors)
+
+## The data from rep 1 and 2 correlate quite well with previous data, replicate 3 again has this subfraction of barcodes that is expressed only in this replicate
+
+### Identify what this subfraction is - which TFs? Why are those highly expressed? Technical or biological explanation?
+bc_df_rep_k562$rep3_dif <- bc_df_rep_k562$R3 - bc_df_rep_k562$R2
+rep3_k562_bcs <- na.omit(bc_df_rep_k562$barcode[bc_df_rep_k562$rep3_dif > 500])
+bc_k562_outlier_df <- bc_df[bc_df$barcode %in% rep3_k562_bcs,] %>%
+  dplyr::select(barcode, tf, promoter) %>%
+  unique()
+print(bc_k562_outlier_df)
 
 
 # Plot pDNA distribution vs. cutoff
-pDNA_fraction <- bc_df[grep("pDNA", bc_df$condition),]
-pDNA_fraction <- pDNA_fraction[!is.na(pDNA_fraction$TF),]
-pDNA_fraction <- pDNA_fraction %>% dplyr::select(barcode, condition, rpm)
-pDNA_fraction <- dcast(pDNA_fraction, barcode ~ condition)
-pDNA_fraction <- pDNA_fraction %>% 
-  mutate(pDNA = (pDNA_1 + pDNA_2) / 2) %>%
-  dplyr::select(-pDNA_1, -pDNA_2)
+pDNA_fraction <- bc_df_filt[grep("combined", bc_df_filt$sample),] %>%
+  filter(library == "1")
+pDNA_fraction <- pDNA_fraction %>% dplyr::select(barcode, sample, rpm)
 pDNA_fr <- data.frame("cutoff" = seq(0,100, 1),
                       "bcs_missing" = "", stringsAsFactors=FALSE)
 for (i in pDNA_fr$cutoff) {
   pDNA_fr$bcs_missing[pDNA_fr$cutoff == i] <- length(pDNA_fraction$barcode) -
-    length(pDNA_fraction$barcode[pDNA_fraction$pDNA >= i])
+    length(pDNA_fraction$barcode[pDNA_fraction$rpm >= i])
 }
 
 ggplot(pDNA_fr) +
@@ -485,16 +715,18 @@ ggplot(pDNA_fr) +
 
 ```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
 # Remove samples with low dynamic range
-for (i in unique(bc_df$condition)) {
-  bc_df$n_bc[bc_df$condition == i] <- length(bc_df$barcode[bc_df$rpm > 500 & bc_df$condition == i])
+for (i in unique(bc_df$sample)) {
+  bc_df$n_bc[bc_df$sample == i] <- length(bc_df$barcode[bc_df$rpm > 500 & bc_df$sample == i])
 }
-bc_df <- bc_df[bc_df$n_bc >= 150 | bc_df$condition == "pDNA_1" | bc_df$condition == "pDNA_2" ,] %>% dplyr::select(-n_bc)
+bc_df <- bc_df[bc_df$n_bc >= 150 | bc_df$sample == "pMT02_pDNA" | bc_df$sample == "pMT09_pMT02_combined" | 
+                 bc_df$sample == "R1_pDNA_TF_v2_08_04" | bc_df$sample == "R2_pDNA_TF_v2_08_04" ,] %>% dplyr::select(-n_bc)
 
 # Remove samples with high pDNA contamination
-bc_df <- bc_df[bc_df$cor <= 0.85 | bc_df$condition == "pDNA_1" | bc_df$condition == "pDNA_2",] %>% dplyr::select(-cor)
+bc_df <- bc_df[bc_df$cor <= 0.85 | bc_df$sample == "pMT02_pDNA" | bc_df$sample == "pMT09_pMT02_combined" | 
+                 bc_df$sample == "R1_pDNA_TF_v2_08_04" | bc_df$sample == "R2_pDNA_TF_v2_08_04",] %>% dplyr::select(-cor)
 
 # Remove all non-matching reads
-bc_df <- bc_df[!is.na(bc_df$TF),]
+bc_df <- bc_df[!is.na(bc_df$tf),]
 ```
 
 ---
@@ -504,18 +736,31 @@ bc_df <- bc_df[!is.na(bc_df$TF),]
 Divide cDNA barcode counts through pDNA barcode counts to get activity
 
 ```{r normalization, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
-# Add pDNA data as separate column
-pDNA <- bc_df[grep("pDNA", bc_df$condition),] %>% dplyr::select(barcode, condition, rpm) %>% unique() %>%
-  dcast(barcode ~ condition) %>%
-  mutate(pDNA_counts_rpm = (pDNA_1 + pDNA_2) / 2) %>%
+# Add pDNA data as separate column - for both library 1 and library 2
+pDNA_lib2 <- bc_df[bc_df$sample == "R1_pDNA_TF_v2_08_04" | bc_df$sample == "R2_pDNA_TF_v2_08_04",] %>%
+  filter(library == "2") %>%
+  dplyr::select(barcode, sample, rpm) %>% 
+  unique() %>%
+  dcast(barcode ~ sample) %>%
+  mutate(pDNA_counts_rpm = (R1_pDNA_TF_v2_08_04 + R2_pDNA_TF_v2_08_04) / 2) %>%
   dplyr::select(barcode, pDNA_counts_rpm)
-bc_df <- merge(pDNA, bc_df)
+
+pDNA_lib1 <- bc_df[bc_df$sample == "pMT02_pDNA",] %>%
+  filter(library == "1") %>% 
+  dplyr::select(barcode, 'pDNA_counts_rpm' = rpm) %>%
+  unique()
+
+pDNA_lib <- rbind(pDNA_lib1, pDNA_lib2)
+
+
+bc_df <- merge(bc_df, pDNA_lib, by = "barcode")
 
 # Compute activity by dividing cDNA bc counts through pDNA bc counts
 bc_df$activity <- bc_df$rpm / bc_df$pDNA_counts_rpm
 
-# Remove all activities that were computed with low pDNA bc counts, this keeps the noise level in the data low
-bc_df$activity[bc_df$pDNA_counts_rpm <= 1] <- NA
+# Mark all activities that were computed with low pDNA bc counts, this keeps the noise level in the data low
+bc_df$noisy <- "No"
+bc_df$noisy[bc_df$pDNA_counts_rpm <= 3] <- "Yes"
 ```
 
 
@@ -526,15 +771,16 @@ bc_df$activity[bc_df$pDNA_counts_rpm <= 1] <- NA
 ```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
 # First identify and remove outlier barcodes - this removes the noise created by faulty barcode clustering etc. 
 ## Calculate mean and SD for each reporter
-bc_df_cDNA <- bc_df[-grep("pDNA", bc_df$condition),]
-bc_df_cDNA$reporter_id <- paste(bc_df_cDNA$TF, bc_df_cDNA$spacing, 
+bc_df_cDNA <- bc_df[-grep("pDNA", bc_df$sample),]
+bc_df_cDNA <- bc_df_cDNA[-grep("pMT", bc_df_cDNA$sample),]
+bc_df_cDNA$reporter_id <- paste(bc_df_cDNA$tf, bc_df_cDNA$spacing, 
                                 bc_df_cDNA$distance, bc_df_cDNA$promoter,
                                 bc_df_cDNA$background, sep = "_")
 bc_df_cDNA$mean_activity <- ave(bc_df_cDNA$activity, bc_df_cDNA$reporter_id, 
-                                bc_df_cDNA$condition, FUN =
+                                bc_df_cDNA$sample, FUN =
                                   function(x) mean(x))
 bc_df_cDNA$sd_activity <- ave(bc_df_cDNA$activity, bc_df_cDNA$reporter_id, 
-                              bc_df_cDNA$condition,  FUN =
+                              bc_df_cDNA$sample,  FUN =
                                   function(x) sd(x))
 
 ## Remove data points that are 2xSD away from the mean
@@ -546,25 +792,23 @@ bc_df_cDNA$high_outlier <- bc_df_cDNA$upper_activity - bc_df_cDNA$activity
 
 ## Plot effect of highest outlier bc -> SNP in minP promoter
 outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "Zfp42_5bp_21bp_minP_3",] %>% 
-  dplyr::select(`bc.number`, activity) %>%
+  dplyr::select(barcode_number, activity) %>%
   unique()
 
-ggplot(outlier, aes(x = `bc.number`, y = activity)) +
+ggplot(outlier, aes(x = barcode_number, y = activity)) +
   geom_quasirandom() + theme_bw() +
-  scale_x_continuous(breaks = seq(1, 8, by = 1)) +
   xlab("barcode #") + 
   labs(title = "Zfp42 reporter - TATA-box minP mutated", 
-       subtitle = "bc8 AGAGGGTATATAAT -> AGAGGGGATATAAT" )
+       subtitle = "bc8 AGAGGGTATATAAT -> AGAGGGGATATAAT")
 
 
 ## Plot effect of highest outlier bc -> Elk1 outlier
 outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "Elk1_5bp_21bp_mCMV_2",] %>% 
-  dplyr::select(`bc.number`, activity) %>%
+  dplyr::select(barcode_number, activity) %>%
   unique()
 
-ggplot(outlier, aes(x = `bc.number`, y = activity)) +
+ggplot(outlier, aes(x = barcode_number, y = activity)) +
   geom_quasirandom() + theme_bw() +
-  scale_x_continuous(breaks = seq(1, 8, by = 1)) +
   xlab("barcode #") + 
   labs(title = "Elk1 reporter - bc1 attached to Pax6 reporter")
 
@@ -572,12 +816,11 @@ ggplot(outlier, aes(x = `bc.number`, y = activity)) +
 
 ## Plot effect of highest outlier bc -> Elk1 outlier
 outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "Tcf7l2_5bp_10bp_hBGm_3",] %>% 
-  dplyr::select(`bc.number`, activity) %>%
+  dplyr::select(barcode_number, activity) %>%
   unique()
 
-ggplot(outlier, aes(x = `bc.number`, y = activity)) +
+ggplot(outlier, aes(x = barcode_number, y = activity)) +
   geom_quasirandom() + theme_bw() +
-  scale_x_continuous(breaks = seq(1, 8, by = 1)) +
   xlab("barcode #") + 
   labs(title = "Tcfl1 reporter - bc1 attached to multiple (less active) reporters")
 
@@ -588,11 +831,14 @@ bc_df_cDNA_filt <- bc_df_cDNA[bc_df_cDNA$low_outlier > -0.3 & bc_df_cDNA$high_ou
 
 ## Recalculate mean and sd
 bc_df_cDNA_filt$mean_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id, 
-                                bc_df_cDNA_filt$condition, FUN =
+                                bc_df_cDNA_filt$sample, FUN =
                                   function(x) mean(x))
 bc_df_cDNA_filt$sd_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id, 
-                              bc_df_cDNA_filt$condition,  FUN =
+                              bc_df_cDNA_filt$sample,  FUN =
                                   function(x) sd(x))
+
+
+## Mark reporters with a high SD (SD > 200)
 ```
 
 
@@ -644,30 +890,39 @@ bc_df_cDNA_filt$sd_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$rep
 ### Scaling data 
 
 ```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE}
-# Scale data to 1 for negative controls
+# # Scale data to 1 for negative controls
 bc_df_cDNA_filt_neg <- bc_df_cDNA_filt %>%
-  dplyr::select(condition, activity, reporter_id, neg_ctrls, rand_promoter) %>%
+  dplyr::select(sample, activity, reporter_id, neg_ctrls, rand_promoter, library) %>%
   filter(neg_ctrls == "Yes", rand_promoter == "Yes") %>%
-  unique() %>% 
-  group_by(condition) %>%
+  unique() %>%
+  group_by(library) %>%
   mutate(activity = mean(activity)) %>%
   ungroup() %>%
   dplyr::select(-reporter_id) %>%
   unique() %>%
-  dplyr::select("background_activity" = activity, condition) 
+  dplyr::select("background_activity" = activity, library) %>%
+  unique()
 
 bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, bc_df_cDNA_filt_neg)
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
   mutate(activity = activity / background_activity)
 
-bc_df_cDNA_filt$mean_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id, 
-                                bc_df_cDNA_filt$condition, FUN =
+bc_df_cDNA_filt$mean_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id,
+                                bc_df_cDNA_filt$sample, FUN =
                                   function(x) mean(x))
-bc_df_cDNA_filt <- bc_df_cDNA_filt[!is.na(bc_df_cDNA_filt$condition),]
+#bc_df_cDNA_filt <- bc_df_cDNA_filt[!is.na(bc_df_cDNA_filt$condition),]
 ```
 
 
 ---
+
+
+## Re-labeling rep 3 K562 sample
+```{r}
+bc_df_cDNA_filt$sample[bc_df_cDNA_filt$sample == "R3_K562_DMSO"] <- "K562_stressed"
+bc_df_cDNA_filt$condition[bc_df_cDNA_filt$sample == "K562_stressed"] <- "K562_stressed"
+```
+
 
 ## Calculate correlations between technical replicates
 
@@ -675,44 +930,51 @@ bc_df_cDNA_filt <- bc_df_cDNA_filt[!is.na(bc_df_cDNA_filt$condition),]
 ## Combine replicates in 8 different columns
 bc_df_rep <- bc_df_cDNA_filt[bc_df_cDNA_filt$hPGK == "No" & bc_df_cDNA_filt$native_enhancer == "No" &
                           bc_df_cDNA_filt$rand_promoter == "No",] %>% 
-  dplyr::select(`bc.number`, activity, condition, reporter_id)
-rep1 <- bc_df_rep[bc_df_rep$`bc.number` == 1,] %>% dplyr::select(-`bc.number`)
-rep2 <- bc_df_rep[bc_df_rep$`bc.number` == 2,] %>% dplyr::select(-`bc.number`)
-rep3 <- bc_df_rep[bc_df_rep$`bc.number` == 3,] %>% dplyr::select(-`bc.number`)
-rep4 <- bc_df_rep[bc_df_rep$`bc.number` == 4,] %>% dplyr::select(-`bc.number`)
-rep5 <- bc_df_rep[bc_df_rep$`bc.number` == 5,] %>% dplyr::select(-`bc.number`)
-rep6 <- bc_df_rep[bc_df_rep$`bc.number` == 6,] %>% dplyr::select(-`bc.number`)
-rep7 <- bc_df_rep[bc_df_rep$`bc.number` == 7,] %>% dplyr::select(-`bc.number`)
-rep8 <- bc_df_rep[bc_df_rep$`bc.number` == 8,] %>% dplyr::select(-`bc.number`)
+  filter(noisy == "No", commercial_reporter == "No") %>%
+  dplyr::select(barcode_number, activity, sample, reporter_id, library, neg_ctrls) %>%
+  spread(barcode_number, activity)
+names(bc_df_rep) <- gsub("([1-9]{1})", "TR\\1", names(bc_df_rep))
 
 
-setnames(rep1, "activity", "bc1")
-setnames(rep2, "activity", "bc2")
-setnames(rep3, "activity", "bc3")
-setnames(rep4, "activity", "bc4")
-setnames(rep5, "activity", "bc5")
-setnames(rep6, "activity", "bc6")
-setnames(rep7, "activity", "bc7")
-setnames(rep8, "activity", "bc8")
+for (i in unique(bc_df_rep$library)) {
+  p <- ggscatter(bc_df_rep[bc_df_rep$library == i,], x = "TR1", y = "TR2",
+                 add = "reg.line",
+                 color = "neg_ctrls",
+                 size = 0.5,
+                 add.params = list(color = "blue", fill = "lightgray"), 
+                 title = paste("rep1 vs rep2 - library:", i),
+                 conf.int = TRUE, ylab = "rep2", xlab = "rep1") + 
+    stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
+    geom_abline(linetype = "dashed") +
+    xlim(0,50) + ylim(0,50) +
+    scale_color_manual(values = colors) +
+    facet_wrap(~sample)
+  print(p)
+}
+
+for (i in unique(bc_df_rep$library)) {
+  p <- ggscatter(bc_df_rep[bc_df_rep$library == i,], x = "TR2", y = "TR4",
+                 add = "reg.line",
+                 color = "neg_ctrls",
+                 size = 0.5,
+                 add.params = list(color = "blue", fill = "lightgray"), 
+                 title = paste("rep1 vs rep2 - library:", i),
+                 conf.int = TRUE, ylab = "rep2", xlab = "rep1") + 
+    stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
+    geom_abline(linetype = "dashed") +
+    xlim(0,50) + ylim(0,50) +
+    scale_color_manual(values = colors) +
+    facet_wrap(~sample)
+  print(p)
+}
 
 
-bc_df_rep <- merge(rep1, rep2, all = T)
-bc_df_rep <- bc_df_rep[rowSums(is.na(bc_df_rep)) != ncol(bc_df_rep), ]
-bc_df_rep <- merge(bc_df_rep, rep3, all = T)
-bc_df_rep <- merge(bc_df_rep, rep4, all = T)
-bc_df_rep <- bc_df_rep[rowSums(is.na(bc_df_rep)) != ncol(bc_df_rep), ]
-bc_df_rep <- merge(bc_df_rep, rep5, all = T)
-bc_df_rep <- merge(bc_df_rep, rep6, all = T)
-bc_df_rep <- bc_df_rep[rowSums(is.na(bc_df_rep)) != ncol(bc_df_rep), ]
-bc_df_rep <- merge(bc_df_rep, rep7, all = T)
-bc_df_rep <- merge(bc_df_rep, rep8, all = T)
-bc_df_rep <- bc_df_rep[rowSums(is.na(bc_df_rep)) != ncol(bc_df_rep), ]
 
 
 # Correlation matrix plot
 n <- sample(1:nrow(bc_df_rep), 5000)
 boundaries <- seq(from = 0.8, by = 0.05, length.out = 4)
-plt <- ggpairs(bc_df_rep %>% dplyr::select(bc1, bc2, bc3, bc4, bc5, bc6, bc7, bc8),
+plt <- ggpairs(bc_df_rep %>% filter(library == "1") %>% dplyr::select('TR1', 'TR2', 'TR3', 'TR4', 'TR5', 'TR6', 'TR7', 'TR8'),
                upper = list(continuous = corColor),
                lower = list(continuous = function(data, mapping, ...) {
                    ggally_points(data = data[n, ], mapping = mapping, alpha = 0.1, size = 0.5) +
@@ -724,8 +986,7 @@ plt <- ggpairs(bc_df_rep %>% dplyr::select(bc1, bc2, bc3, bc4, bc5, bc6, bc7, bc
   ggtitle("Correlation Between Technial Replicates") +
   theme(text = element_text(size = 20)) +
   xlab("Reporter activity") +
-  ylab("Reporter activity") + 
-  theme_light()
+  ylab("Reporter activity")
 
 print(plt)
 ```
@@ -738,69 +999,66 @@ print(plt)
 ```{r correlations_3, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Correlation plots of the replicates
 ## Combine replicates of normalized data in 3 different columns
-bc_df_rep <- bc_df_cDNA_filt %>% dplyr::select(rep, mean_activity, reporter_id, condition) %>% unique()
-bc_df_rep$condition <- gsub("(.*?)_r[1-3]$", "\\1", bc_df_rep$condition)
-rep1 <- bc_df_rep[bc_df_rep$rep == 1,]
-rep2 <- bc_df_rep[bc_df_rep$rep == 2,]
-rep3 <- bc_df_rep[bc_df_rep$rep == 3,]
-rep1 <- rep1 %>% dplyr::select(-rep)
-rep2 <- rep2 %>% dplyr::select(-rep)
-rep3 <- rep3 %>% dplyr::select(-rep)
-
-names(rep1) <- c("rep1", "reporter", "condition")
-names(rep2) <- c("rep2", "reporter", "condition")
-names(rep3) <- c("rep3", "reporter", "condition")
-
-bc_df_rep <- merge(rep1, rep2, all = TRUE)
-bc_df_rep <- merge(bc_df_rep, rep3, all = TRUE)
-bc_df_rep$neg_ctrl <- "No"
-bc_df_rep$neg_ctrl[grep("neg", bc_df_rep$reporter)] <- "Yes"
+bc_df_rep <- bc_df_cDNA_filt %>% 
+  filter(noisy == "No") %>%
+  dplyr::select(replicate, mean_activity, reporter_id, condition, neg_ctrls, library) %>% 
+  unique() %>%
+  spread(replicate, mean_activity)
 
 colors <- c("#2D3047", "#1B998B")
 
-sp1 <- ggscatter(bc_df_rep, x = "rep1", y = "rep2",
-   add = "reg.line",
-   color = "neg_ctrl",
-   size = 0.5,
-   add.params = list(color = "blue", fill = "lightgray"), title = "rep1 vs rep2",
-   conf.int = TRUE, ylab = "rep2", xlab = "rep1") + 
-  stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
-  geom_abline(linetype = "dashed") +
-  xlim(0,50) + ylim(0,50) +
-  scale_color_manual(values = colors)
+for (i in unique(bc_df_rep$library)) {
+  p <- ggscatter(bc_df_rep[bc_df_rep$library == i,], x = "R1", y = "R2",
+                 add = "reg.line",
+                 color = "neg_ctrls",
+                 size = 0.5,
+                 add.params = list(color = "blue", fill = "lightgray"), 
+                 title = paste("rep1 vs rep2 - library:", i),
+                 conf.int = TRUE, ylab = "rep2", xlab = "rep1") + 
+    stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
+    geom_abline(linetype = "dashed") +
+    xlim(0,50) + ylim(0,50) +
+    scale_color_manual(values = colors) +
+    facet_wrap(~condition)
+  print(p)
+}
 
-sp2 <- ggscatter(bc_df_rep, x = "rep1", y = "rep3",
-   add = "reg.line",
-   color = "neg_ctrl",
-   size = 0.5,
-   add.params = list(color = "blue", fill = "lightgray"), title = "rep1 vs rep3",
-   conf.int = TRUE, ylab = "rep3", xlab = "rep1") + 
-  stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
-  geom_abline(linetype = "dashed")+
-  xlim(0,50) + ylim(0,50) +
-  scale_color_manual(values = colors)
+for (i in unique(bc_df_rep$library)) {
+  p <- ggscatter(bc_df_rep[bc_df_rep$library == i,], x = "R1", y = "R3",
+                 add = "reg.line",
+                 color = "neg_ctrls",
+                 size = 0.5,
+                 add.params = list(color = "blue", fill = "lightgray"), 
+                 title = paste("rep1 vs rep3 - library:", i),
+                 conf.int = TRUE, ylab = "rep3", xlab = "rep1") + 
+    stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
+    geom_abline(linetype = "dashed") +
+    xlim(0,50) + ylim(0,50) +
+    scale_color_manual(values = colors) +
+    facet_wrap(~condition)
+  print(p)
+}
 
-sp3 <- ggscatter(bc_df_rep, x = "rep3", y = "rep2",
-   add = "reg.line",
-   color = "neg_ctrl",
-   size = 0.5,
-   add.params = list(color = "blue", fill = "lightgray"), title = "rep3 vs rep2",
-   conf.int = TRUE, ylab = "rep2", xlab = "rep3") + 
-  stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
-  geom_abline(linetype = "dashed")+
-  xlim(0,50) + ylim(0,50) +
-  scale_color_manual(values = colors)
-
-
-#Grid three plots to one panel
-sp.plot <- arrangeGrob(sp1,sp2,sp3, nrow = 2, ncol = 2)
-grid.arrange(sp.plot)
+for (i in unique(bc_df_rep$library)) {
+  p <- ggscatter(bc_df_rep[bc_df_rep$library == i,], x = "R2", y = "R3",
+                 add = "reg.line",
+                 color = "neg_ctrls",
+                 size = 0.5,
+                 add.params = list(color = "blue", fill = "lightgray"), 
+                 title = paste("rep2 vs rep3 - library:", i),
+                 conf.int = TRUE, ylab = "rep3", xlab = "rep2") + 
+    stat_cor(method = "pearson", label.x = 4, label.y = 0) + 
+    geom_abline(linetype = "dashed") +
+    xlim(0,50) + ylim(0,50) +
+    scale_color_manual(values = colors) +
+    facet_wrap(~condition)
+  print(p)
+}
 ```
 
 
 ```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE}
 # Mean of the three replicates
-bc_df_cDNA_filt$condition <- gsub("(.*?)_r[1-3]$", "\\1", bc_df_cDNA_filt$condition)
 bc_df_cDNA_filt$reporter_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$condition, FUN = function(x) mean(x))
 bc_df_cDNA_filt$reporter_activity_sd <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$condition, FUN = function(x) sd(x))
 ```
@@ -815,12 +1073,11 @@ bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
            new = c("replicate_activity", "replicate_activity_sd")) %>% 
   mutate(log_activity = log2(activity),
          log_reporter_activity = log2(reporter_activity))
-bc_df_cDNA_filt$condition <- gsub("^X", "", bc_df_cDNA_filt$condition)
 
 
 # Export bc_df for cDNA analysis
 filename <- SetFileName("_reporter_activity_filt", "mt")
-setwd("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/results/")
+setwd("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6502_gen2/results/")
 write.csv(bc_df_cDNA_filt, file = paste(filename,".csv", sep = ""), row.names = F)
 ```
 
