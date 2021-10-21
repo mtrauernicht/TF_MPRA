@@ -1,0 +1,45 @@
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
+'''
+    Title: pDNA insert seq extraction
+    Date last modified: 2021/03/18
+    Python Version: 3.6.2
+'''
+##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
+
+include:
+    '/DATA/usr/t.filipovska/projects/library_TF_activity/analysis/raw_data_analysis/config.py'
+
+# Rules -----------------------------------------------------------------------
+
+rule all:
+    input:
+        expand('results/{ecn}_counts.tsv', ecn = ECN)
+
+
+# Extract inserts from fastq file
+rule extract_inserts_from_fq:
+    input:
+        fq = ECN_DIR + S1
+    output:
+        tsv = 'results/{ecn}_sequences.tsv'
+    log:
+        '/DATA/usr/t.filipovska/projects/library_TF_activity/analysis/raw_data_analysis/log/extract_inserts_from_fq.log'
+    conda:
+        '/DATA/usr/t.filipovska/projects/library_TF_activity/analysis/raw_data_analysis/environment.yaml'
+    script:
+        'mt20201026_insert-counts.py'
+
+# Cluster inserts with Starcode
+rule cluster_inserts:
+    input:
+        starcode_in = 'results/{ecn}_sequences.tsv'
+    output:
+        ofn = 'results/{ecn}_counts.tsv',
+    log:
+        '/DATA/usr/t.filipovska/projects/library_TF_activity/analysis/raw_data_analysis/log/cluster_ecn_inserts.log'
+    conda:
+        '/DATA/usr/t.filipovska/projects/library_TF_activity/analysis/raw_data_analysis/environment.yaml'
+    threads: 12
+    shell:
+        'starcode --threads {threads} --print-clusters -i {input.starcode_in} --dist 3 | \
+        sort -k1,1 > {output.ofn}'

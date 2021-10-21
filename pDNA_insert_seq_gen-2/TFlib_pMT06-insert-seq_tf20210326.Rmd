@@ -1,0 +1,307 @@
+---
+title: "pDNA insert matching"
+author: "Teodora Filipovska"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output: 
+  html_document:
+    theme: journal #cerulean
+    highlight: monochrome 
+    toc: true
+    toc_float: true
+    code_folding: show
+  editor_options:
+    chunk_output_type: console
+---
+
+*knitr document van Steensel lab*
+
+
+## Introduction
+I sequenced the complete insert of the pDNA library for pMT06 in E.cloni and MegaX (with MyTaq or KAPA). Prior to this, all the sequences in front of the 3' adapter were extracted from the raw sequencing data, and all the identical sequences were counted using starcode. Here, an overview of the integrity of the library will be assessed to see how many pDNA insert sequences in the pDNA match their intended barcodes. 
+
+
+#Data processing 
+##Path, libraries, useful functions
+```{r setup, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+StartTime <-Sys.time()
+
+# 8-digit Date tag:
+Date <- substr(gsub("-","",Sys.time()),1,8) 
+# libraries:
+library(seqinr)
+library(plyr)
+library(maditr)
+library(phylotools)
+library(tidyr)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(ggbeeswarm)
+library(vwr)
+library(d3r)
+library(sunburstR)
+library(LncFinder)
+library(plotly)
+library(tibble)
+library(stringr)
+library(GGally)
+```
+
+
+```{r, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+# Custom functions
+SetFileName <- function(filename, initials) {
+  # Set filename with extension and initials to make filename with date integrated.
+  filename <- substitute(filename)
+  initials <- substitute(initials)
+  filename <- paste0(initials, Date, filename)
+  filename
+}
+
+ReadFasta<-function(file) {
+   # Read the file line by line
+   fasta<-readLines(file)
+   # Identify header lines
+   ind<-grep(">", fasta)
+   # Identify the sequence lines
+   s<-data.frame(ind=ind, from=ind+1, to=c((ind-1)[-1], length(fasta)))
+   # Process sequence lines
+   seqs<-rep(NA, length(ind))
+   for(i in 1:length(ind)) {
+      seqs[i]<-paste(fasta[s$from[i]:s$to[i]], collapse="")
+   }
+   
+   # Create a data frame 
+   DF<-data.frame(name=gsub(">", "", fasta[ind]), sequence=seqs)
+   # Return the data frame as a result object from the function
+   return(DF)
+}
+
+# ggpairs custom functions
+corColor <- function(data, mapping, color = I("black"), sizeRange = c(1, 3), ...) {
+  x   <- eval_data_col(data, mapping$x)
+  y   <- eval_data_col(data, mapping$y)
+  r   <- cor(x, y, use = "na.or.complete")
+  rt  <- format(r, digits = 3)
+  tt  <- as.character(rt)
+  cex <- max(sizeRange)
+  # helper function to calculate a useable size
+  percent_of_range <- function(percent, range) {
+    percent * diff(range) + min(range, na.rm = TRUE)
+  }
+  # plot correlation coefficient
+  p <- ggally_text(label = tt, mapping = aes(), xP = 0.5, yP = 0.5,
+                   size = I(percent_of_range(cex * abs(r), sizeRange)), color = color, ...) +
+    theme(panel.grid.minor=element_blank(),
+          panel.grid.major=element_blank())
+  corColors <- RColorBrewer::brewer.pal(n = 7, name = "YlOrRd")[2:6]
+  if (r <= boundaries[1]) {
+    corCol <- corColors[1]
+  } else if (r <= boundaries[2]) {
+    corCol <- corColors[2]
+  } else if (r < boundaries[3]) {
+    corCol <- corColors[3]
+  } else if (r < boundaries[4]) {
+    corCol <- corColors[4]
+  } else {
+    corCol <- corColors[5]
+  }
+  p <- p +
+    theme_bw() +
+    theme(panel.background = element_rect(fill = alpha(corCol, 0.4)),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank())
+  return(p)
+}
+```
+
+```{r knits setup, echo=FALSE, warning= FALSE, message=FALSE}
+# Prepare output 
+library(knitr)
+filename <- SetFileName("_figures","tf")
+dir.create(paste("results/", filename, sep = ""), showWarnings = FALSE)
+opts_chunk$set(fig.width = 4, fig.height = 4, 
+               dev=c('png', 'pdf'), fig.path = file.path(paste("results/", filename, "/", sep = ""))) 
+pdf.options(useDingbats = FALSE)
+```
+
+```{r, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+# Data import
+#Import reference sequences
+ref_seq <- ReadFasta("/DATA/usr/t.filipovska/projects/library_TF_activity/data/mt20210114_oligo_pool_orderedTwist.fasta")
+
+# Remove adapters from reference sequence (cause these are not in the sequencing data)
+ref_seq$sequence <- gsub("CGGAGCGAACCGAGTTAG", "", ref_seq$sequence)
+ref_seq$sequence <- gsub("CATCGTCGCATCCAAGAG", "", ref_seq$sequence)
+
+# Split up in insert and barcode part
+## In my case, the barcode should be the last 13 bases of the sequence
+ref_seq$barcode <- gsub(".*([A-Z]{13})$", "\\1", ref_seq$sequence)
+ref_seq$insert <- gsub("(.*)[A-Z]{13}$", "\\1", ref_seq$sequence)
+
+## Add column to filter out controls
+toMatch <- c("romanov", "ctrl", "promega", "TF-seq")
+ref_seq$control <- "no"
+ref_seq$control[grep(paste(toMatch, collapse="|"), ref_seq$name)] <- "yes"
+
+# Import sequencing files
+pDNA_seq_files = list.files('/DATA/usr/t.filipovska/projects/library_TF_activity/analysis/raw_data_analysis/results/',
+                       full.names=T, patter='.*TF.*_counts.tsv')
+pDNA_seq <- lapply(pDNA_seq_files, fread, header = FALSE)
+names(pDNA_seq)<- gsub('.*//(.*?)_[CGAT]{8}.*_counts.tsv', 
+                                    '\\1', 
+                                    pDNA_seq_files)
+
+# Generate wide df - each condition attached as new column
+for (i in 1:length(pDNA_seq)) {
+  if (i == 1) {
+  pDNA_seq_df <- data.frame(pDNA_seq[i])
+  pDNA_seq_df[3] <- names(pDNA_seq[i])
+  names(pDNA_seq_df) <- c("sequence", "count", "name")
+  pDNA_seq_df <- reshape2::dcast(pDNA_seq_df, sequence ~ name, value.var = "count")
+  }
+  else {
+  pDNA_seq_df_i <- data.frame(pDNA_seq[i])
+  pDNA_seq_df_i[3] <- names(pDNA_seq[i])
+  names(pDNA_seq_df_i) <- c("sequence", "count", "name")
+  pDNA_seq_df_i <- reshape2::dcast(pDNA_seq_df_i, sequence ~ name, value.var = "count")
+  pDNA_seq_df <- merge(pDNA_seq_df, pDNA_seq_df_i, all = T)
+  }
+}
+
+# Convert to long df - write conditions under each other
+pDNA_seq <- melt(pDNA_seq_df, id.vars = "sequence",
+              variable.name = "condition", value.name = "counts")
+
+# Split up in insert and barcode part
+## In my case, the barcode should be the last 13 bases of the sequence
+pDNA_seq$barcode <- gsub(".*([A-Z]{13})$", "\\1", pDNA_seq$sequence)
+pDNA_seq$insert <- gsub("(.*)[A-Z]{13}$", "\\1", pDNA_seq$sequence)
+
+# Calculate reads per million
+pDNA_seq$counts[is.na(pDNA_seq$counts)] <- 0
+for (i in unique(pDNA_seq$condition)) {
+  pDNA_seq$rpm[pDNA_seq$condition == i] <- (pDNA_seq$counts[pDNA_seq$condition == i] + 1) / # Adds a pseudocount of 1
+    sum(pDNA_seq$counts[pDNA_seq$condition == i]) *1e6
+}
+
+```
+
+#Analysis
+## How do the different samples correlate?
+```{r correlation_all_samples, fig.width=10, fig.height=10, fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+# Correlation matrix plot
+pDNA_seq_df_2 <- pDNA_seq[pDNA_seq$counts >= 5,]
+pDNA_seq_df_2 <- dcast(pDNA_seq_df_2, sequence ~ condition, value.var = "rpm")
+n <- sample(1:nrow(pDNA_seq_df_2), 10000)
+boundaries <- seq(from = 0.1, by = 0.25, length.out = 4)
+plt <- ggpairs(pDNA_seq_df_2 %>% dplyr::select(oligos, PCR_mytaq, PCR_kapa, plasmind_mytaq_megax, plasmid_kapa_ecloni),
+               upper = list(continuous = corColor),
+               lower = list(continuous = function(data, mapping, ...) {
+                   ggally_points(data = data[n, ], mapping = mapping, alpha = 0.4, size = 1) +
+                   xlim(0,400) + ylim(0,400)+
+                   geom_abline(slope = 1, lty = "dashed", col = "red") +
+                   theme_bw()}),
+               diag = list(continuous = function(data, mapping, ...) {
+                   ggally_densityDiag(data = data, mapping = mapping, alpha = 0.4, fill = "red") +
+                   xlim(0,400) +
+                   theme_bw()})) +
+  ggtitle("Read counts: corelation between samples") +
+  theme(text = element_text(size = 14)) +
+  xlab("Reads per million") +
+  ylab("Reads per million")
+print(plt)
+```
+
+## What is the barcode distribution of mapped vs. unmapped for all TFs?
+```{r read_distribution_per_tf, fig.width=4, fig.height=4, fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+
+
+# Match barcodes with original data
+pDNA_seq_bc <- pDNA_seq %>% 
+  dplyr::select(barcode, rpm, condition) %>% 
+  unique() %>% 
+  mutate(id = "pDNA")
+
+# Only keep highest barcode values - a bit of cheating here
+pDNA_seq_bc <- pDNA_seq_bc[order(pDNA_seq_bc$barcode, -abs(pDNA_seq_bc$rpm) ), ]
+pDNA_seq_bc <- pDNA_seq_bc[ !duplicated(pDNA_seq_bc$barcode), ] 
+ref_seq_bc <- ref_seq %>% dplyr::select(name, barcode, control)
+match_bc <- merge(ref_seq_bc, pDNA_seq_bc, by = "barcode", all = T)
+match_bc <- match_bc[!is.na(match_bc$rpm),]
+match_bc$TF <- gsub("_.*", "\\1", match_bc$name)
+match_bc$match <- "true"
+match_bc$match[is.na(match_bc$name)] <- "false"
+match_bc$conf <- "high"
+match_bc$conf[match_bc$rpm < 10] <- "low"
+
+# Visualize barcode distribution per TF per sample
+ggplot(match_bc, aes(x = TF, y = rpm, color=control)) +
+  geom_quasirandom() +
+  theme_bw() +
+  xlab("reporter matches to:") +
+  ylab("reads per million") +
+  theme(text = element_text(size = 14), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 6)) +
+  ylim(0,300) +
+  facet_wrap(~condition)
+
+# Plot per TF the amount of high vs. low confidence reporters
+x <- match_bc %>%
+  filter(match == "true") %>%
+  mutate(conf_count = as.numeric(ave(TF, TF, conf, FUN = function(x) length(x)))) %>%
+  dplyr::select(conf_count, TF, conf, condition) %>%
+  unique %>%
+  dcast(TF+condition ~ conf, value.var = "conf_count")
+x[is.na(x)] <- 0
+x <- x %>%
+  mutate(sum = high + low,
+         percent = (high/sum)*100)
+
+ggplot(x, 
+       aes(x = reorder(TF, -percent), y = percent)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_bw() + 
+  theme(text = element_text(size = 14), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 6))+
+  facet_wrap(~condition)
+
+# Visualize read distribution for all matched reporters
+ggplot(match_bc %>%
+         filter(match == "true"), aes(x = rpm))+
+  geom_density() +
+  geom_vline(aes(xintercept = 10), linetype = "dashed")+
+  theme_bw() +
+  xlim(-15, 200)+
+facet_wrap(~condition)
+```
+
+```
+
+
+
+### Visualisation
+```{r, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+
+
+
+```
+
+
+### Results
+```{r, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+```
+
+
+### Exporting potential data
+```{r, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+```
+
+
+# Session Info
+```{r}
+paste("Run time: ",format(Sys.time()-StartTime))
+getwd()
+date()
+sessionInfo()
+```
+

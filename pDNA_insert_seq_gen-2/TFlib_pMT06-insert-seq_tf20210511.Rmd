@@ -1,0 +1,605 @@
+title: "pMT06-GR pDNA insert sequencing"
+author: "Max Trauernicht"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+ prettydoc::html_pretty:
+   theme: leonids
+   highlight: github
+ #   toc: true
+ #   toc_float: true
+ #   code_folding: show
+ # editor_options:
+ #   chunk_output_type: console
+---
+*knitr document van Steensel lab*
+# pMT06-GR pDNA insert sequencing
+# Introduction
+I sequenced the complete insert of the pDNA library of pMT06. I already extracted all sequences in front of the 3' adapter from the sequences data and added counts to identical sequences by starcode. I now want to make an overview about how many pDNA insert sequences in the pDNA still match the designed inserts.
+```{r setup, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
+
+setwd("/DATA/usr/t.filipovska/projects/library_TF_activity")
+
+# Load all options and libraries
+knitr::opts_chunk$set(echo = TRUE)
+StartTime <-Sys.time()
+# 8-digit Date tag:
+Date <- substr(gsub("-","",Sys.time()),1,8)
+# libraries:
+library(seqinr)
+library(ShortRead)
+library(plyr)
+library(maditr)
+library(phylotools)
+library(tidyr)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(ggbeeswarm)
+library(vwr)
+library(d3r)
+library(sunburstR)
+library(LncFinder)
+library(plotly)
+library(tibble)
+library(GGally)
+library(ggpointdensity)
+library(viridis)
+library(gridExtra)
+library(maditr)
+```
+
+
+```{r, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# Load all custom functions
+SetFileName <- function(filename, initials) {
+ # Set filename with extension and initials to make filename with date integrated.
+ filename <- substitute(filename)
+ initials <- substitute(initials)
+ filename <- paste0(initials, Date, filename)
+ filename
+}
+ReadFasta<-function(file) {
+  # Read the file line by line
+  fasta<-readLines(file)
+  # Identify header lines
+  ind<-grep(">", fasta)
+  # Identify the sequence lines
+  s<-data.frame(ind=ind, from=ind+1, to=c((ind-1)[-1], length(fasta)))
+  # Process sequence lines
+  seqs<-rep(NA, length(ind))
+  for(i in 1:length(ind)) {
+     seqs[i]<-paste(fasta[s$from[i]:s$to[i]], collapse="")
+  }
+  # Create a data frame
+  DF<-data.frame(name=gsub(">", "", fasta[ind]), sequence=seqs)
+  # Return the data frame as a result object from the function
+  return(DF)
+}
+# ggpairs custom functions
+corColor <- function(data, mapping, color = I("black"), sizeRange = c(1, 3), ...) {
+ x   <- eval_data_col(data, mapping$x)
+ y   <- eval_data_col(data, mapping$y)
+ r   <- cor(x, y, use = "na.or.complete")
+ rt  <- format(r, digits = 3)
+ tt  <- as.character(rt)
+ cex <- max(sizeRange)
+ # helper function to calculate a useable size
+ percent_of_range <- function(percent, range) {
+   percent * diff(range) + min(range, na.rm = TRUE)
+ }
+ # plot correlation coefficient
+ p <- ggally_text(label = tt, mapping = aes(), xP = 0.5, yP = 0.5,
+                  size = I(percent_of_range(cex * abs(r), sizeRange)), color = color, ...) +
+   theme(panel.grid.minor=element_blank(),
+         panel.grid.major=element_blank(), axis.text.y = element_text(angle = 45))
+ corColors <- RColorBrewer::brewer.pal(n = 7, name = "YlOrRd")[2:6]
+ if (r <= boundaries[1]) {
+   corCol <- corColors[1]
+ } else if (r <= boundaries[2]) {
+   corCol <- corColors[2]
+ } else if (r < boundaries[3]) {
+   corCol <- corColors[3]
+ } else if (r < boundaries[4]) {
+   corCol <- corColors[4]
+ } else {
+   corCol <- corColors[5]
+ }
+ p <- p +
+   theme_bw() +
+   theme(panel.background = element_rect(fill = alpha(corCol, 0.4)),
+         panel.grid.major = element_blank(),
+         panel.grid.minor = element_blank())
+ return(p)
+}
+```
+
+
+
+```{r knits setup, echo=FALSE, warning= FALSE, message=FALSE}
+
+# Prepare output
+library(knitr)
+filename <- SetFileName("_figures","tf")
+dir.create(paste("results/", filename, sep = ""), showWarnings = FALSE)
+opts_chunk$set(fig.width = 4, fig.height = 4,
+              dev=c('png', 'pdf'), fig.path = file.path(paste("results/", filename, "/", sep = "")))
+pdf.options(useDingbats = FALSE)
+```
+
+
+```{r, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+## Data import
+# Import reference sequences
+ref_seq <- ReadFasta("/DATA/usr/t.filipovska/projects/library_TF_activity/data/mt20210114_oligo_pool_orderedTwist.fasta")
+
+# Remove adapters from reference sequence (cause these are not in the sequencing data)
+ref_seq$sequence <- gsub("CGGAGCGAACCGAGTTAG", "", ref_seq$sequence)
+ref_seq$sequence <- gsub("CATCGTCGCATCCAAGAG", "", ref_seq$sequence)
+
+
+# Split up in insert and barcode part in reference sequences 
+## In my case, the barcode should be the last 13 bases of the sequence
+ref_seq$barcode <- gsub(".*([A-Z]{13})$", "\\1", ref_seq$sequence)
+
+ref_seq$insert <- gsub("(.*)[A-Z]{13}$", "\\1", ref_seq$sequence)
+
+
+## Add column to filter out controls
+toMatch <- c("romanov", "ctrl", "promega", "TF-seq")
+ref_seq$control <- "no"
+ref_seq$control[grep(paste(toMatch, collapse="|"), ref_seq$name)] <- "yes"
+
+# Import sequencing files
+pDNA_seq_files = list.files('/DATA/usr/t.filipovska/projects/library_TF_activity/analysis/raw_data_analysis/results/',
+                      full.names=T, pattern = '.*TF.*_counts.tsv')
+
+
+pDNA_seq <- lapply(pDNA_seq_files, fread, header = FALSE)
+
+names(pDNA_seq)<- gsub('.*//.*[0-9]{1-2}_TF_lib_(.*?)_[A-Z]{8}-[A-Z]{8}_S[1-9]{1}_counts.tsv',
+                                   '\\1',
+                                   pDNA_seq_files)
+
+
+# Generate wide df - each condition attached as new column
+for (i in 1:length(pDNA_seq)) {
+ if (i == 1) {
+ pDNA_seq_df <- data.frame(pDNA_seq[i])
+ pDNA_seq_df[3] <- names(pDNA_seq[i])
+ names(pDNA_seq_df) <- c("sequence", "count", "name")
+ pDNA_seq_df <- reshape2::dcast(pDNA_seq_df, sequence ~ name, value.var = "count")
+ }
+ else {
+ pDNA_seq_df_i <- data.frame(pDNA_seq[i])
+ pDNA_seq_df_i[3] <- names(pDNA_seq[i])
+ names(pDNA_seq_df_i) <- c("sequence", "count", "name")
+ pDNA_seq_df_i <- reshape2::dcast(pDNA_seq_df_i, sequence ~ name, value.var = "count")
+ pDNA_seq_df <- merge(pDNA_seq_df, pDNA_seq_df_i, all = T)
+ }
+}
+
+# Split up in insert and barcode part in sequenced data
+## In my case, the barcode should be the last 13 bases of the sequence
+pDNA_seq_df$barcode <- gsub(".*([A-Z]{13})$", "\\1", pDNA_seq_df$sequence)
+pDNA_seq_df$insert <- gsub("(.*)[A-Z]{13}$", "\\1", pDNA_seq_df$sequence)
+```
+
+
+# Analysis
+## How do the different samples correlate?
+```{r correlation_all_samples, fig.width=10, fig.height=10, fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+# Convert to long df - write conditions under each other
+pDNA_seq <- melt(pDNA_seq_df, id.vars = c("sequence", "barcode", "insert"),
+             variable.name = "condition", value.name = "counts")
+# Calculate reads per million
+pDNA_seq$counts[is.na(pDNA_seq$counts)] <- 0
+for (i in unique(pDNA_seq$condition)) {
+ pDNA_seq$rpm[pDNA_seq$condition == i] <- (pDNA_seq$counts[pDNA_seq$condition == i] + 1) / # Adds a pseudocount of 1
+   sum(pDNA_seq$counts[pDNA_seq$condition == i]) *1e6
+}
+
+# Correlation matrix plot
+pDNA_seq_df_2 <- pDNA_seq[pDNA_seq$counts >= 5,]
+pDNA_seq_df_2 <- dcast(pDNA_seq_df_2, sequence ~ condition, value.var = "rpm")
+n <- sample(1:nrow(pDNA_seq_df_2), 10000)
+boundaries <- seq(from = 0.6, by = 0.1, length.out = 5)
+plt <- ggpairs(pDNA_seq_df_2 %>% dplyr::select(oligos, PCR_mytaq, PCR_kapa, plasmid_mytaq_megax, plasmid_kapa_ecloni, plasmid_kapa_megax),
+              upper = list(continuous = corColor),
+              lower = list(continuous = function(data, mapping, ...) {
+                  ggally_points(data = data[n, ], mapping = mapping, alpha = 0.4, size = 1) +
+                  xlim(0,400) + ylim(0,400)+
+                  geom_abline(slope = 1, lty = "dashed", col = "red") +
+                  theme_bw()}),
+              diag = list(continuous = function(data, mapping, ...) {
+                  ggally_densityDiag(data = data, mapping = mapping, alpha = 0.4, fill = "red") +
+                  xlim(0,400) +
+                  theme_bw()})) +
+ ggtitle("Read counts: corelation between samples") +
+ theme(text = element_text(size = 14)) +
+ xlab("Reads per million") +
+ ylab("Reads per million")
+print(plt)
+
+# pdf(file = "/DATA/usr/t.filipovska/projects/library_TF_activity/analysis/plots/correlation_between_samples.pdf")
+# print(plt)
+# dev.off()
+```
+
+
+## What is the barcode distribution of mapped vs. unmapped for all TFs?
+```{r distribution_per_tf, fig.width=6, fig.height=6, fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+# Match sequences with original data
+pDNA_seq_bc <- pDNA_seq %>%
+ dplyr::select(barcode, rpm, condition) %>%
+ #filter(rpm > 5) %>% #use this filter to visualize the spread better
+ unique() %>%
+ mutate(id = "seq")
+# Only keep highest barcode values - a bit of cheating here
+ref_seq_bc <- ref_seq %>% dplyr::select(name, barcode)
+ref_seq_bc_2 <- merge(ref_seq_bc, unique(pDNA_seq_bc$condition), all = T) %>%
+ setnames("y", "condition")
+match_bc <- merge(ref_seq_bc_2, pDNA_seq_bc, all = T)
+match_bc$TF <- gsub("_.*", "\\1", match_bc$name)
+match_bc$match <- "true"
+match_bc$match[is.na(match_bc$name)] <- "false"
+match_bc$conf <- "high"
+match_bc$conf[match_bc$rpm < 10] <- "low"
+match_bc$TF[is.na(match_bc$TF)] <- "x_no_match"
+match_bc$cond_bc <- paste(match_bc$barcode, match_bc$condition, sep = "_")
+match_bc <- match_bc[order(match_bc$cond_bc, -abs(match_bc$rpm) ), ]
+match_bc <- match_bc[ !duplicated(match_bc$cond_bc), ]
+
+# Visualize
+dist <- ggplot(match_bc[!is.na(match_bc$condition),], aes(x = condition, y = rpm)) +
+ geom_quasirandom(dodge.width = 0.4) +
+ theme_bw() +
+ xlab("condition") +
+ ylab("reads per million") +
+ theme(text = element_text(size = 14), axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+print(dist)
+# pdf(file = "/DATA/usr/t.filipovska/projects/library_TF_activity/analysis/plots/barcode_distribution.pdf")
+# print(dist)
+# dev.off()
+```
+
+
+
+
+## Correlate to GC contenct
+```{r gc_content, fig.width=6, fig.height=6, fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+# Load reference file
+ref_seq_2 <- seqinr::read.fasta("/DATA/usr/t.filipovska/projects/library_TF_activity/data/mt20210114_oligo_pool_orderedTwist.fasta")
+# Compute gc contents
+gc <- compute_GC(ref_seq_2)
+# Plot gc distribution
+ggplot(gc, aes(x = GC.content)) +
+ geom_density() + theme_bw()
+match_seq <- match_bc[!is.na(match_bc$name),]
+gc <- gc %>% rownames_to_column(var = "name")
+gc <- merge(gc, match_seq)
+ggplot(gc[!is.na(gc$condition),], aes(x = GC.content, y = rpm)) +
+ geom_pointdensity() +
+ scale_color_viridis() +
+ theme_bw() +
+ facet_wrap(~condition)
+
+# pdf(file = "/DATA/usr/t.filipovska/projects/library_TF_activity/analysis/plots/GC_content.pdf")
+# print(dist)
+# dev.off()
+```
+
+
+
+## Plot how many barcodes are found in pDNA data
+How many barcodes are found in the pDNA data; match represents how many of the barcodes from the reference file are found in the pDNA data, while the no_match represents all the other barcodes found in the data that are not from the reference file. These are likely barcodes with mutations introduced during the PCR amplification. 
+
+
+```{r barcodes_found, fig.width=4, fig.height=4, fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+
+# Match barcodes with original data
+ref_seq_bc <- ref_seq %>% dplyr::select(name, barcode)
+ref_seq_bc$TF <- gsub("_.*", "\\1", ref_seq_bc$name)
+pDNA_seq_bc <- pDNA_seq %>%
+ dplyr::select(barcode, rpm, condition) %>%
+ unique() %>%
+ mutate(id = "pDNA")
+match_bc <- merge(ref_seq_bc, pDNA_seq_bc, by = "barcode", all = T)
+match_bc$cond_bc <- paste(match_bc$barcode, match_bc$condition, sep = "_")
+match_bc <- match_bc[order(match_bc$cond_bc, -abs(match_bc$rpm) ), ]
+match_bc <- match_bc[ !duplicated(match_bc$cond_bc), ]
+
+## Identify the unmapped fraction
+match_bc$match <- "match"
+match_bc$match[is.na(match_bc$TF)] <- "no_match"
+for (i in seq(1,5,1)) {
+ p<- ggplot(match_bc %>%
+        filter(rpm > i) %>%
+        mutate(match_count = ave(rpm, match, condition, FUN = function(x) length(x)),
+               match_count = 100*match_count/nrow(ref_seq_bc)) %>%
+        dplyr::select(condition, match_count, match) %>%
+        unique(), aes(x = match_count, y = condition, fill = match)) +
+ geom_bar(stat = "identity", position = "dodge") +
+ scale_fill_manual(values = c("#1B998B", "#2D3047")) +
+ labs(title = paste("barcodes matching, rpm cutoff:", i, sep ="")) +
+ theme_bw() +
+ ylab("")+
+ xlab("designed barcodes in sequencing data (%)")+
+ theme(legend.position = "none") +
+ theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+ print(p)
+}
+
+# pdf(file = "/DATA/usr/t.filipovska/projects/library_TF_activity/analysis/plots/barcodes_found.pdf")
+# print(t)
+# dev.off()
+```
+
+
+
+
+
+## Plot how many reads match to designed barcodes
+Here we plot how many of the total reads from the sequencing data have the barcodes from the reference file. We see that the number of matched reads is high, which means that the reads that do not match the designed barcodes have very low rpm counts. It also means that it is rare to have mutations in the barcodes.
+
+```{r matched_barcode_reads, fig.width=4, fig.height=4, fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+# Now plot the sum of reads from matched vs unmatched barcodes
+for (i in seq(1,5,1)) {
+ p<- ggplot(match_bc %>%
+        filter(rpm > i) %>%
+        mutate(match_count = ave(rpm, match, condition, FUN = function(x) sum(x)),
+               all_count = ave(rpm, condition, FUN = function(x) sum(x)),
+               match_count = 100*match_count/all_count) %>%
+        dplyr::select(condition, match_count, match) %>%
+        unique(), aes(x = match_count, y = condition, fill = match)) +
+ geom_bar(stat = "identity", position = "dodge") +
+ scale_fill_manual(values = c("#1B998B", "#2D3047")) +
+ labs(title = paste("reads from matching barcodes, rpm cutoff:", i, sep ="")) +
+ theme_bw() +
+ ylab("")+
+ xlab("reads from designed barcodes (%)")+
+ theme(legend.position = "none") +
+ theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+ print(p)
+}
+
+# pdf(file = "/DATA/usr/t.filipovska/projects/library_TF_activity/analysis/plots/reads_matched_to_barcodes.pdf")
+# print(p)
+# dev.off()
+```
+
+
+
+## How many raw complete sequences match with the design?
+Here we plot the reporter sequence (everything preceding the barcode) match the reference file. Similarly to the previous plot with barcodes matched, we see that around 80% of the sequences from the original oligo pool are found back in the sequenced data. The no_match represents sequences with mutations - this value is probably higher than the number in barcodes not matching simply because the sequence is longer. It's interesting that in this case we see most no_match cases in the plasmids with KAPA amplified oligos, while in the case with the barcodes matched we see a lot of No_matches in the PCRs. 
+
+```{r sequenced_found, fig.width=4, fig.height=4, fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+# Match barcodes with original data
+ref_seq_bc <- ref_seq %>% dplyr::select(name, sequence)
+ref_seq_bc$TF <- gsub("_.*", "\\1", ref_seq_bc$name)
+pDNA_seq_bc <- pDNA_seq %>%
+ dplyr::select(sequence, rpm, condition) %>%
+ # filter(rpm > 2) %>%
+ unique() %>%
+ mutate(id = "pDNA")
+match_bc <- merge(ref_seq_bc, pDNA_seq_bc, by = "sequence", all = T)
+match_bc$cond_bc <- paste(match_bc$sequence, match_bc$condition, sep = "_")
+match_bc <- match_bc[order(match_bc$cond_bc, -abs(match_bc$rpm) ), ]
+match_bc <- match_bc[ !duplicated(match_bc$cond_bc), ]
+
+
+## Identify the unmapped fraction
+match_bc$match <- "match"
+match_bc$match[is.na(match_bc$TF)] <- "no_match"
+
+# Make the plot
+for (i in seq(1,5,1)) {
+ p <- ggplot(match_bc %>%
+        filter(rpm > i) %>%
+        mutate(match_count = ave(rpm, match, condition, FUN = function(x) length(x)),
+               match_count = 100*match_count/nrow(ref_seq_bc)) %>%
+        dplyr::select(condition, match_count, match) %>%
+        unique(), aes(x = match_count, y = condition, fill = match)) +
+ geom_bar(stat = "identity", position = "dodge") +
+ scale_fill_manual(values = c("#1B998B", "#2D3047")) +
+ theme_bw() +
+ ylab("")+
+   ggtitle(paste("complete reporter matching, rpm cutoff:", i)) +
+ xlab("designed vs. non-matching reporters (%)")+
+ theme(legend.position = "none")+
+ theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+ print(p)
+}
+
+missing <- match_bc %>% filter(rpm<1, match == "match")
+gc_filtered <- gc %>% filter (rpm <1, match =="true")
+```
+
+##Looking into the missing complete reporters from the sequenced data
+```{r}
+
+oligos <- missing %>% filter (condition =="oligos")
+p_mytaq_megax <- missing %>% filter (condition =="plasmid_mytaq_megax")
+p_kapa_megax <- missing %>% filter (condition =="plasmid_kapa_megax")
+p_kapa_ecloni <- missing %>% filter (condition =="plasmid_mytaq_ecloni")
+pcr_mytaq <- missing %>% filter (condition =="PCR_mytaq")
+pcr_kapa <- missing %>% filter (condition =="PCR_kapa")
+all = c(oligos, p_mytaq_megax, p_kapa_ecloni, p_kapa_megax, pcr_kapa, pcr_mytaq)
+
+##plot missing TFs from each condition
+
+ggplot(missing, aes(fill = factor(condition), x = factor(TF), stat = "count", width = 0.8, colour = factor(condition))) + 
+  geom_bar(position = "stack", stat = "count", width=1) +
+  ggtitle("Missing reporters") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  coord_flip()
+
+ggplot(missing, aes(x = factor(condition), stat = "count", fill = factor(condition), width = 0.8, colour = factor(condition))) + 
+  geom_bar(position = "stack", stat = "count", width=1) +
+  ggtitle("Missing reporters") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+  
+###add another column with reporter design details
+
+#spacing
+spacing_5 <- "5bp"
+spacing_10 <- "s-10bp"
+missing$spacing <- 0
+missing$spacing[grep(paste(spacing_5, collapse="|"), missing$name)] <- "5bp"
+missing$spacing[grep(paste(spacing_10, collapse="|"), missing$name)] <- "10bp"
+
+#distance to promoter
+dist_10 <- "d-10bp"
+dist_21 <- "d-21"
+missing$distance <- 0
+missing$distance[grep(paste(dist_10, collapse="|"), missing$name)] <- "10bp"
+missing$distance[grep(paste(dist_21, collapse="|"), missing$name)] <- "21bp"
+
+#promoter
+mCMV <- "mCMV"
+minP <- "minP"
+missing$promoter <- 0
+missing$promoter[grep(paste(mCMV, collapse="|"), missing$name)] <- mCMV
+missing$promoter[grep(paste(minP, collapse="|"), missing$name)] <- minP
+
+#barcode
+missing$barcode <- 0
+missing$barcode[grep(paste("bc-1", collapse = "|"), missing$name)] <- "bc1"
+missing$barcode[grep(paste("bc-2", collapse = "|"), missing$name)] <- "bc2"
+missing$barcode[grep(paste("bc-3", collapse = "|"), missing$name)] <- "bc3"
+missing$barcode[grep(paste("bc-4", collapse = "|"), missing$name)] <- "bc4"
+missing$barcode[grep(paste("bc-5", collapse = "|"), missing$name)] <- "bc5"
+
+#background
+missing$background <- 0
+missing$background[grep(paste("bg-1", collapse = "|"), missing$name)] <- "bg1"
+missing$background[grep(paste("bg-2", collapse = "|"), missing$name)] <- "bg2"
+missing$background[grep(paste("bg-3", collapse = "|"), missing$name)] <- "bg3"
+
+###visualize the data
+
+#spacing
+bp <- ggplot(missing, aes(x=factor(TF), stat = "count", fill = factor(spacing)))+
+  geom_bar(width =0.7, stat = "count")
+bp
+
+
+bp2 <- ggplot(missing, aes(x=factor(spacing), stat = "count", fill = factor (condition)))+
+  geom_bar(width =0.7, stat = "count") + 
+  ggtitle("Spacing between motifs in missing reporters")
+bp2
+
+#distance to promoter
+bp3 <- ggplot(missing, aes(x=factor(distance), stat = "count", fill = factor (condition)))+
+  geom_bar(width =0.7, stat = "count")+
+  ggtitle("Promoter-motif distance in missing reporters")
+bp3
+
+#different promoter 
+bp4 <- ggplot(missing, aes(x=factor(promoter), stat = "count", fill = factor (condition)))+
+  geom_bar(width =0.7, stat = "count")+
+  ggtitle("Different promoters in missing reporters")
+bp4
+
+#different barcodes
+bp5 <- ggplot(missing, aes(x=factor(barcode), stat = "count", fill = factor (condition)))+
+  geom_bar(width =0.7, stat = "count")+
+  ggtitle("Different barcodes in missing reporters")
+bp5
+
+#different bacground sequences 
+bp6 <- ggplot(missing, aes(x=factor(background), stat = "count", fill = factor (condition)))+
+  geom_bar(width =0.7, stat = "count")+
+  ggtitle("Different backgrounds in missing reporters")
+bp6
+
+```
+
+
+## Now we want to know the read distribution of matched/unmatched sequences
+
+```{r reads_matched_sequences, fig.width=4, fig.height=4, fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+# Make the plot
+for (i in seq(1,5,1)) {
+ p <- ggplot(match_bc %>%
+        filter(rpm > i) %>%
+        mutate(match_count = ave(rpm, match, condition, FUN = function(x) sum(x)),
+               all_count = ave(rpm, condition, FUN = function(x) sum(x)),
+               match_count = 100*match_count/all_count) %>%
+        dplyr::select(condition, match_count, match) %>%
+        unique(), aes(x = match_count, y = condition, fill = match)) +
+ geom_bar(stat = "identity", position = "dodge") +
+ scale_fill_manual(values = c("#1B998B", "#2D3047")) +
+ theme_bw() +
+ ylab("")+
+   ggtitle(paste("complete reporter matching, rpm cutoff:", i)) +
+ xlab("designed vs. non-matching reporters (%)")+
+ theme(legend.position = "none")+
+ theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+ print(p)
+}
+
+
+```
+
+##Here I will have a look at the reporters that were not found in the sequenced data
+```{r}
+
+gone_seq <- c()
+for (x in match_bc){
+  if (match_bc$match == "no_match") {
+    gone_seq <- c(gone_seq, match_bc[match_bc$TF,])
+}
+  print(gone_seq)
+}
+```
+  
+}
+
+
+
+I selected all sequences from the pDNA data that have a barcode that is in the design. I then matched the complete sequences with the designed complete sequences, and found that the matched sequences are well represented in the library. Sequences that are not found in the design do not have many reads, and are therefore very unlikely to influence the results of the reporter assays.
+
+
+# Barcodes attached to wrong insert?
+```{r barcode_reporter_matching, fig.width=4, fig.height=4, fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+# Select only matched barcodes
+pDNA_seq_insert <- pDNA_seq[pDNA_seq$barcode %in% ref_seq$barcode,]
+# Add bc-id to the barcodes found in pDNA
+ref_seq_insert <- ref_seq %>% dplyr::select(barcode, name) %>% setnames("name", "bc-match")
+pDNA_seq_insert <- merge(pDNA_seq_insert, ref_seq_insert, by = "barcode")
+# Add insert-id to the inserts found in pDNA
+ref_seq_insert <- ref_seq %>% dplyr::select(insert, name) %>% setnames("name", "insert-match")
+ref_seq_insert$`insert-match` <- gsub("(.*)_bc-[0-9]$", "\\1", ref_seq_insert$`insert-match`)
+ref_seq_insert <- ref_seq_insert %>% unique()
+pDNA_seq_insert <- merge(pDNA_seq_insert, ref_seq_insert, by = "insert")
+
+# Count occurences where bc matches insert
+pDNA_seq_insert$`bc-match` <- gsub("(.*)_bc-[0-9]$", "\\1", pDNA_seq_insert$`bc-match`)
+pDNA_seq_insert$match <- pDNA_seq_insert$`bc-match` == pDNA_seq_insert$`insert-match`
+pDNA_seq_insert$TF <- gsub("_.*", "\\1", pDNA_seq_insert$`insert-match`)
+
+# Make the plot
+for (i in 1:5) {
+ p <- ggplot(pDNA_seq_insert %>%
+        filter(rpm > i) %>%
+        mutate(match_count = ave(rpm, match, condition, FUN = function(x) sum(x)),
+               all_count = ave(rpm, condition, FUN = function(x) sum(x)),
+               match_count = 100*(match_count/all_count)) %>%
+        dplyr::select(condition, match_count, match) %>%
+        unique(), aes(x = match_count, y = condition, fill = match)) +
+ geom_bar(stat = "identity", position = "dodge") +
+ scale_fill_manual(values = c("#2D3047", "#1B998B")) +
+ labs(title = paste("reads from correct bc-reporter matching, rpm cutoff:", i, sep = "")) + 
+ theme_bw() +
+ theme(legend.position = "none", plot.title = element_text(size = 7, hjust = 0))
+ print(p)
+}
+```
+# Session Info
+```{r}
+paste("Run time: ",format(Sys.time()-StartTime))
+getwd()
+date()
+sessionInfo()
+```
+
