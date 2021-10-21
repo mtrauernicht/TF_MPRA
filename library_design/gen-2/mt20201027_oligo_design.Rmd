@@ -56,17 +56,7 @@ library(RcmdrMisc)
 library(LncFinder)
 library(ENCODExplorer)
 library(biomaRt)
-
-# Prepare output 
-output_dir <- "library_design/gen-2/results"
-dir.create(output_dir, showWarnings = FALSE)
-```
-
-```{r knits setup}
-library(knitr)
-opts_chunk$set(fig.width = 10, fig.height = 4, 
-               dev=c('png', 'pdf'), fig.path = file.path(output_dir, "figures/")) 
-pdf.options(useDingbats = FALSE)
+library(ggpubr)
 ```
 
 
@@ -1451,6 +1441,88 @@ dat2fasta(tf.df.export, outfile = paste(filename,".fasta", sep = ""))
 
 ```
 
+
+
+
+## Addition: Scan all the reporters again (especially the negative controls) to ensure that only the desired TFs are binding
+```{r}
+# Select sequence in front of core promoter
+tf.df.check <- ReadFasta("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/mt20210114_oligo_pool_gen2.fasta") %>%
+  mutate(name = gsub("(.*bg-[1-3]{1})_.*", "\\1", name)) %>%
+  filter(str_detect(name, "TF-seq", negate = T), 
+         str_detect(name, "romanov", negate = T),
+         str_detect(name, "promega", negate = T),
+         str_detect(name, "TF-seq", negate = T),
+         str_detect(name, "hPGK", negate = T))
+
+tf.df.check <- tf.df.check %>%
+  mutate(sequence2 = gsub("CGGAGCGAACCGAGTTAG", "", sequence),
+         sequence3 = gsub("TAGAGGGTATATAATGGAAGCTCGACTTCCAG.*", "", sequence2),
+         sequence4 = gsub("GGCGTTTACTATGGGAGGTCTATATAAGCAGAGCTCGTTTAGTGAACCGTCAGATC.*", "", sequence3),
+         sequence5 = gsub("GGTTAGCGATCCAATTCAGCTAGATTTTAAGC.*", "", sequence4)) %>%
+  dplyr::select("seq.name" = name, "seq.text" = sequence5) %>%
+  unique()
+
+
+dat2fasta(tf.df.check, outfile = "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/fimo/tf_check.fasta")   
+```
+
+## Run FIMO script again 
+```{bash run fimo db2_9, eval = FALSE}
+# motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
+# odir=//DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/fimo/reporter_check
+# query=/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/fimo/tf_check.fasta
+
+# nice -n 19 fimo --no-qvalue --thresh 1e-4 --verbosity 1 --o $odir $motfn $query 
+```
+
+
+
+## load fimo results
+We built a TF motif matrix using -log10 transformed FIMO scores. We used this feature encoding throughout the rest of this analysis, unless otherwise stated. 
+
+```{r build tf motif matrices db2: tf_check, out.width= "100%", fig.align= "center", echo=FALSE}
+# load motif Metadata --> PWM feature matrix
+tib_pwm_tf_check  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-2/fimo/reporter_check/fimo.tsv',
+                                        db            = 2)
+```
+
+
+```{r, fig.height=4, fig.width=4, out.width= "100%", fig.align= "center", echo=FALSE, eval=FALSE}
+# Generate heatmaps in a loop for each TF
+# Select only hits
+tib_pwm_tf_check$TF <- gsub("[.*.|_].*","\\1",tib_pwm_tf_check$id)
+
+tib_pwm_tf_check_2 <- tib_pwm_tf_check %>% 
+  remove_rownames %>% column_to_rownames(var="id")
+
+# Create breaks for heatmap (to make legend between heatmaps comparable)
+myBreaks1 <- seq(0,8,0.08)
+
+ # Prepare annotation for the heatmap rows
+tib_pwm_tf_check_3 <- tib_pwm_tf_check_2
+tib_pwm_tf_check_3$neg <- "disrupted"
+tib_pwm_tf_check_3$neg[-grep("neg", rownames(tib_pwm_tf_check_3))] <- "high-affinity"
+neg <- tib_pwm_tf_check_3[,which(colnames(tib_pwm_tf_check_3) == "neg"),drop=FALSE]
+colors <- list(
+   neg = c("high-affinity"= "#B3E2CD", "disrupted"="#FDCDAC"))
+
+
+# Create heatmaps for each TF
+tib_pwm_tf_check_2 <- tib_pwm_tf_check_2 %>% filter(str_detect(TF, "Random", negate = TRUE))
+for (i in unique(tib_pwm_tf_check_2$TF)) {
+  data <- tib_pwm_tf_check_2[tib_pwm_tf_check_2$TF == i,]
+  data <- data[,colSums(data != 0) > 0]
+p <- pheatmap(as.matrix(data %>% dplyr::select(-TF)), 
+              main = paste(i),
+              border_color = "#000000",
+              annotation_row = neg,
+              annotation_colors = colors,
+              breaks = myBreaks1)
+print(p)
+}
+```
 
 
 
