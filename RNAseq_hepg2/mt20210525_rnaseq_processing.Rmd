@@ -72,11 +72,6 @@ library(GENOVA)
 library(ggh4x)
 library(SummarizedExperiment)
 library(seriation)
-
-# # Prepare output 
-output_dir <- "mt20210525_rnaseq_processing"
-dir.create(output_dir, showWarnings = FALSE)
-
 ```
 
 ### Custom functions
