@@ -1,0 +1,383 @@
+---
+title: "ATACseq QC"
+author: 
+  - name: "Teodora Filipovska"
+    email: "t.filipovska@nki.nl"
+    affiliation: "Netherlands Cancer Institute"
+date: '`r format(Sys.time(), "%d/%m/%Y")`'
+output: 
+  html_document:
+    theme: united
+    highlight: pygments
+    fig_caption: yes
+    code_folding: hide
+    df_print: kable
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: false
+---
+
+## Setup {.tabset}
+
+<!-- little HTML script to do indentation of the table of contents -->
+<script>
+    $(document).ready(function() {
+      $items = $('div#TOC li');
+      $items.each(function(idx) {
+        num_ul = $(this).parentsUntil('#TOC').length;
+        $(this).css({'text-indent': num_ul * 10, 'padding-left': 0});
+      });
+
+    });
+</script>
+
+```{css, echo = FALSE}
+div.sourceCode {
+  overflow-x: hidden;
+}
+```
+
+### Load packages
+
+```{r load_packages, results = 'hide', warning = FALSE, message = FALSE}
+library(DESeq2)
+library(SummarizedExperiment)
+library(GenomicRanges)
+
+library(here)
+library(ggplot2)
+library(data.table)
+library(scales)
+library(ggh4x)
+
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+```
+
+### Load data
+
+```{r load_data}
+setwd("/DATA/usr/t.filipovska/projects/ATAC-seq_TF-footprinting/analysis")
+exp <- readRDS("/DATA/usr/t.filipovska/projects/ATAC-seq_TF-footprinting/analysis/rds/experiment_6420.rds")
+```
+
+### Setup Aesthetics
+
+```{r setup_aes}
+mycolour <- "#000000FF" # Opaque Black
+
+theme_set(theme_gray())
+theme_update(text = element_text(colour = mycolour),
+             line = element_line(colour = mycolour),
+             aspect.ratio = 1,
+             axis.line  = element_line(colour = mycolour),
+             axis.ticks = element_line(colour = mycolour),
+             axis.text  = element_text(colour = mycolour),
+             legend.key = element_blank(),
+             panel.background = element_blank(),
+             panel.grid.major = element_line(colour = "grey95"),
+             panel.grid.minor = element_blank(),
+             plot.background  = element_blank(),
+             strip.background = element_blank(),
+             strip.text = element_text(colour = mycolour))
+
+rm(mycolour)
+
+scale_colour_celltype <- function(...) {
+  scale_colour_manual(
+    name = "cell lines",
+    values = c(
+      "HepG2"  = "#e41a1c",
+      "K562"  = "#377eb8"
+    ),
+    ...
+  )
+}
+
+scale_fill_celltype <- function(...) {
+  scale_fill_manual(
+    name = "cell lines",
+    values = c(
+      "HepG2"  = "#e41a1c",
+      "K562"  = "#377eb8"
+    ),
+    ...
+  )
+}
+
+fill_shape_guide <- function(...) {
+  guide_legend(override.aes = list(shape = 21), ...)
+}
+```
+
+## Aim
+
+Investigate some QC metrics for the timeseries ATACseq data.
+
+## Data wrangling
+
+Loop through the tabix files and calculate some metrics.
+
+```{r}
+peaks <- as(rowRanges(exp), "GNCList")
+
+tss_width <- 100
+flank_width <- 2000
+
+tss <- resize(genes(TxDb.Hsapiens.UCSC.hg38.knownGene), 1)
+tss_target <- resize(tss, tss_width, fix = "center")
+tss_flank  <- c(
+  flank(tss_target, flank_width / 2, start = TRUE),
+  flank(tss_target, flank_width / 2, start = FALSE)
+)
+tss_target <- as(tss_target, "GNCList")
+tss_flank  <- as(tss_flank, "GNCList")
+
+qcstats <- lapply(seq_len(ncol(exp)), function(i) {
+  dat <- fread(exp$tabix_file[[i]])
+  dat <- with(dat, GRanges(V1, IRanges(V2, V3)))
+  
+  dat <- keepStandardChromosomes(dat, "Homo_sapiens", "coarse")
+  
+  # Mitochondrial
+  mito <- sum(seqnames(dat) == "chrM")
+  dat  <- dat[seqnames(dat) != "chrM"]
+  
+  # Calculate fraction of reads in peaks
+  frip <- mean(overlapsAny(dat, peaks))
+  
+  # Calculate TSS score
+  target_tss   <- sum(overlapsAny(dat, tss_target)) / tss_width
+  target_flank <- sum(overlapsAny(dat, tss_flank)) / flank_width
+  
+  # Calculate fragment length distribution
+  fraglen <- table(width(dat))
+  fraglen <- fraglen / sum(fraglen)
+  
+  DataFrame(
+    id = i,
+    useable_reads = length(dat),
+    mitochondrial_reads = mito,
+    frip = frip,
+    tss_target = target_tss,
+    tss_flank  = target_flank,
+    fraglen = SimpleList(fraglen)
+  )
+})
+
+qcstats <- do.call(rbind, qcstats)
+```
+
+## Statistics
+
+### Read duplication
+
+This is the percent duplication metric found in the Picard MarkDuplicates logs.
+
+```{r}
+df <- data.frame(
+  run  = exp$run,
+  celltype  = exp$celltype,
+  treatment = exp$treatment,
+  replicate  = exp$replicate,
+  dup  = exp$logs$percent_duplication
+)
+
+ggplot(df, aes(interaction(celltype, replicate), dup)) +
+  geom_point(aes(shape = treatment, fill = celltype), size=3) +
+  ggtitle("Read duplication")+ theme(plot.title = element_text(hjust = 0.5)) + theme (plot.title = element_text(color="black", size=16, face="bold")) +
+  facet_grid(~ celltype, scales = "free_x", space = "free_x") +
+  geom_hline(yintercept = 0.5, colour = "purple", linetype = 2) +
+  scale_y_continuous(labels = percent_format(1),
+                     name = "Duplicated Reads",
+                     limits = c(0, NA),
+                     expand = c(0,0,0.1,0)) +
+  scale_x_discrete(name = NULL) +
+  scale_shape_manual(
+    name = "Treatment",
+    values = c(25, 21:24),
+  ) +
+  scale_fill_celltype(guide = fill_shape_guide()) +
+  guides(x = guide_axis_nested()) +
+  theme(aspect.ratio = NULL,
+        axis.text.x = element_text(angle = 90, vjust = 0.5,
+                                   margin = margin(t = 2.2, b = 2.2)))
+```
+
+### Mitochondrial reads
+
+Counts of reads originating from 'chrM' versus not originating from 'chrM'.
+
+```{r}
+df <- data.frame(
+  run  = exp$run,
+  celltype  = exp$celltype,
+  treatment = exp$treatment,
+  replicate  = exp$replicate,
+  mito = qcstats$mitochondrial_reads,
+  useable = qcstats$useable_reads
+)
+df$perc <- df$mito / (df$mito + df$useable)
+
+df2 <- tidyr::pivot_longer(df, c(mito, useable))
+
+plot <- ggplot(df2, aes(y = interaction(celltype, treatment, replicate))) +
+  geom_col(aes(x = value, fill = factor(name, c("useable", "mito"))), 
+           width = 0.8) +
+  ggtitle("Mitochondrial reads")+ theme(plot.title = element_text(hjust = 0.5)) + theme (plot.title = element_text(color="black", size=16, face="bold")) +
+  facet_grid(celltype ~ ., scales = "free_y", space = "free_y") +
+  geom_text(
+    data = df,
+    aes(x = 0, label = percent(perc, 0.1)),
+    size = 3, hjust = 1, nudge_x = -1e6
+  ) +
+  scale_fill_manual(
+    name = "Read Origin",
+    values = c("grey50", "#E41A1C"),
+    labels = c("Nuclear", "Mitochondrial")
+  ) +
+  scale_x_continuous(
+    labels = number_format(scale = 1e-6, suffix = "M"),
+    name = "Reads",
+    expand = c(0.07,0,0.1,0)
+  ) +
+  scale_y_discrete(name = NULL) +
+  guides(y = guide_axis_nested()) +
+  theme(aspect.ratio = NULL,
+        axis.text.y = element_text(margin = margin(l=2.2, r = 2.2)),
+        legend.position = c(1,0),
+        legend.justification = c(1, 0),
+        legend.background = element_blank())
+
+pdf(file = "/DATA/usr/t.filipovska/projects/ATAC-seq_TF-footprinting/analysis/Plots/mitochondrial_reads.pdf")
+print(plot)
+dev.off()
+```
+
+### TSS enrichment
+
+Number of nuclear reads overlapping `r tss_width` bp around TSSs divided by number of nuclear reads overlapping `r flank_width` bp flanking those sites. Typical recommendation is that this metric is >4.
+
+```{r}
+df <- data.frame(
+  run  = exp$run,
+  celltype  = exp$celltype,
+  treatment = exp$treatment,
+  replicate  = exp$replicate,
+  tss  = qcstats$tss_target / qcstats$tss_flank
+)
+
+ggplot(df, aes(interaction(celltype, replicate), tss)) +
+  geom_point(aes(shape = treatment, fill = celltype),
+             size = 3) +
+  ggtitle("TSS enrichment")+ theme(plot.title = element_text(hjust = 0.5)) + theme (plot.title = element_text(color="black", size=16, face="bold")) +
+  geom_hline(yintercept = 4, colour = "purple", linetype = 2) +
+  facet_grid(~ celltype, scales = "free_x", space = "free_x") +
+  scale_y_continuous(name = "Fold Enrichment",
+                     limits = c(4, NA)) +
+  scale_x_discrete(name = NULL) +
+  scale_shape_manual(
+    name = "Treatment",
+    values = c(25, 21:24),
+  ) +
+  scale_fill_celltype(guide = fill_shape_guide()) +
+  guides(x = guide_axis_nested()) +
+  theme(aspect.ratio = NULL,
+        axis.text.x = element_text(angle = 90, vjust = 0.5,
+                                   margin = margin(t = 2.2, b = 2.2)))
+```
+
+### Fraction of Reads in Peaks
+
+Number of nuclear reads that have any overlap with a peak as fraction of the total number of nuclear reads.
+
+```{r}
+df <- data.frame(
+  run  = exp$run,
+  celltype  = exp$celltype,
+  treatment = exp$treatment,
+  replicate  = exp$replicate,
+  frip = qcstats$frip
+)
+
+ggplot(df, aes(interaction(celltype, replicate), frip)) +
+  geom_point(aes(shape = treatment, fill = celltype),
+             size = 3) +
+  ggtitle("Fraction of reads in peaks")+ theme(plot.title = element_text(hjust = 0.5)) + theme (plot.title = element_text(color="black", size=16, face="bold")) +
+  facet_grid(~ celltype, scales = "free_x", space = "free_x") +
+  geom_hline(yintercept = 0.1, colour = "purple", linetype = 2) +
+  scale_y_continuous(name = "Fraction of Reads in Peaks",
+                     limits = c(0, NA),
+                     expand = c(0,0,0.1,0)) +
+  scale_x_discrete(name = NULL) +
+  scale_shape_manual(
+    name = "Treatment",
+    values = c(25, 21:24),
+  ) +
+  scale_fill_celltype(guide = fill_shape_guide()) +
+  guides(x = guide_axis_nested()) +
+  theme(aspect.ratio = NULL,
+        axis.text.x = element_text(angle = 90, vjust = 0.5,
+                                   margin = margin(t = 2.2, b = 2.2)))
+```
+
+### Fragment length distribution
+
+Count for every unique value of nuclear read start in bp minus the read end in bp how often they occur and divide that by the total number of nuclear reads.
+
+```{r}
+fraglen <- lapply(qcstats$fraglen, as.data.frame)
+fraglen <- rbindlist(fraglen, idcol = "id")
+fraglen <- transform(
+  fraglen,
+  Var1 = as.numeric(as.character(fraglen$Var1)),
+  celltype  = exp$celltype[id],
+  treatment = exp$treatment[id],
+  replicate  = exp$replicate[id],
+  run  = exp$run[id]
+)
+
+ggplot(fraglen, aes(Var1, Freq * 1000)) +
+  ggtitle("Fragment length distribution") + theme(plot.title = element_text(hjust = 0.5)) + theme (plot.title = element_text(color="black", size=16, face="bold")) +
+  geom_area(aes(fill = celltype, colour = celltype),
+            size = 0.1) +
+  geom_vline(xintercept = 147, colour = "purple", linetype = 2) +
+  scale_x_continuous(
+    name = "Fragment Length",
+    limits = c(0, 600), oob = oob_keep,
+    expand = c(0, 0),
+    breaks = c(0, 200, 400)
+  ) +
+  scale_y_continuous(
+    name = "Relative Frequency (x 1000)",
+    limits = c(0, 0.01) * 1000, oob = oob_keep,
+    expand = c(0, 0, 0.1, 0),
+    breaks = c(0, 5, 10)
+  ) +
+  scale_fill_celltype(aesthetics = c("colour", "fill")) +
+  facet_nested(treatment ~ celltype + replicate, nest_line = TRUE) +
+  theme(aspect.ratio = 2 / (1 + sqrt(5)),
+        legend.position = "none")
+```
+
+## References
+
+<div id="refs"></div>
+
+## Session Info
+
+<p>
+  <a class="btn btn-primary" data-toggle="collapse" href="#sinfo" role="button" aria-expanded="false" aria-controls="sinfo">
+    View
+  </a>
+</p>
+<div class="collapse" id="sinfo">
+  <div class="card card-body">
+
+```{r session_info, include=TRUE, echo=FALSE, results = "asis"}
+pkgs <- loadedNamespaces()
+#libTvdB::format_sessioninfo_html(pkgs)
+```
+
+  </div>
+</div>
