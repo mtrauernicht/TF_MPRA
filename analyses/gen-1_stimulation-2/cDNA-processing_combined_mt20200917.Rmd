@@ -57,129 +57,29 @@ SetFileName <- function(filename, initials) {
   filename
 }
 
-
-cbind.fill <- function(...){
-    nm <- list(...) 
-    nm <- lapply(nm, as.matrix)
-    n <- max(sapply(nm, nrow)) 
-    do.call(cbind, lapply(nm, function (x) 
-        rbind(x, matrix(, n-nrow(x), ncol(x))))) 
+# Custom ggplot2 themes
+theme_classic_lines <- function() {
+  theme_pubr(border = T, base_family = "Arial", legend = "top") +
+            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.1),
+                  strip.background = element_rect(fill = "#ced4da")
+            )
 }
 
-# Function to substring the right part of the motif
-substrRight <- function(x, n){
-  substr(x, nchar(x)-n+1, nchar(x))
+theme_classic_lines_45 <- function() {
+  theme_pubr(border = T, base_family = "Arial", legend = "top", x.text.angle = 45) +
+            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.1),
+                  strip.background = element_rect(fill = "#ced4da")
+            )
 }
 
-
-# Function to load PWM matrix
-get_pwm_feature_matrix <- function(motif_meta_fn, fimo_fn, db = 2) {
-
-  # validate args
-  valid_dbs <- 1:2
-  if(!db %in% valid_dbs)
-    stop('Invalid db (database version). Please use db=1 (maintained for backward compatibility only) or db=2')
-
-  # db=1 is maintained for backward compatibility only
-  if(db == 1) {
-
-    # read in motif metadata
-    motif_meta    <- read.csv(motif_meta_fn)
-
-    # check whether motif metadata contain essential annotations
-    if(!all(c('PWM.ID', 'Cognate.TF') %in% colnames(motif_meta))) {
-      message('The motif metadata file does not contain the essential columns PWM.ID and Cognate.TF')
-    }
-
-    motif_minimal <- motif_meta[, c('PWM.ID', 'Cognate.TF')]
-
-    # load fimo output --> extract motif id, sequence id and p-value
-    df <- read.table(fimo_fn)
-    df <- df[, c(1, 2, 7)]
-
-    colnames(df) <- c('PWM.ID', 'seqid', 'pval')
-
-    # add TF id
-    df <- merge(df, motif_minimal, by = 'PWM.ID')
-
-    # group motif hits by sequence id
-    l <- split(df, df[['seqid']])
-
-    # multiple PWM and multiple hits possible. Reduce hits to one per TF, keeping best p-val only
-    l <- lapply(l, function(x) {
-      x_by_tf <- split(x, x[['Cognate.TF']], drop = TRUE)
-      x_by_tf <- lapply(x_by_tf, function(y) y[which.min(y$pval), ])
-      do.call('rbind', x_by_tf)
-    })
-
-    # initialize feature matrix
-    n_tf          <- motif_minimal[['Cognate.TF']] %>%
-      unique %>%
-      length
-    n_seq         <- length(l)
-    pwm           <- matrix(1, nrow = n_seq, ncol = n_tf)
-    colnames(pwm) <- (motif_minimal[['Cognate.TF']] %>% unique)
-
-    # replace :: from names of composite motifs
-    colnames(pwm) <- str_replace_all(colnames(pwm), '::', '_')
-
-    # fill in feature matrix
-    for(i in 1 : n_seq) {
-      pwm[i, l[[i]][['Cognate.TF']]] <- l[[i]]$pval
-    }
-
-    # -log10 transform
-    pwm           <- -1 * log10(pwm)
-
-    # coerce to tib and return
-    tib_fimo <- as_data_frame(pwm) %>%
-      mutate(id = names(l))
-      dplyr::select(id, everything())
-
-  }
-
-  # db = 2 (default)
-  else {
-
-    # load metadata
-    tib_meta    <- read_csv(motif_meta_fn) %>%
-      # extract tf symbol from motif id (Cognate_TF unsafe, it can be empty) and replace :: occurrences
-      mutate(tf_symbol = str_remove(ID, '_[0-9]*'),
-             tf_symbol = str_replace(tf_symbol, '::', '_')) %>%
-      dplyr::select(motif_id = `PWM ID`, tf_symbol)
-
-    # load fimo results
-    tib_fimo <- read_tsv(fimo_fn) %>%
-      # extract motif id, sequence id and p-value
-      dplyr::select(motif_id, sequence_name, pval = `p-value`)
-
-    # add tf symbol to fimo results
-    tib_fimo <- tib_fimo %>%
-      left_join(tib_meta, by = 'motif_id') %>%
-      # remove hits with missing motif id (composite pwms)
-      filter(!is.na(tf_symbol))
-
-    # select best hit for each motif and sequence
-    tib_fimo <- tib_fimo %>%
-      group_by(sequence_name, tf_symbol) %>%
-      dplyr::slice(which.min(pval)) %>%
-      ungroup()
-
-    # spread into feature matrix
-    tib_fimo <- tib_fimo %>%
-      mutate(pval = -1 * log10(pval)) %>%
-      dplyr::select(-motif_id) %>%
-      spread(key = tf_symbol, value = pval, fill = 0, drop = TRUE) %>%
-      # perform cosmetics on the id
-      mutate(id = sequence_name) %>%
-      dplyr::select(-c(sequence_name)) %>%
-      dplyr::select(id, everything())
-
-  }
-
-  return(tib_fimo)
-
+theme_classic_lines_90 <- function() {
+  theme_pubr(border = T, base_family = "Arial", legend = "top", x.text.angle = 90) +
+            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.1),
+                  strip.background = element_rect(fill = "#ced4da")
+            )
 }
+
+theme_set(theme_classic_lines())
 
 # From Fede:
 # ggpairs custom functions
