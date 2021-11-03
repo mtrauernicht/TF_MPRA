@@ -177,7 +177,7 @@ theme_set(theme_classic_lines())
 
 colors_diverse <- c("#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51")
 
-ggplot <- function(...) ggplot2::ggplot(...) + 
+ggplot_cust <- function(...) ggplot2::ggplot(...) + 
   scale_color_manual(values = colors_diverse) + 
   scale_fill_manual(values = colors_diverse)
 
@@ -200,7 +200,7 @@ hline <- function(y = 0, color = "black") {
 
 ```{r data import, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
 # Load metadata file that contains all required information about the sequenced samples
-metadata_df <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/analyses/mt20211025_metadata_all_experiments.csv")
+metadata_df <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6578_gen2_stimulation-2/mt20211025_metadata_all_experiments.csv")
 
 # Load in barcode counts
 bc_files <- paste(metadata_df$path, metadata_df$file, sep = "")
@@ -209,7 +209,7 @@ names(bc_files) <- metadata_df$id
 
 
 # Import barcode annotation of both libraries
-bc_annotation <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/analyses/mt20211021_bc_annotation_combined.csv") %>%
+bc_annotation <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6578_gen2_stimulation-2/mt20211021_bc_annotation_combined.csv") %>%
   dplyr::select(-library)
 ```
 
@@ -403,7 +403,7 @@ for (i in unique(bc_df$library)) {
 ### b: read counts per TF
 bc_df_filt <- bc_df[!is.na(bc_df$tf),]
 
-ggplot(bc_df_filt %>%
+ggplot_cust(bc_df_filt %>%
          filter(neg_ctrls == "No", native_enhancer == "No", commercial_reporter == "No", hPGK == "No", rand_promoter == "No"), aes(x = rpm, y = tf)) +
   geom_violin() +
   theme(axis.text.y = element_text(size = 6)) +
@@ -414,13 +414,13 @@ bc_df_2 <- bc_df[bc_df$rpm <= 250,]
 bc_df_2 <- bc_df_2[bc_df_2$rpm >= 0.5,]
 bc_df_2 <- bc_df_2[!is.na(bc_df_2$tf),]
 
-ggplot(bc_df_2, aes(x = rpm)) +
+ggplot_cust(bc_df_2, aes(x = rpm)) +
   geom_histogram(binwidth = 20) +
   xlim(0,250)+
   ylim(0,6000)+
   facet_wrap(~sample_id)
 
-ggplot(bc_df[bc_df$rpm >= 500 & !is.na(bc_df$tf),], aes(x = rpm)) +
+ggplot_cust(bc_df[bc_df$rpm >= 500 & !is.na(bc_df$tf),], aes(x = rpm)) +
   geom_histogram(binwidth = 20) +
   xlim(250,1000)+
   ylim(0,50)+
@@ -499,7 +499,7 @@ bc_fraction$bc_reads <- as.numeric(bc_fraction$bc_reads)
 #c("#1B998B", "#2D3047", "#FF9B71", "#ECDD7B")
 # Plot to evaluate data quality per cutoff
 for (i in unique(bc_fraction$library)) {
-p <- ggplot(bc_fraction[bc_fraction$library == i,]) +
+p <- ggplot_cust(bc_fraction[bc_fraction$library == i,]) +
   geom_point(aes(x = cutoff, y = bcs_found), color = '#1B998B', size = 1) +
   geom_line(aes(x = cutoff, y = bcs_found), color = '#1B998B', size = 1) +
   geom_point(aes(x = cutoff, y = bc_reads), color = 'black', size = 1) +
@@ -777,7 +777,7 @@ outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "ZFP42_5bp_21bp_minP_3",] %>%
   dplyr::select(barcode_number, activity, sample) %>%
   unique()
 
-ggplot(outlier, aes(x = barcode_number, y = activity)) +
+ggplot_cust(outlier, aes(x = barcode_number, y = activity)) +
   geom_quasirandom() +
   xlab("barcode #") + 
   labs(title = "Zfp42 reporter - TATA-box minP mutated", 
@@ -789,7 +789,7 @@ outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "ELK1_5bp_21bp_mCMV_2",] %>%
   dplyr::select(barcode_number, activity) %>%
   unique()
 
-ggplot(outlier, aes(x = barcode_number, y = activity)) +
+ggplot_cust(outlier, aes(x = barcode_number, y = activity)) +
   geom_quasirandom()+
   xlab("barcode #") + 
   labs(title = "Elk1 reporter - bc1 attached to Pax6 reporter")
@@ -801,7 +801,7 @@ outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "TCF3_5bp_10bp_hBGm_3",] %>%
   dplyr::select(barcode_number, activity) %>%
   unique()
 
-ggplot(outlier, aes(x = barcode_number, y = activity)) +
+ggplot_cust(outlier, aes(x = barcode_number, y = activity)) +
   geom_quasirandom() +
   xlab("barcode #") + 
   labs(title = "Tcf3 reporter - bc1 attached to multiple (less active) reporters")
