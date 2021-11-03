@@ -56,130 +56,6 @@ SetFileName <- function(filename, initials) {
   filename
 }
 
-
-cbind.fill <- function(...){
-    nm <- list(...) 
-    nm <- lapply(nm, as.matrix)
-    n <- max(sapply(nm, nrow)) 
-    do.call(cbind, lapply(nm, function (x) 
-        rbind(x, matrix(, n-nrow(x), ncol(x))))) 
-}
-
-# Function to substring the right part of the motif
-substrRight <- function(x, n){
-  substr(x, nchar(x)-n+1, nchar(x))
-}
-
-
-# Function to load PWM matrix
-get_pwm_feature_matrix <- function(motif_meta_fn, fimo_fn, db = 2) {
-
-  # validate args
-  valid_dbs <- 1:2
-  if(!db %in% valid_dbs)
-    stop('Invalid db (database version). Please use db=1 (maintained for backward compatibility only) or db=2')
-
-  # db=1 is maintained for backward compatibility only
-  if(db == 1) {
-
-    # read in motif metadata
-    motif_meta    <- read.csv(motif_meta_fn)
-
-    # check whether motif metadata contain essential annotations
-    if(!all(c('PWM.ID', 'Cognate.TF') %in% colnames(motif_meta))) {
-      message('The motif metadata file does not contain the essential columns PWM.ID and Cognate.TF')
-    }
-
-    motif_minimal <- motif_meta[, c('PWM.ID', 'Cognate.TF')]
-
-    # load fimo output --> extract motif id, sequence id and p-value
-    df <- read.table(fimo_fn)
-    df <- df[, c(1, 2, 7)]
-
-    colnames(df) <- c('PWM.ID', 'seqid', 'pval')
-
-    # add TF id
-    df <- merge(df, motif_minimal, by = 'PWM.ID')
-
-    # group motif hits by sequence id
-    l <- split(df, df[['seqid']])
-
-    # multiple PWM and multiple hits possible. Reduce hits to one per TF, keeping best p-val only
-    l <- lapply(l, function(x) {
-      x_by_tf <- split(x, x[['Cognate.TF']], drop = TRUE)
-      x_by_tf <- lapply(x_by_tf, function(y) y[which.min(y$pval), ])
-      do.call('rbind', x_by_tf)
-    })
-
-    # initialize feature matrix
-    n_tf          <- motif_minimal[['Cognate.TF']] %>%
-      unique %>%
-      length
-    n_seq         <- length(l)
-    pwm           <- matrix(1, nrow = n_seq, ncol = n_tf)
-    colnames(pwm) <- (motif_minimal[['Cognate.TF']] %>% unique)
-
-    # replace :: from names of composite motifs
-    colnames(pwm) <- str_replace_all(colnames(pwm), '::', '_')
-
-    # fill in feature matrix
-    for(i in 1 : n_seq) {
-      pwm[i, l[[i]][['Cognate.TF']]] <- l[[i]]$pval
-    }
-
-    # -log10 transform
-    pwm           <- -1 * log10(pwm)
-
-    # coerce to tib and return
-    tib_fimo <- as_data_frame(pwm) %>%
-      mutate(id = names(l))
-      dplyr::select(id, everything())
-
-  }
-
-  # db = 2 (default)
-  else {
-
-    # load metadata
-    tib_meta    <- read_csv(motif_meta_fn) %>%
-      # extract tf symbol from motif id (Cognate_TF unsafe, it can be empty) and replace :: occurrences
-      mutate(tf_symbol = str_remove(ID, '_[0-9]*'),
-             tf_symbol = str_replace(tf_symbol, '::', '_')) %>%
-      dplyr::select(motif_id = `PWM ID`, tf_symbol)
-
-    # load fimo results
-    tib_fimo <- read_tsv(fimo_fn) %>%
-      # extract motif id, sequence id and p-value
-      dplyr::select(motif_id, sequence_name, pval = `p-value`)
-
-    # add tf symbol to fimo results
-    tib_fimo <- tib_fimo %>%
-      left_join(tib_meta, by = 'motif_id') %>%
-      # remove hits with missing motif id (composite pwms)
-      filter(!is.na(tf_symbol))
-
-    # select best hit for each motif and sequence
-    tib_fimo <- tib_fimo %>%
-      group_by(sequence_name, tf_symbol) %>%
-      dplyr::slice(which.min(pval)) %>%
-      ungroup()
-
-    # spread into feature matrix
-    tib_fimo <- tib_fimo %>%
-      mutate(pval = -1 * log10(pval)) %>%
-      dplyr::select(-motif_id) %>%
-      spread(key = tf_symbol, value = pval, fill = 0, drop = TRUE) %>%
-      # perform cosmetics on the id
-      mutate(id = sequence_name) %>%
-      dplyr::select(-c(sequence_name)) %>%
-      dplyr::select(id, everything())
-
-  }
-
-  return(tib_fimo)
-
-}
-
 # From Fede:
 # ggpairs custom functions
 corColor <- function(data, mapping, color = I("black"), sizeRange = c(1, 3), ...) {
@@ -240,6 +116,30 @@ ReadFasta<-function(file) {
    # Return the data frame as a result object from the function
    return(DF)
 }
+
+# Custom ggplot2 themes
+theme_classic_lines <- function() {
+  theme_pubr(border = T, base_family = "Arial", legend = "top") +
+            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.1),
+                  strip.background = element_rect(fill = "#ced4da")
+            )
+}
+
+theme_classic_lines_45 <- function() {
+  theme_pubr(border = T, base_family = "Arial", legend = "top", x.text.angle = 45) +
+            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.1),
+                  strip.background = element_rect(fill = "#ced4da")
+            )
+}
+
+theme_classic_lines_90 <- function() {
+  theme_pubr(border = T, base_family = "Arial", legend = "top", x.text.angle = 90) +
+            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.1),
+                  strip.background = element_rect(fill = "#ced4da")
+            )
+}
+
+theme_set(theme_classic_lines())
 ```
 
 
@@ -279,7 +179,7 @@ cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6210_stimu
 # 
 # #ggplot(dmso_2i_lif) +
 #   #geom_point(aes(x = `2i_pos_LIF`, y = `DMSO 1`), color = "#1B998B", 
-#              #size = 0.5, alpha = 0.5) + theme_bw() +
+#              #size = 0.5, alpha = 0.5) +  +
 #   #geom_point(aes(x = `2i_pos_LIF`, y = `DMSO 2`), color = "#2D3047",
 #              #size = 0.5, alpha = 0.5) +
 #   #geom_point(aes(x = `2i_pos_LIF`, y = `DMSO 3`), color = "#FF9B71",
@@ -314,14 +214,14 @@ colors <- c("#1B998B", "#2D3047", "#FF9B71")
 ## reporter activity distribution for each experiment individually
 ggplot(data = cDNA_df %>% dplyr::select(condition, log_reporter_activity, reporter_id) %>% unique(), aes(y = log_reporter_activity, x = "x")) + 
   geom_quasirandom(alpha = 0.4) + xlab("log2(cDNA/pDNA)") + 
-  labs(title = "reporter activity distribution per condition") + theme_bw() + facet_wrap(vars(condition))
+  labs(title = "reporter activity distribution per condition") + facet_wrap(vars(condition))
 
 ## reporter activity distribution - highlight negative motif controls
 ggplot(cDNA_df[cDNA_df$hPGK == "No",], aes(x = log_activity, fill = neg_ctrls, alpha = 0.4)) + 
   geom_density() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - negative ctrls", subtitle = "Green = TF-mediated activity") +
   scale_fill_manual(values = colors) +
-  xlim(-10,10) + theme_bw()+
+  xlim(-10,10) + 
   theme(text = element_text(size = 12))
 
 ## reporter activity distribution - highlight Miguels enhancer control
@@ -330,7 +230,7 @@ ggplot(data = cDNA_df %>% dplyr::select(condition, log_reporter_activity, report
   geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - native enhancers") +
   scale_color_manual(values = colors) +
-  theme_bw()+ facet_wrap(vars(condition))
+  facet_wrap(vars(condition))
 
 
 ## reporter activity distribution - highlight different promoters
@@ -339,8 +239,8 @@ ggplot(data = cDNA_df %>%
        aes(y = log_reporter_activity, x = Promoter, color = Promoter, alpha = 0.4)) + 
   geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - promoters") +
-  scale_color_brewer(palette = "Set2") +
-  theme_bw()
+  scale_color_brewer(palette = "Set2")
+  
 
 ## reporter activity distribution - highlight different promoters - and negative controls (does the activity actually come from the TFs or from the promoter itself?)
 ggplot(cDNA_df[cDNA_df$Promoter != "hPGK",] %>% 
@@ -348,7 +248,7 @@ ggplot(cDNA_df[cDNA_df$Promoter != "hPGK",] %>%
   geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - promoters") +
   scale_color_brewer(palette = "Set2") +
-  theme_bw() + facet_wrap(~Promoter)
+  facet_wrap(~Promoter)
 
 ## reporter activity distribution - highlight different distances
 ggplot(data = cDNA_df[cDNA_df$Distance != "",] %>% 
@@ -356,8 +256,8 @@ ggplot(data = cDNA_df[cDNA_df$Distance != "",] %>%
        aes(y = log_reporter_activity, x = Distance, color = Distance, alpha = 0.4)) + 
   geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - distances") +
-  scale_color_brewer(palette = "Set2") +
-  theme_bw()
+  scale_color_brewer(palette = "Set2")
+  
 
 ## reporter activity distribution - highlight different spacings
 ggplot(data = cDNA_df[cDNA_df$Spacing != "",] %>% 
@@ -366,15 +266,15 @@ ggplot(data = cDNA_df[cDNA_df$Spacing != "",] %>%
   geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - spacings") +
   scale_color_brewer(palette = "Set2") +
-  theme_bw() + facet_wrap(~TF)
+  facet_wrap(~TF)
 
 ggplot(data = cDNA_df[cDNA_df$Spacing != "",] %>% 
          dplyr::select(log_reporter_activity, reporter_id, Spacing, TF) %>% unique(), 
        aes(y = log_reporter_activity, x = Spacing, color = Spacing, alpha = 0.4)) + 
   geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - spacings") +
-  scale_color_brewer(palette = "Set2") +
-  theme_bw()
+  scale_color_brewer(palette = "Set2")
+  
 
 ## reporter activity distribution - highlight different backgrounds
 ggplot(data = cDNA_df[cDNA_df$Background != "",] %>% 
@@ -382,8 +282,8 @@ ggplot(data = cDNA_df[cDNA_df$Background != "",] %>%
        aes(y = log_reporter_activity, x = Background, color = Background, alpha = 0.4)) + 
   geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
   labs(title = "reporter activity distribution - backgrounds") +
-  scale_color_brewer(palette = "Set2") +
-  theme_bw()
+  scale_color_brewer(palette = "Set2")
+  
 
 ## reporter activity distribution - highlight different tfs - and negative controls
 ggplot(cDNA_df[cDNA_df$native_enhancer == "No" & cDNA_df$Promoter != "hPGK",]%>% 
@@ -392,7 +292,7 @@ ggplot(cDNA_df[cDNA_df$native_enhancer == "No" & cDNA_df$Promoter != "hPGK",]%>%
   geom_quasirandom() + 
   labs(title = "reporter activity distribution - tfs") +
   scale_color_brewer(palette = "Set2") +
-  theme_bw() + facet_wrap(~TF)
+  facet_wrap(~TF)
 
 ## reporter activity distribution - highlight different tfs - and negative controls
 ggplot(cDNA_df[cDNA_df$native_enhancer == "No" & cDNA_df$Promoter != "hPGK" & cDNA_df$neg_ctrls == "No",]%>% 
@@ -400,8 +300,7 @@ ggplot(cDNA_df[cDNA_df$native_enhancer == "No" & cDNA_df$Promoter != "hPGK" & cD
          unique() %>% mutate(TF = gsub("_neg", "", TF)), 
        aes(y = log_reporter_activity, x = condition, alpha = 0.4)) + 
   geom_quasirandom() + 
-  labs(title = "reporter activity distribution - tfs") +
-  theme_bw() + 
+  labs(title = "reporter activity distribution - tfs")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 9)) +
   facet_wrap(~TF)
 ```
@@ -460,7 +359,7 @@ comb_activity <- data.frame("pos" = colnames(tf_activity_heatmap),
                              "activity" = colSums(tf_activity_heatmap)) 
 
 ggplot(comb_activity, aes(x = pos, y = activity)) +
-  geom_bar(stat = "identity", aes(fill = activity)) + theme_classic() +
+  geom_bar(stat = "identity", aes(fill = activity)) + 
     theme(axis.title.y = element_blank(), axis.text.y = element_blank(), 
           axis.ticks.y = element_blank(), axis.ticks.x = element_blank(),
           axis.text.x = element_blank(), 
@@ -692,7 +591,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 #   ylab("Variance explained (%)") + xlab("") + 
 #   labs(title = "Linear variance modelling", 
 #        subtitle = "Expression variance predicted by features") +
-#   theme_bw() +
+#    +
 #   theme(text = element_text(size = 12)) +
 #   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12), 
 #         axis.text.y = element_text(size = 10)) +
@@ -702,7 +601,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 #           add = "reg.line", 
 #           add.params = list(color = "blue", fill = "lightgray"),
 #           conf.int = TRUE, ylab = "Predicted log2-activity", size = 0.5,
-#           xlab = "Average log2-activity") + theme_bw() + facet_wrap(~condition) +
+#           xlab = "Average log2-activity") +  + facet_wrap(~condition) +
 #   stat_cor(aes(label = ..r.label..), method = "pearson", label.x = -2, label.y = 4)
 # 
 # 
@@ -715,7 +614,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 #    add.params = list(color = "blue", fill = "lightgray"),
 #    conf.int = TRUE, ylab = "Predicted log2-activity", 
 #    title = i,
-#    xlab = "Average log2-activity") + theme_bw()
+#    xlab = "Average log2-activity") + 
 #   
 #   
 #   # Feature importance overview for each TF (including mean activities per feature)
@@ -725,7 +624,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 #   geom_bar(stat = "identity") + 
 #   ylab("Variance explained (%)") + xlab("") +
 #   ggtitle(i)+
-#   theme_bw() +
+#    +
 #   theme(text = element_text(size = 12)) +
 #   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12), 
 #         axis.text.y = element_text(size = 10)) +
@@ -738,7 +637,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 #   ggtitle(i)+
 #   geom_bar(stat = "identity") + 
 #   ylab("Weight") + xlab("") +
-#   theme_bw() +
+#    +
 #   theme(text = element_text(size = 12)) +
 #   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 10), 
 #         axis.text.y = element_text(size = 10)) +
@@ -1041,7 +940,7 @@ for(i in unique(tf_activity_heatmap$TF[tf_activity_heatmap$TF != "Irx3" & tf_act
 #     labs(title = "TF activity distribution per condition", 
 #          subtitle = paste("Page", i)) +
 #     facet_wrap_paginate(~TF, ncol = 3, nrow = 3, page = i) +
-#     theme_bw() +
+#      +
 #     ylim(0,6) +
 #     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
 #           axis.text.y = element_text(size = 10)) +
@@ -1068,7 +967,7 @@ for(i in unique(tf_activity_heatmap$TF[tf_activity_heatmap$TF != "Irx3" & tf_act
 #                    method="t.test", paired=TRUE) + 
 #     labs(title = "hPGK controls: activity distribution per condition", 
 #          subtitle = p) +
-#     theme_bw() +
+#      +
 #     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
 #           axis.text.y = element_text(size = 10)) +
 #     ylab("TF reporter activity") + xlab("") + 
@@ -1093,7 +992,7 @@ for(i in unique(tf_activity_heatmap$TF[tf_activity_heatmap$TF != "Irx3" & tf_act
 #          subtitle = paste("Page", i)) +
 #     facet_wrap_paginate(~TF, ncol = 3, nrow = 3, page = i) +
 #     ylim(0,6) +
-#     theme_bw() +
+#      +
 #     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
 #           axis.text.y = element_text(size = 10)) +
 #     ylab("TF reporter activity") + xlab("") + 
@@ -1120,7 +1019,7 @@ for(i in unique(tf_activity_heatmap$TF[tf_activity_heatmap$TF != "Irx3" & tf_act
 #     labs(title = "TF activity distribution per condition - only negative controls", 
 #          subtitle = paste("Page", i)) +
 #     facet_wrap_paginate(~TF, ncol = 3, nrow = 3, page = i) +
-#     theme_bw() +
+#      +
 #     ylim(0,6) +
 #     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
 #           axis.text.y = element_text(size = 10)) +
@@ -1177,7 +1076,7 @@ for(i in unique(tf_activity_heatmap$TF[tf_activity_heatmap$TF != "Irx3" & tf_act
 #     labs(title = "Trp53 activity distribution per design and condition", 
 #          subtitle = paste("Page", i)) +
 #     facet_wrap_paginate(~reporter_id, ncol = 3, nrow = 3, page = i) +
-#     theme_bw() +
+#      +
 #     ylim(0,16) +
 #     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
 #           axis.text.y = element_text(size = 10)) +
@@ -1195,7 +1094,7 @@ for(i in unique(tf_activity_heatmap$TF[tf_activity_heatmap$TF != "Irx3" & tf_act
 #     scale_color_manual(values = c("#1B998B", "#2D3047", "#FF9B71")) +
 #     geom_boxplot() +
 #     labs(title = "Trp53 activity distribution per design and condition") +
-#     theme_bw() +
+#      +
 #     ylim(-2,6) +
 #     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
 #           axis.text.y = element_text(size = 10)) +
@@ -1228,7 +1127,7 @@ for(i in unique(tf_activity_heatmap$TF[tf_activity_heatmap$TF != "Irx3" & tf_act
 #       labs(title = "Comparing spacings: TF activity distribution per condition", 
 #            subtitle = paste("Page", i)) +
 #       facet_wrap_paginate(~TF, nrow = 2, ncol = 2, page = i) +
-#       theme_bw() +
+#        +
 #       ylim(0,6) +
 #       theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
 #            axis.text.y = element_text(size = 10)) +
@@ -1260,7 +1159,7 @@ for(i in unique(tf_activity_heatmap$TF[tf_activity_heatmap$TF != "Irx3" & tf_act
 #       labs(title = "Comparing backgrounds: TF activity distribution per condition", 
 #            subtitle = paste("Page", i)) +
 #       facet_wrap_paginate(~TF, nrow = 2, ncol = 2, page = i) +
-#       theme_bw() +
+#        +
 #       ylim(0,6) +
 #       theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
 #            axis.text.y = element_text(size = 10)) +
@@ -1290,7 +1189,7 @@ for(i in unique(tf_activity_heatmap$TF[tf_activity_heatmap$TF != "Irx3" & tf_act
 #       labs(title = "Comparing promoters: TF activity distribution per condition", 
 #            subtitle = paste("Page", i)) +
 #       facet_wrap_paginate(~TF, nrow = 2, ncol = 2, page = i) +
-#       theme_bw() +
+#        +
 #       ylim(0,6) +
 #       theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
 #            axis.text.y = element_text(size = 10)) +
@@ -1320,7 +1219,7 @@ for(i in unique(tf_activity_heatmap$TF[tf_activity_heatmap$TF != "Irx3" & tf_act
 #       labs(title = "Miguels native enhancers per promoter", 
 #            subtitle = paste("Page", i)) +
 #       facet_wrap_paginate(~TF, nrow = 2, ncol = 2, page = i) +
-#       theme_bw() +
+#        +
 #       ylim(0,6) +
 #       theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
 #            axis.text.y = element_text(size = 10)) +
@@ -1442,7 +1341,7 @@ ggplot(exp_variance,
   ylab("Variance explained (%)") + xlab("") + 
   labs(title = "Linear variance modelling", 
        subtitle = "Expression variance predicted by features") +
-  theme_bw() +
+   +
   theme(text = element_text(size = 12)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12), 
         axis.text.y = element_text(size = 10)) +
@@ -1452,7 +1351,7 @@ ggscatter(cDNA_df_TF, x = "log_reporter_activity", y = "activity_predicted",
           add = "reg.line", 
           add.params = list(color = "blue", fill = "lightgray"),
           conf.int = TRUE, ylab = "Predicted log2-activity", size = 0.5,
-          xlab = "Average log2-activity") + theme_bw() + facet_wrap(~TF) + 
+          xlab = "Average log2-activity") +  + facet_wrap(~TF) + 
   stat_cor(aes(label = ..r.label..), method = "pearson", label.x = -2, label.y = 4)
 
 
@@ -1465,7 +1364,7 @@ for (i in unique(cDNA_df_TF$TF)) {
    add.params = list(color = "blue", fill = "lightgray"),
    conf.int = TRUE, ylab = "Predicted log2-activity", 
    title = i,
-   xlab = "Average log2-activity") + theme_bw()
+   xlab = "Average log2-activity") + 
   
   
   # Feature importance overview for each TF (including mean activities per feature)
@@ -1475,7 +1374,7 @@ for (i in unique(cDNA_df_TF$TF)) {
   geom_bar(stat = "identity") + 
   ylab("Variance explained (%)") + xlab("") +
   ggtitle(i)+
-  theme_bw() +
+   +
   theme(text = element_text(size = 12)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12), 
         axis.text.y = element_text(size = 10)) +
@@ -1488,7 +1387,7 @@ for (i in unique(cDNA_df_TF$TF)) {
   ggtitle(i)+
   geom_bar(stat = "identity") + 
   ylab("Weight") + xlab("") +
-  theme_bw() +
+   +
   theme(text = element_text(size = 12)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 10), 
         axis.text.y = element_text(size = 10)) +
@@ -1610,7 +1509,7 @@ ggplot(exp_variance,
   ylab("Variance explained (%)") + xlab("") + 
   labs(title = "Linear variance modelling", 
        subtitle = "Expression variance predicted by features") +
-  theme_bw() +
+   +
   theme(text = element_text(size = 12)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12), 
         axis.text.y = element_text(size = 10)) +
@@ -1639,7 +1538,7 @@ for (i in unique(cDNA_df_TF$TF)) {
    add.params = list(color = "blue", fill = "lightgray"),
    conf.int = TRUE, ylab = "Predicted log2-activity", 
    title = i,
-   xlab = "Average log2-activity") + theme_bw()
+   xlab = "Average log2-activity") + 
   
   
   # Feature importance overview for each TF (including mean activities per feature)
@@ -1648,7 +1547,7 @@ for (i in unique(cDNA_df_TF$TF)) {
   scale_fill_manual(values = c("#1B998B", "#2D3047")) +
   geom_bar(stat = "identity") + 
   ylab("Variance explained (%)") + xlab("") +
-  theme_bw() +
+   +
   theme(text = element_text(size = 12)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12), 
         axis.text.y = element_text(size = 10)) +
@@ -1660,7 +1559,7 @@ for (i in unique(cDNA_df_TF$TF)) {
   scale_fill_manual(values = c("#1B998B", "#2D3047", "#FF9B71", "#ECDD7B", "#C2B2B4", "#A54657")) +
   geom_bar(stat = "identity") + 
   ylab("Weight") + xlab("") +
-  theme_bw() +
+   +
   theme(text = element_text(size = 12)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 10), 
         axis.text.y = element_text(size = 10)) +
@@ -1704,14 +1603,14 @@ for (i in unique(cDNA_df_TF$TF)) {
 # 
 # x1 <- ggplot(tf_properties, aes(x = chromatin_regulation_mode, y = value)) +
 #   geom_quasirandom(width = 0.2) +
-#   theme_bw() +
+#    +
 #   xlab("Chromatin regulation mode") +
 #   theme(axis.text.x = element_text(angle = 90, hjust = 1.0, vjust = 0))+
 #   ylab("TF reporter quality")
 # 
 # x2 <- ggplot(tf_properties, aes(x = chromatin_regulation_mode, y = log_reporter_activity_relative)) +
 #   geom_quasirandom(width = 0.2) +
-#   theme_bw() +
+#    +
 #   xlab("Chromatin regulation mode") +
 #   theme(axis.text.x = element_text(angle = 90, hjust = 1.0, vjust = 0))+
 #   ylab("TF reporter expression")
@@ -1724,14 +1623,14 @@ for (i in unique(cDNA_df_TF$TF)) {
 # 
 # y1 <- ggplot(tf_properties, aes(x = TF_superclass, y = value)) +
 #   geom_quasirandom(width = 0.2) +
-#   theme_bw() +
+#    +
 #   theme(axis.text.x = element_text(angle = 90, hjust = 1.0, vjust = 0))+
 #   xlab("TF superclass") +
 #   ylab("TF reporter quality")
 # 
 # y2 <- ggplot(tf_properties, aes(x = TF_superclass, y = log_reporter_activity_relative)) +
 #   geom_quasirandom(width = 0.2) +
-#   theme_bw() +
+#    +
 #   theme(axis.text.x = element_text(angle = 90, hjust = 1.0, vjust = 0))+
 #   xlab("TF superclass") +
 #   ylab("TF reporter expression")
@@ -1742,13 +1641,13 @@ for (i in unique(cDNA_df_TF$TF)) {
 # 
 # z1 <- ggplot(tf_properties, aes(x = mode_of_regulation, y = value)) +
 #   geom_quasirandom(width = 0.2) +
-#   theme_bw() +
+#    +
 #   xlab("Mode of regulation") +
 #   ylab("TF reporter quality")
 # 
 # z2 <- ggplot(tf_properties, aes(x = mode_of_regulation, y = log_reporter_activity_relative)) +
 #   geom_quasirandom(width = 0.2) +
-#   theme_bw() +
+#    +
 #   xlab("Mode of regulation") +
 #   ylab("TF reporter expression")
 # 
@@ -1758,14 +1657,14 @@ for (i in unique(cDNA_df_TF$TF)) {
 # 
 # x4 <- ggplot(tf_properties, aes(x = tissue_of_expression, y = value)) +
 #   geom_quasirandom(width = 0.2) +
-#   theme_bw() +
+#    +
 #   theme(axis.text.x = element_text(angle = 90, hjust = 1.0, vjust = 0))+
 #   xlab("Tissue specificity") +
 #   ylab("TF reporter quality")
 # 
 # x5 <- ggplot(tf_properties, aes(x = tissue_of_expression, y = log_reporter_activity_relative)) +
 #   geom_quasirandom(width = 0.2) +
-#   theme_bw() +
+#    +
 #   theme(axis.text.x = element_text(angle = 90, hjust = 1.0, vjust = 0))+
 #   xlab("Tissue specificity") +
 #   ylab("TF reporter expression")
@@ -1776,14 +1675,14 @@ for (i in unique(cDNA_df_TF$TF)) {
 # 
 # x6 <- ggplot(tf_properties, aes(x = DBD, y = value)) +
 #   geom_quasirandom(width = 0.2) +
-#   theme_bw() +
+#    +
 #   theme(axis.text.x = element_text(angle = 90, hjust = 1.0, vjust = 0))+
 #   xlab("DNA binding domain") +
 #   ylab("TF reporter quality")
 # 
 # x7 <- ggplot(tf_properties, aes(x = DBD, y = log_reporter_activity_relative)) +
 #   geom_quasirandom(width = 0.2) +
-#   theme_bw() +
+#    +
 #   theme(axis.text.x = element_text(angle = 90, hjust = 1.0, vjust = 0))+
 #   xlab("DNA binding domain") +
 #   ylab("TF reporter expression")
@@ -1904,7 +1803,7 @@ ggplot(exp_variance[grep("Trp53", exp_variance$TF),],
   ylab("Variance explained (%)") + xlab("") + 
   labs(title = "Linear variance modelling", 
        subtitle = "Expression variance predicted by features") +
-  theme_bw() +
+   +
   theme(text = element_text(size = 12)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12), 
         axis.text.y = element_text(size = 10)) +
@@ -1933,7 +1832,7 @@ for (i in unique(cDNA_df_TF$TF[grep("Creb1", cDNA_df_TF$TF)])) {
    add.params = list(color = "blue", fill = "lightgray"),
    conf.int = TRUE, ylab = "Predicted log2-activity", 
    title = i,
-   xlab = "Average log2-activity") + theme_bw()
+   xlab = "Average log2-activity") + 
   
   
   # Feature importance overview for each TF (including mean activities per feature)
@@ -1942,7 +1841,7 @@ for (i in unique(cDNA_df_TF$TF[grep("Creb1", cDNA_df_TF$TF)])) {
   scale_fill_manual(values = c("#1B998B", "#2D3047")) +
   geom_bar(stat = "identity") + 
   ylab("Variance explained (%)") + xlab("") +
-  theme_bw() +
+   +
   theme(text = element_text(size = 12)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12), 
         axis.text.y = element_text(size = 10)) +
@@ -1954,7 +1853,7 @@ for (i in unique(cDNA_df_TF$TF[grep("Creb1", cDNA_df_TF$TF)])) {
   scale_fill_manual(values = c("#1B998B", "#2D3047", "#FF9B71", "#ECDD7B", "#C2B2B4", "#A54657")) +
   geom_bar(stat = "identity") + 
   ylab("Weight") + xlab("") +
-  theme_bw() +
+   +
   theme(text = element_text(size = 12)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 10), 
         axis.text.y = element_text(size = 10)) 
