@@ -347,10 +347,19 @@ ggplot(exp_counts_m %>%
 # Make .bed file from all motifs
 tib_fimo <- read_tsv("/DATA/usr/m.trauernicht/projects/SuRE-TF/ATAC_seq_hepg2/fimo_out/fimo.tsv") %>%
   # extract motif id, sequence id and p-value
-  dplyr::select(motif_id, sequence_name, pval = `p-value`, 'motif_start' = start, 'motif_stop' = stop) 
+  dplyr::select(motif_id, sequence_name, pval = `p-value`, 'motif_start' = start, 'motif_stop' = stop, matched_sequence) 
   # # select a p-value cutoff?
   # filter(pval < 1e-06)
   
+# only select exact k-mer matches, so I only take direct comparisons with my reporters
+kmer_motifs <- read_csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/tf_motifs_all.csv") %>%
+  filter(str_detect(TF, "neg", negate = T))
+kmer_motifs2 <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/parameter_files/mt20191119_TFs_list_updated.csv") %>%
+  dplyr::select(TF, 'motif' = Motif)
+kmer_motifs <- rbind(kmer_motifs, kmer_motifs2)
+
+tib_fimo_match <- tib_fimo[tib_fimo$matched_sequence %in% kmer_motifs$motif,]
+
 
 # select best hit for each motif and sequence
 tib_fimo <- tib_fimo %>%
@@ -389,7 +398,7 @@ tib_fimo_2 <- tib_fimo_2 %>%
 
 for (i in unique(tib_fimo_2$motif_id)) {
   write.table(tib_fimo_2[tib_fimo_2$motif_id == i,] %>% dplyr::select(-motif_id),
-              file = paste("/DATA/usr/m.trauernicht/projects/SuRE-TF/ATAC_seq_hepg2/motifs/all/", i, ".bed", sep = ""),
+              file = paste("/DATA/usr/m.trauernicht/projects/SuRE-TF/ATAC_seq_hepg2/motifs/exact_reporter_match_only/", i, ".bed", sep = ""),
               row.names = F,
               col.names = F,
               quote = F,
@@ -535,6 +544,19 @@ difftf_activity <- read_tsv("/DATA/usr/m.trauernicht/projects/SuRE-TF/ATAC_seq_h
 
 difftf_activity2 <- read_tsv("/DATA/usr/m.trauernicht/projects/SuRE-TF/ATAC_seq_hepg2/diffTF/output_rna_allTFBS/FINAL_OUTPUT/extension100/HepG2vsK562.top1000.summary.tsv") %>%
   dplyr::select(TF, 'diffTF_activity2' = weighted_meanDifference, 'classification2' = classification_q0.001_final)
+
+difftf_activity3 <- read_tsv("/DATA/usr/m.trauernicht/projects/SuRE-TF/ATAC_seq_hepg2/diffTF/output_rna_exact_match_only/FINAL_OUTPUT/extension100/HepG2vsK562.top1000.summary.tsv") %>%
+  dplyr::select(TF, 'diffTF_activity2' = weighted_meanDifference)
+
+# Check if there is a difference between using only direct k-mers as input or using (more degenerate) motif matches
+diff <- merge(difftf_activity, difftf_activity3, by = "TF")
+ggplot(diff, aes(x = diffTF_activity, y = diffTF_activity2)) +
+  geom_point() +
+  xlab("DiffTF activity, input = regions similar to motif") +
+  ylab("DiffTF activity, input = same sequence as in reporter") +
+  geom_abline(linetype = "dashed")
+
+
 
 # Import mean reporter activities per TF
 reporter_activity <- read_csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/ATAC_seq_hepg2/diffTF/tf_reporter_activity.csv")

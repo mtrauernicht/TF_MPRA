@@ -80,6 +80,11 @@ theme_classic_lines_90 <- function() {
 }
 
 theme_set(theme_classic_lines())
+
+
+ggplot <- function(...) ggplot2::ggplot(...) + 
+  scale_color_manual(values = colors_diverse) + 
+  scale_fill_manual(values = colors_diverse)
 ```
 
 
