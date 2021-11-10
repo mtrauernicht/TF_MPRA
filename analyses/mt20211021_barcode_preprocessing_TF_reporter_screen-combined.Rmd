@@ -155,20 +155,20 @@ corColor <- function(data, mapping, color = I("black"), sizeRange = c(1, 3), ...
 
 # Custom ggplot2 themes
 theme_classic_lines <- function() {
-  theme_pubr(border = T, base_family = "Arial", legend = "top") +
+  theme_pubr(border = T, legend = "top") +
             theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.1),
                   strip.background = element_rect(fill = "#ced4da"))
     
 }
 
 theme_classic_lines_45 <- function() {
-  theme_pubr(border = T, base_family = "Arial", legend = "top", x.text.angle = 45) +
+  theme_pubr(border = T, legend = "top", x.text.angle = 45) +
             theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.1),
                   strip.background = element_rect(fill = "#ced4da"))
 }
 
 theme_classic_lines_90 <- function() {
-  theme_pubr(border = T, base_family = "Arial", legend = "top", x.text.angle = 90) +
+  theme_pubr(border = T,legend = "top", x.text.angle = 90) +
             theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.1),
                   strip.background = element_rect(fill = "#ced4da"))
 }
@@ -177,7 +177,7 @@ theme_set(theme_classic_lines())
 
 colors_diverse <- c("#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51")
 
-ggplot_cust <- function(...) ggplot2::ggplot(...) + 
+ggplot_custom <- function(...) ggplot2::ggplot(...) + 
   scale_color_manual(values = colors_diverse) + 
   scale_fill_manual(values = colors_diverse)
 
@@ -403,7 +403,7 @@ for (i in unique(bc_df$library)) {
 ### b: read counts per TF
 bc_df_filt <- bc_df[!is.na(bc_df$tf),]
 
-ggplot_cust(bc_df_filt %>%
+ggplot_custom(bc_df_filt %>%
          filter(neg_ctrls == "No", native_enhancer == "No", commercial_reporter == "No", hPGK == "No", rand_promoter == "No"), aes(x = rpm, y = tf)) +
   geom_violin() +
   theme(axis.text.y = element_text(size = 6)) +
@@ -414,13 +414,13 @@ bc_df_2 <- bc_df[bc_df$rpm <= 250,]
 bc_df_2 <- bc_df_2[bc_df_2$rpm >= 0.5,]
 bc_df_2 <- bc_df_2[!is.na(bc_df_2$tf),]
 
-ggplot_cust(bc_df_2, aes(x = rpm)) +
+ggplot_custom(bc_df_2, aes(x = rpm)) +
   geom_histogram(binwidth = 20) +
   xlim(0,250)+
   ylim(0,6000)+
   facet_wrap(~sample_id)
 
-ggplot_cust(bc_df[bc_df$rpm >= 500 & !is.na(bc_df$tf),], aes(x = rpm)) +
+ggplot_custom(bc_df[bc_df$rpm >= 500 & !is.na(bc_df$tf),], aes(x = rpm)) +
   geom_histogram(binwidth = 20) +
   xlim(250,1000)+
   ylim(0,50)+
@@ -499,7 +499,7 @@ bc_fraction$bc_reads <- as.numeric(bc_fraction$bc_reads)
 #c("#1B998B", "#2D3047", "#FF9B71", "#ECDD7B")
 # Plot to evaluate data quality per cutoff
 for (i in unique(bc_fraction$library)) {
-p <- ggplot_cust(bc_fraction[bc_fraction$library == i,]) +
+p <- ggplot_custom(bc_fraction[bc_fraction$library == i,]) +
   geom_point(aes(x = cutoff, y = bcs_found), color = '#1B998B', size = 1) +
   geom_line(aes(x = cutoff, y = bcs_found), color = '#1B998B', size = 1) +
   geom_point(aes(x = cutoff, y = bc_reads), color = 'black', size = 1) +
@@ -624,6 +624,8 @@ bc_df_rep <- bc_df[!is.na(bc_df$tf),] %>%
   spread(replicate, rpm)
 
 colors <- c("#2D3047", "#1B998B")
+
+bc_df_rep <- bc_df_rep[!is.na(bc_df_rep$library),]
 
 for (i in unique(bc_df_rep$library)) {
 p <- ggscatter(bc_df_rep[bc_df_rep$library == i,], x = paste(i, "r1", sep = "_"), y = paste(i, "r2", sep = "_"),
@@ -777,7 +779,7 @@ outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "ZFP42_5bp_21bp_minP_3",] %>%
   dplyr::select(barcode_number, activity, sample) %>%
   unique()
 
-ggplot_cust(outlier, aes(x = barcode_number, y = activity)) +
+ggplot_custom(outlier, aes(x = barcode_number, y = activity)) +
   geom_quasirandom() +
   xlab("barcode #") + 
   labs(title = "Zfp42 reporter - TATA-box minP mutated", 
@@ -789,7 +791,7 @@ outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "ELK1_5bp_21bp_mCMV_2",] %>%
   dplyr::select(barcode_number, activity) %>%
   unique()
 
-ggplot_cust(outlier, aes(x = barcode_number, y = activity)) +
+ggplot_custom(outlier, aes(x = barcode_number, y = activity)) +
   geom_quasirandom()+
   xlab("barcode #") + 
   labs(title = "Elk1 reporter - bc1 attached to Pax6 reporter")
@@ -801,7 +803,7 @@ outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "TCF3_5bp_10bp_hBGm_3",] %>%
   dplyr::select(barcode_number, activity) %>%
   unique()
 
-ggplot_cust(outlier, aes(x = barcode_number, y = activity)) +
+ggplot_custom(outlier, aes(x = barcode_number, y = activity)) +
   geom_quasirandom() +
   xlab("barcode #") + 
   labs(title = "Tcf3 reporter - bc1 attached to multiple (less active) reporters")
@@ -827,19 +829,19 @@ bc_df_cDNA_filt$sd_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$rep
 ## Compute activity relative to minimal promoter background
 bc_df_cDNA_filt_neg <- bc_df_cDNA_filt %>%
   dplyr::select(sample_id, activity, reporter_id, tf, promoter) %>%
-  filter(str_detect(tf, "RANDOM"), promoter == "minP") %>%
+  filter(str_detect(tf, "RANDOM")) %>%
   unique() %>%
-  mutate(activity = ave(activity, sample_id, FUN = function(x) mean(x))) %>%
+  mutate(activity = ave(activity, promoter, sample_id, FUN = function(x) mean(x))) %>%
   dplyr::select(-reporter_id) %>%
   unique() %>%
-  dplyr::select("minP_activity" = activity, sample_id) %>%
+  dplyr::select("tf_activity" = activity, promoter, sample_id) %>%
   unique()
 
-bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, bc_df_cDNA_filt_neg, by = "sample_id")
+bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, bc_df_cDNA_filt_neg, by = c("sample_id", "promoter"))
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
-  mutate(minP_activity = activity / minP_activity)
+  mutate(minP_activity = activity / tf_activity)
 
-## Compute activity relative to SP1 reporter
+## Compute activity relative to NFYA reporter
 bc_df_cDNA_filt_nfya <- bc_df_cDNA_filt %>%
   dplyr::select(sample_id, activity, reporter_id, tf, promoter) %>%
   filter(str_detect(tf, "NFYA"), promoter == "minP") %>%
