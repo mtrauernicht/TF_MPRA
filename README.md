@@ -24,7 +24,7 @@ In a first experiment, the library was transfected into cells using 7 different 
 6. mESC: N2B27 (neural differentiation medium)
 7. NPC
 8. HepG2
-9: K562
+9. K562
 
 The cells were grown in this condition for 24h after transfection before RNA isolation.
 
