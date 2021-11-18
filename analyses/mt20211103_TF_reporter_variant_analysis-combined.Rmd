@@ -1,27 +1,53 @@
 ---
-title: "barcode count preprocessing - TF reporter screen"
-author: "Max Trauernicht"
-date: "`r format(Sys.time(), '%Y-%m-%d')`"
+title: "TF activity computation & feature analysis - TF reporter library 90 TFs - combined"
+author: 
+  - name: "Max Trauernicht"
+    email: "m.trauernicht@nki.nl"
+    affiliation: "Netherlands Cancer Institute - van Steensel lab"
+date: '`r format(Sys.time(), "%d/%m/%Y")`'
 output: 
-  prettydoc::html_pretty:
-    theme: leonids
-    highlight: github
-  #   toc: true
-  #   toc_float: true
-  #   code_folding: show
-  # editor_options:
-  #   chunk_output_type: console
+  html_document:
+    theme: united
+    highlight: pygments
+    fig_caption: yes
+    code_folding: hide
+    df_print: kable
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: false
 ---
 
-*knitr document van Steensel lab*
+---
 
-# TF reporter barcode count preprocessing - combining all data
-
-## Introduction
-I previously processed the raw sequencing data, optimized the barcode clustering, quantified the pDNA data and normalized the cDNA data. In this script, I want to have a detailed look at the cDNA data from a general perspective.
+### Aim
+In more than 100 samples, 35,500 reporters for 86 TFs were transfected into various cells (mainly mES, K562 & HepG2), and stimulated with various compounds. To be more precise, the data consists of two different libraries, library 1, which is more focused on mES biology, and library 2, which is more focused on classical signaling pathways.All the barcode counts from the 7 different sequencing runs are combined in this analysis. In a previous scripts, sanity checks will be carried out to filter out samples with bad quality, and barcode counts will be normalized to compute reporter activitites. In this script, plots will be generated to characterize the TF reporter activities and models will be built to extract the importance of reporter features. 
 
 
+---
 
+## Setup {.tabset}
+
+<!-- little HTML script to do indentation of the table of contents -->
+<script>
+    $(document).ready(function() {
+      $items = $('div#TOC li');
+      $items.each(function(idx) {
+        num_ul = $(this).parentsUntil('#TOC').length;
+        $(this).css({'text-indent': num_ul * 10, 'padding-left': 0});
+      });
+
+    });
+</script>
+
+```{css, echo = FALSE}
+div.sourceCode {
+  overflow-x: hidden;
+}
+```
+
+
+### Libraries 
 
 ```{r setup, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -43,8 +69,10 @@ library(viridis)
 library(plyr)
 library(cowplot)
 library(gridExtra)
+library(pROC)
 ```
 
+### Functions
 
 ```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 ### Custom functions
@@ -59,254 +87,555 @@ SetFileName <- function(filename, initials) {
 
 # Custom ggplot2 themes
 theme_classic_lines <- function() {
-  theme_pubr(border = T, base_family = "Arial", legend = "top") +
-            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.1),
+  theme_pubr(border = F, legend = "top") +
+            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.25),
                   strip.background = element_rect(fill = "#ced4da")
             )
 }
 
 theme_classic_lines_45 <- function() {
-  theme_pubr(border = T, base_family = "Arial", legend = "top", x.text.angle = 45) +
-            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.1),
+  theme_pubr(border = T, legend = "top", x.text.angle = 45) +
+            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.25),
                   strip.background = element_rect(fill = "#ced4da")
             )
 }
 
 theme_classic_lines_90 <- function() {
-  theme_pubr(border = T, base_family = "Arial", legend = "top", x.text.angle = 90) +
-            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.1),
+  theme_pubr(border = T, legend = "top", x.text.angle = 90) +
+            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.25),
                   strip.background = element_rect(fill = "#ced4da")
             )
 }
 
 theme_set(theme_classic_lines())
 
+colors_diverse <- c("#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51")
 
-ggplot <- function(...) ggplot2::ggplot(...) + 
+ggplot_custom <- function(...) ggplot2::ggplot(...) + 
   scale_color_manual(values = colors_diverse) + 
   scale_fill_manual(values = colors_diverse)
 ```
 
+### Loading data
 
 ```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 # Import processed bc counts from the preprocessing step
-cDNA_df_5 <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6578_gen2_stimulation-2/results/mt20211022_reporter_activity_filt.csv", header = T) %>%
-  filter(hPGK == "No", neg_ctrls == "No", promoter == "mCMV") %>%
-  dplyr::select(barcode, tf, reporter_activity, condition) %>%
-  mutate(tf = gsub("_.*", "", tf),
-         tf = toupper(tf))%>%
-  unique() %>%
-  na.omit()
-cDNA_df_5$tf[cDNA_df_5$tf == "NR3C1(GR)"] <- "NR3C1"
-cDNA_df_5$tf[cDNA_df_5$tf == "P53"] <- "TP53"
-cDNA_df_5$tf[cDNA_df_5$tf == "FOXO"] <- "FOXO1"
-cDNA_df_5$tf[cDNA_df_5$tf == "FOXA"] <- "FOXA1"
-
-
-cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/results/mt20210713_reporter_activity_filt.csv", header = T)%>%
-  filter(hPGK == "No", neg_ctrls == "No", promoter == "mCMV", native_enhancer == "No", condition != "vitA", condition != "NPC") %>%
-  dplyr::select(barcode, 'tf' = TF, reporter_activity, condition) %>%
-  mutate(tf = gsub("_.*", "", tf),
-         tf = toupper(tf)) %>%
-  unique() %>%
-  na.omit()
-cDNA_df$tf[cDNA_df$tf == "NR3C1(GR)"] <- "NR3C1"
-cDNA_df$tf[cDNA_df$tf == "TRP53"] <- "TP53"
-cDNA_df$condition[cDNA_df$condition == "LIF_pos_CH"] <- "LIF_CH"
-cDNA_df$condition[cDNA_df$condition == "LIF_pos_PD"] <- "LIF_PD"
-cDNA_df$condition[cDNA_df$condition == "2i_neg_LIF"] <- "2i"
-cDNA_df$condition[cDNA_df$condition == "2i_pos_LIF"] <- "2i_LIF"
-
-
-cDNA_df_2 <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6139_stimulation-2/results/mt20201209_reporter_activity_filt.csv", header = T) %>%
-  filter(hPGK == "No", neg_ctrls == "No", Promoter == "mCMV", native_enhancer == "No", condition == "HQ") %>%
-  dplyr::select(barcode, 'tf' = TF, reporter_activity, condition) %>%
-  mutate(tf = gsub("_.*", "", tf),
-         tf = toupper(tf)) %>%
-  unique() %>%
-  na.omit()
-cDNA_df_2$tf[cDNA_df_2$tf == "NR3C1(GR)"] <- "NR3C1"
-cDNA_df_2$tf[cDNA_df_2$tf == "TRP53"] <- "TP53"
-
-
-cDNA_df_3 <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6502_gen2/results/mt20210722_reporter_activity_filt.csv", header = T)%>%
-  filter(hPGK == "No", neg_ctrls == "No", promoter == "mCMV", native_enhancer == "No", condition == "K562_DMSO" | condition == "HepG2_DMSO") %>%
-  dplyr::select(barcode, tf, reporter_activity, condition) %>%
-  mutate(tf = gsub("_.*", "", tf),
-         tf = toupper(tf)) %>%
-  unique() %>%
-  na.omit()
-cDNA_df_3$tf[cDNA_df_3$tf == "NR3C1(GR)"] <- "NR3C1"
-cDNA_df_3$tf[cDNA_df_3$tf == "TRP53"] <- "TP53"
-cDNA_df_3$tf[cDNA_df_3$tf == "P53"] <- "TP53"
-cDNA_df_3$tf[cDNA_df_3$tf == "FOXO"] <- "FOXO1"
-cDNA_df_3$tf[cDNA_df_3$tf == "FOXA"] <- "FOXA1"
-
-
-cDNA_df <- rbind(cDNA_df, cDNA_df_2, cDNA_df_3, cDNA_df_5)
+cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6578_gen2_stimulation-2/results/mt20211117_reporter_activity_filt_combined.csv", header = T)
 ```
 
-## Analysis
 
-### First insights into data distribution - reporter activity distribution plots
+## Reporter activities over background per tf and condition
+
 ```{r data_density, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
-## reporter activity distribution over all experiments
-colors <- c("#1B998B", "#2D3047", "#FF9B71")
+# Change multiple hypothesis correction method
+cDNA_df$pval_adj <- p.adjust(cDNA_df$pval, method = 'fdr')
 
-## reporter activity distribution for each experiment individually
-ggplot(data = cDNA_df %>% dplyr::select(sample, log_reporter_activity, reporter_id, neg_ctrls) %>% unique(), aes(y = log_reporter_activity, x = "x")) + 
-  geom_quasirandom(alpha = 0.4) + xlab("log2(cDNA/pDNA)") + 
-  labs(title = "reporter activity distribution per condition") +  facet_wrap(vars(sample))
-
-## reporter activity distribution - highlight negative motif controls
-ggplot(cDNA_df[cDNA_df$hPGK == "No", ], aes(x = log_activity, fill = neg_ctrls, alpha = 0.4)) + 
-  geom_density() + xlab("log2(cDNA/pDNA)") + 
-  scale_fill_manual(values = colors)+
-  labs(title = "Reporter activity distribution") +
-  xlim(-10,10) + 
-  theme(text = element_text(size = 12))
-
-
-## reporter activity distribution - highlight different promoters
-ggplot(data = cDNA_df %>% dplyr::select(log_reporter_activity, reporter_id, promoter) %>% unique(), 
-       aes(y = log_reporter_activity, x = promoter, color = promoter, alpha = 0.4)) + 
-  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
-  labs(title = "reporter activity distribution - different promoters") +
-  scale_color_brewer(palette = "Set2") +
-  theme_bw()
-
-## reporter activity distribution - highlight different promoters - and negative controls (does the activity actually come from the TFs or from the promoter itself?)
-ggplot(cDNA_df %>% 
-         filter(promoter != "hPGK") %>%
-         mutate(tf = gsub("_neg", "", tf)) %>%
-         dplyr::select(reporter_id, log_reporter_activity, neg_ctrls, promoter, tf) %>% 
-         unique(), aes(y = log_reporter_activity, x = neg_ctrls, color = promoter, alpha = 0.4)) + 
-  geom_quasirandom(dodge.width = 0.75) + xlab("mutated motif") + 
-  labs(title = "reporter activity distribution - promoters") +
-  scale_color_brewer(palette = "Set2") +
-   facet_wrap(~promoter)
-
-ggplot(cDNA_df %>% 
-         filter(promoter != "hPGK", commercial_reporter == "No") %>%
-         mutate(tf = gsub("_neg", "", tf)) %>%
-         dplyr::select(reporter_id, log_reporter_activity, neg_ctrls, promoter, tf) %>% 
-         unique(), aes(y = log_reporter_activity, x = neg_ctrls, color = promoter, alpha = 0.4)) + 
-  geom_quasirandom(dodge.width = 0.75) + xlab("mutated motif?") + 
-  labs(title = "Library 2: reporter activity distribution - promoters") +
-  scale_color_brewer(palette = "Set2") +
-   facet_wrap(~tf)
-
-## reporter activity distribution - highlight different distances individually per TF
-ggplot(data = cDNA_df[cDNA_df$distance != "",] %>% 
-         filter(neg_ctrls == "No", hPGK == "No", rand_promoter == "No", commercial_reporter =="No") %>%
-         dplyr::select(log_reporter_activity, reporter_id, distance, tf) %>% unique(), 
-       aes(y = log_reporter_activity, x = distance, color = distance, alpha = 0.4)) + 
-  geom_quasirandom() + ylab("log2(cDNA/pDNA)") + 
-  labs(title = "Library 2: reporter activity distribution - distances") +
-  scale_color_brewer(palette = "Set2") +
-   facet_wrap(~tf)
-
-## reporter activity distribution - highlight different spacings individually per TF
-ggplot(data = cDNA_df[cDNA_df$spacing != "",] %>% 
-         filter(neg_ctrls == "No", hPGK == "No", rand_promoter == "No") %>%
-         dplyr::select(log_reporter_activity, reporter_id, spacing, tf, condition) %>% 
-         unique(), 
-       aes(y = log_reporter_activity, x = condition, color = spacing, alpha = 0.4)) + 
-  geom_quasirandom(dodge.width = 0.75) + ylab("log2(cDNA/pDNA)") + 
-  labs(title = "Library 1: reporter activity distribution - spacings") +
-   facet_wrap(~tf) +
-  scale_color_manual(values = colors)+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1)) 
-
-## reporter activity distribution - highlight different backgrounds
-ggplot(data = cDNA_df[cDNA_df$background != "",] %>% dplyr::select(log_reporter_activity, reporter_id, background, condition) %>% unique(), 
-       aes(y = log_reporter_activity, x = background, color = background, alpha = 0.4)) + 
-  geom_quasirandom() + xlab("log2(cDNA/pDNA)") + 
-  labs(title = "reporter activity distribution - backgrounds") +
-  scale_color_brewer(palette = "Set2") +
-  theme_bw()
-
-## reporter activity distribution - highlight different backgrounds - each TF and each condition
-ggplot(data = cDNA_df[cDNA_df$spacing != "",] %>% 
-         filter(neg_ctrls == "No", hPGK == "No", rand_promoter == "No") %>%
-         dplyr::select(log_reporter_activity, reporter_id, background, tf, condition) %>% 
-         unique(), 
-       aes(y = log_reporter_activity, x = condition, color = background, alpha = 0.4)) + 
-  geom_quasirandom(dodge.width = 0.75) + ylab("log2(cDNA/pDNA)") + 
-  labs(title = "Library 1: reporter activity distribution - backgrounds") +
-   facet_wrap(~tf) +
-  scale_color_manual(values = colors)+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1)) 
+# Plot per minimal promoter the reporter activites over the minimal promoter only and the adjusted p-value for each reporter
+for (i in unique(cDNA_df$condition)) {
+  
+  p <- ggplot_custom(cDNA_df %>%
+                filter(condition == i, neg_ctrls == "No") %>%
+                dplyr::select(reporter_id, pval_adj, reporter_activity_minP, promoter) %>%
+                unique(),
+            aes(x = log(reporter_activity_minP), y = -log10(pval_adj),
+                color = ifelse(log(reporter_activity_minP) > 1 & pval_adj < 0.05, "green", 
+                               ifelse(log(reporter_activity_minP) < -1 & pval_adj < 0.05, "yellow","black")))) +
+    geom_point() +
+    geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+    geom_vline(xintercept = log2(2), linetype = "dashed") +
+    geom_vline(xintercept = -log2(2), linetype = "dashed") +
+    facet_wrap(~promoter)+
+    ggtitle(i)
+  
+  print(p)
+}
 
 
-## correlation bc-counts pDNA vs. cDNA
-sp <- ggscatter(cDNA_df[cDNA_df$neg_ctrls  == "No" &
-               cDNA_df$hPGK == "No" &
-               cDNA_df$rand_promoter == "No",],
-               x = "pDNA_counts_rpm", y = "rpm",
-               size = 0.1, alpha = 0.3, color = "#2D3047", 
-   add = "reg.line",
-   add.params = list(color = "blue", fill = "lightgray"), title = "normalized barcode counts cDNA vs. pDNA",
-   conf.int = TRUE, ylab = "cDNA", xlab = "pDNA")
-sp + stat_cor(method = "pearson", label.x = 150, label.y = 2) + 
-  geom_abline(linetype = "dashed") + facet_wrap(~tf) + xlim(0,200) + ylim(0,200)
+# Same plot for one condition only
+ggplot_custom(cDNA_df %>%
+                filter(condition == "HepG2_DMSO", neg_ctrls == "No", library == "1+2") %>%
+                dplyr::select(reporter_id, pval_adj, reporter_activity_minP, promoter) %>%
+                unique(),
+            aes(x = log(reporter_activity_minP), y = -log10(pval_adj), 
+                color = ifelse(log(reporter_activity_minP) > 1 & pval_adj < 0.05, "green", 
+                               ifelse(log(reporter_activity_minP) < -1 & pval_adj < 0.05, "yellow","black")))) +
+  geom_point() +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+  geom_vline(xintercept = log2(2), linetype = "dashed") +
+  geom_vline(xintercept = -log2(2), linetype = "dashed") +
+  facet_wrap(~promoter)
+
+ggplot_custom(cDNA_df %>%
+                filter(condition == "mES_2i_LIF", neg_ctrls == "No", library == "1") %>%
+                dplyr::select(reporter_id, pval_neg, reporter_activity_neg, promoter) %>%
+                mutate(pval_neg = p.adjust(pval_neg, method = 'fdr')) %>%
+                unique(),
+            aes(x = log(reporter_activity_neg), y = -log10(pval_neg), 
+                color = ifelse(log(reporter_activity_neg) > 1 & pval_neg < 0.05, "green", 
+                               ifelse(log(reporter_activity_neg) < -1 & pval_neg < 0.05, "yellow","black")))) +
+  geom_point() +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+  geom_vline(xintercept = log2(2), linetype = "dashed") +
+  geom_vline(xintercept = -log2(2), linetype = "dashed") +
+  facet_wrap(~promoter)
 
 
 
-## correlation bc-counts pDNA vs. reporter activity
-sp <- ggscatter(cDNA_df[cDNA_df$neg_ctrls  == "No" &
-                    cDNA_df$hPGK == "No" &
-                    cDNA_df$rand_promoter == "No",],
-          size = 0.75, color = "condition", alpha = 0.1,
-          y = "log_activity", x = "pDNA_counts_rpm",
-          title = "reporter pDNA counts vs log2 reporter activity",
-          ylab = "log2 reporter activity",
-          xlab = "pDNA counts per million",
-          facet.by = "tf")
-sp + xlim(0,200) + ylim(-5,5) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), 
-          axis.text.y = element_text(size = 10)) +
-  theme(text = element_text(size = 12))
+# Show per condition how many reporters per TF are upregulated, downregulated, or unchanged
+cDNA_df$reporter_activity_class <- 0
+cDNA_df$reporter_activity_class[cDNA_df$pval_adj < 0.05 & cDNA_df$reporter_activity_minP > 2] <- 1
+cDNA_df$reporter_activity_class[cDNA_df$pval_adj < 0.05 & cDNA_df$reporter_activity_minP < 0.5] <- -1
+
+
+cDNA_df2 <- cDNA_df %>%
+                filter(neg_ctrls == "No", commercial_reporter == "No") %>%
+                dplyr::select(reporter_id, tf, reporter_activity_class, condition, promoter) %>%
+                unique()
+
+cDNA_df2 <- cDNA_df2 %>%
+  mutate(class_count = ave(reporter_activity_class, tf, promoter, condition, FUN = function(x) sum(x)))
+
+
+for (i in unique(cDNA_df2$condition)) {
+  p <- ggplot_custom(cDNA_df2 %>%
+                       filter(condition == i),
+                     aes(x = reorder(tf, -class_count), fill = factor(reporter_activity_class, levels = c("0", "1", "-1")))) +
+    geom_bar(position = "fill") +
+    geom_hline(yintercept = 0.25, linetype = "dashed") +
+    geom_hline(yintercept = 0.75, linetype = "dashed") +
+    theme_classic_lines_90() +
+    facet_wrap(~promoter) +
+    ggtitle(i)
+  
+  print(p)
+}
+
+
+## Which reporters are significantly different between two conditions?
+cDNA_df3 <- cDNA_df %>%
+  dplyr::select(reporter_id, condition, reporter_activity_minP, tf) %>%
+  filter(condition == "mES_2i_LIF" | condition == "mES_LIF_PD") %>%
+  unique() %>%
+  spread(condition, reporter_activity_minP) %>%
+  mutate(dif = mES_2i_LIF / mES_LIF_PD)
+
+ggplot_custom(cDNA_df3, aes(x = tf, y = dif)) +
+  geom_quasirandom() 
+
+```
+
+
+---
+
+## For TFs that have mixed populations of reporters: what discriminates them?
+
+```{r}
+# Divide TFs per condition into different classes: activators, selective activator, inactive, selective repressor, repressor
+
+## Determine amount of active/repressive reporters per tf
+cDNA_df3 <- cDNA_df2 %>%
+  mutate(class_count2 = ave(reporter_activity_class, tf, condition, FUN = function(x) length(x)),
+         class_count_rel = ave(reporter_activity_class, reporter_activity_class, tf, condition, FUN = function(x) length(x))) %>%
+  mutate(class_count_rel = class_count_rel / class_count2) %>%
+  dplyr::select(tf, condition, class_count_rel, reporter_activity_class) %>%
+  unique() %>%
+  spread(reporter_activity_class, class_count_rel)
+
+cDNA_df3$class[cDNA_df3$`0` >= 0.66] <- 0
+cDNA_df3$class[cDNA_df3$`1` >= 0.66] <- 2
+cDNA_df3$class[cDNA_df3$`-1` >= 0.66] <- -2
+cDNA_df3$class[cDNA_df3$`1` >= 0.33 & cDNA_df3$`1` < 0.66] <- 1
+cDNA_df3$class[cDNA_df3$`-1` >= 0.33 & cDNA_df3$`-1` < 0.66] <- -2
+cDNA_df3$class[cDNA_df3$`1` >= 0.085 & cDNA_df3$`-1` >= 0.085] <- -1
+
+
+cDNA_df4 <- cDNA_df3 %>%
+  dplyr::select(tf, condition, class) %>%
+  unique() %>%
+  na.omit() %>%
+  filter(condition %in% c("HepG2_CDCA", "HepG2_DMSO", "K562_DMSO", "mES_2i", 
+                          "mES_2i_LIF", "mES_HQ", "mES_LIF_CH", "mES_LIF_PD", 
+                          "mES_N2B27")) %>%
+  mutate(sum = ave(class, tf, FUN = function(x) sum(x))) %>%
+  filter(sum != 0) %>%
+  dplyr::select(-sum)
+
+cDNA_df4 <- cDNA_df4 %>%
+  spread(tf, class) %>%
+  column_to_rownames('condition') %>%
+  na.omit() 
+
+makeColorRampPalette <- function(colors, cutoff.fraction, num.colors.in.palette)
+{
+  stopifnot(length(colors) == 3)
+  ramp1 <- colorRampPalette(colors[1:2])(num.colors.in.palette * cutoff.fraction)
+  ramp2 <- colorRampPalette(colors[2:3])(num.colors.in.palette * (1 - cutoff.fraction))
+  return(c(ramp1, ramp2))
+}
+
+cols <- makeColorRampPalette(c(colors_diverse[3], colors_diverse[1], colors_diverse[2]), # distances 3 to max(distmat) colored from green to black
+                             0.5,
+                             100)
+
+pheatmap(as.matrix(cDNA_df4),
+         color = cols,
+         border_color = "white", 
+         cellwidth = 8, cellheight = 8,
+         angle_col = 90)
+```
+
+---
+
+## Why are the reporters classified as repressive/activating? Is there some logic to it?
+
+```{r}
+# Which features explain the classification into activating/repressing?
+cDNA_df_lm <- cDNA_df %>%
+  filter(neg_ctrls == "No", commercial_reporter == "No", promoter != "Random",
+         condition %in% c("HepG2_CDCA", "HepG2_DMSO", "K562_DMSO", "mES_2i", 
+                          "mES_2i_LIF", "mES_HQ", "mES_LIF_CH", "mES_LIF_PD", 
+                          "mES_N2B27"
+                          ),
+         tf %in% names(cDNA_df4)) %>%
+  mutate(background = as.factor(background)) %>%
+  dplyr::select(reporter_id, tf, reporter_activity_class, condition, promoter, spacing, background, distance) %>%
+  unique()
+
+mixed_classes <- cDNA_df3 %>%
+  mutate(id = paste(condition, tf, sep = "_")) %>%
+  dplyr::select(id, class) %>%
+  filter(class == 1 | class == -2 | class == -1) %>%
+  unique()
+
+## Fitting the model for each condition and tf
+cDNA_df_lm$id <- paste(cDNA_df_lm$condition, cDNA_df_lm$tf, sep = "_")
+cDNA_df_lm <- cDNA_df_lm %>%
+  mutate(sum = ave(id, id, FUN = function(x) length(x))) %>%
+  filter(sum >= 2, id %in% mixed_classes$id) %>%
+  dplyr::select(-sum)
+
+
+
+lm_features <- lapply(unique(cDNA_df_lm$id), function(x) lm(reporter_activity_class ~ promoter + spacing + background + distance, 
+                                                                     cDNA_df_lm[cDNA_df_lm$id == x,]))
+
+names(lm_features) <- unique(cDNA_df_lm$id)
+
+
+# ROC
+roc_lm <- list()
+for (i in names(lm_features)) {
+  roc_lm[[i]] <- roc(response = cDNA_df_lm$reporter_activity_class[cDNA_df_lm$id == i], predictor = round(lm_features[[i]]$fitted.values))
+}
+
+auc_lm <- data.frame("id" = names(roc_lm),
+                     "n" = 1:length(roc_lm),
+                     "auc" = "")
+for (i in 1:length(roc_lm)) {
+  if (i == 1) {
+    plot <- plot(roc_lm[[i]], col="#264653", lwd=3, main="ROC curve RF")
+    auc_lm$auc[auc_lm$n == i] <- auc(plot)
+  }
+  else {
+    plot <- plot(roc_lm[[i]], add = TRUE, label = T)
+    auc_lm$auc[auc_lm$n == i] <- auc(plot)
+  }
+}
+
+
+auc_lm <- auc_lm %>%
+  mutate(condition = gsub("(.*)_.*$", "\\1", id),
+         tf = gsub(".*_.*_(.*$)", "\\1", id),
+         auc = as.numeric(auc)) 
+
+ggplot_custom(auc_lm, aes(x = tf, y = auc)) +
+  geom_point() +
+  geom_boxplot() +
+  geom_hline(yintercept = 0.75, linetype = "dashed") +
+  theme_classic_lines_90()
+  
+ggplot_custom(auc_lm, aes(x = condition, y = auc)) +
+  geom_point() +
+  geom_hline(yintercept = 0.75, linetype = "dashed", color = "red")+
+  coord_flip()
+
+
+# auc_lm_sel <- auc_lm %>%
+#   filter(auc >= 0.75)
+# 
+# lm_features <- lm_features[auc_lm_sel$id]
+
+
+# Extract weights
+lm_weights <- list()
+for (i in names(lm_features)) {
+  lm_weights[[i]] <- lm_features[[i]]$coefficients
+}
+
+lm_weights <- bind_rows(lm_weights, .id = "id")
+
+lm_weights <- lm_weights %>%
+  dplyr::select(-`(Intercept)`) %>%
+  pivot_longer(-id, names_to = "feature", values_to = "weight")
+
+ggplot_custom(lm_weights, aes(x = feature, y = weight)) +
+  geom_quasirandom()
+
+
+# Extract features
+exp_features <- list()
+for (i in names(lm_features)) {
+  exp_features[[i]] <- anova(lm_features[[i]]) %>%
+  dplyr::select('sum_sq' = `Sum Sq`) %>%
+  mutate(sum = sum(sum_sq)) %>%
+  mutate(rel_sum_sq = (sum_sq/sum)*100) %>%
+  setnames("rel_sum_sq", "percent") %>%
+  dplyr::select("percent")
+}
+exp_features <- bind_rows(exp_features, .id = "id") %>%
+  rownames_to_column("feature") %>%
+  mutate(feature = gsub("...[0-9]{1-3}", "", feature)) %>%
+  mutate(feature = gsub("[0-9]", "", feature)) %>%
+  mutate(percent = format(percent, scientific = F, digits = 0)) %>%
+  mutate(percent = as.numeric(percent))
+
+exp_features$group <- "no residual"
+exp_features$group[grep("Residual", exp_features$feature)] <- "residual"
+exp_features$percent[exp_features$feature == "Residuals"] <- 100 - exp_features$percent[exp_features$feature == "Residuals"]
+exp_features$feature <- revalue(exp_features$feature, c("Residuals"="total"))
+
+
+# Plotting the features
+ggplot_custom(exp_features, 
+       aes(x = percent, y = reorder(feature, -percent), fill = group)) +
+  geom_bar(stat = "identity") + 
+  xlab("Variance explained (%)") + 
+  ylab("") 
+
+ggplot_custom(exp_features, 
+       aes(y = percent, x = feature, color = group)) +
+  geom_quasirandom() + 
+  xlab("Variance explained (%)") + 
+  ylab("") 
+
+# Keep features from good models only
+exp_features_good <- exp_features %>%
+  filter(group == "residual")
+exp_features_good_auc <- merge(exp_features_good, auc_lm, by = "id")
+
+ggplot_custom(exp_features_good_auc,
+              aes(x = percent/100, y = auc)) +
+  geom_point()
+
+
+exp_features_good <- exp_features_good %>%
+  filter(percent >= 50)
+exp_features_sel <- exp_features[exp_features$id %in% exp_features_good$id,]
+
+# Plot again the features
+ggplot_custom(exp_features_sel, 
+       aes(y = percent, x = feature, color = group)) +
+  geom_quasirandom() + 
+  xlab("Variance explained (%)") + 
+  ylab("")
+
+ggplot(exp_features_sel %>%
+                filter(feature != "total") %>%
+                mutate(sum = ave(percent, id, FUN = function(x) sum(x))), 
+       aes(y = percent, x = reorder(id, -sum), fill = feature, group = feature)) +
+  geom_bar(stat = "identity", position = "stack") + 
+  xlab("Variance explained (%)") + 
+  ylab("") +
+  scale_fill_manual(values = c("#e07a5f", "#3d405b", "#81b29a", "#f2cc8f"))+
+  theme_classic_lines_90()
+
+
+ggplot_custom(exp_features_sel, aes(x=feature, y=percent, color=group, group = id)) + 
+  geom_line() +
+  geom_point()
+
+exp_features_sel_heatmap <- exp_features_sel %>%
+  dplyr::select(-group) %>%
+  filter(feature != "total") %>%
+  spread(feature, percent) %>% 
+  column_to_rownames("id")
+
+pheatmap(as.matrix(t(exp_features_sel_heatmap)),
+         color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100),
+         border_color = "white", 
+         cellwidth = 8, cellheight = 8,
+         angle_col = 90)
+```
+
+---
+
+## Random forest model to classify reporters (performance mediocre) 
+
+```{r}
+cDNA_df_lm <- cDNA_df %>%
+  filter(neg_ctrls == "No", commercial_reporter == "No", promoter != "Random",
+         condition %in% c("HepG2_CDCA", "HepG2_DMSO", "K562_DMSO", "mES_2i", 
+                          "mES_2i_LIF", "mES_HQ", "mES_LIF_CH", "mES_LIF_PD", 
+                          "mES_N2B27"
+                          ),
+         tf %in% names(cDNA_df4),
+         reporter_activity_class != -1) %>%
+  mutate(background = as.factor(background),
+         reporter_activity_class = as.factor(reporter_activity_class)) %>%
+  dplyr::select(reporter_id, tf, reporter_activity_class, condition, promoter, spacing, background, distance) %>%
+  unique()
+
+mixed_classes <- cDNA_df3 %>%
+  mutate(id = paste(condition, tf, sep = "_")) %>%
+  dplyr::select(id, class) %>%
+  filter(class == 1) %>%
+  unique()
+
+## Fitting the model for each condition and tf
+cDNA_df_lm$id <- paste(cDNA_df_lm$condition, cDNA_df_lm$tf, sep = "_")
+cDNA_df_lm <- cDNA_df_lm %>%
+  mutate(sum = ave(id, id, FUN = function(x) length(x))) %>%
+  filter(sum >= 2, id %in% mixed_classes$id) %>%
+  dplyr::select(-sum)
+
+rf_features <- lapply(unique(cDNA_df_lm$id), function(x) randomForest(reporter_activity_class ~ promoter + spacing + background + distance, 
+                                                                     cDNA_df_lm[cDNA_df_lm$id == x,]))
+
+names(rf_features) <- unique(cDNA_df_lm$id)
+
+
+# ROC
+roc_rf_train <- list()
+for (i in names(rf_features)) {
+  roc_rf_train[[i]] <- roc(response = cDNA_df_lm$reporter_activity_class[cDNA_df_lm$id == i], predictor = rf_features[[i]]$votes[,2])
+}
+
+auc_rf <- data.frame("id" = names(roc_rf_train),
+                     "n" = 1:length(roc_rf_train),
+                     "auc" = "")
+for (i in 1:length(roc_rf_train)) {
+  if (i == 1) {
+    plot <- plot(roc_rf_train[[i]], col="#264653", lwd=3, main="ROC curve RF")
+    auc_rf$auc[auc_rf$n == i] <- auc(plot)
+  }
+  else {
+    plot <- plot(roc_rf_train[[i]], add = TRUE, label = T)
+    auc_rf$auc[auc_rf$n == i] <- auc(plot)
+  }
+}
+
+auc_rf <- auc_rf %>%
+  mutate(condition = gsub("(.*)_.*$", "\\1", id),
+         tf = gsub(".*_.*_(.*$)", "\\1", id),
+         auc = as.numeric(auc)) 
+
+ggplot_custom(auc_rf, aes(x = tf, y = auc)) +
+  geom_point() +
+  geom_boxplot() +
+  geom_hline(yintercept = 0.75, linetype = "dashed") +
+  theme_classic_lines_90()
+  
+ggplot_custom(auc_rf, aes(x = condition, y = auc)) +
+  geom_point() +
+  geom_hline(yintercept = 0.75, linetype = "dashed", color = "red")+
+  coord_flip()
+
+
+auc_rf_sel <- auc_rf %>%
+  filter(auc >= 0.75)
+
+rf_features <- rf_features[auc_rf_sel$id]
+
+
+# Get the variable importances
+explained_rf <- list()
+
+for (i in names(rf_features)) {
+  explained_rf[[i]] <- explain(rf_features[[i]], data=cDNA_df_lm %>% dplyr::select(promoter, spacing, background, distance), y=cDNA_df_lm$reporter_activity_class)
+}
+
+varimps <- list()
+for (i in names(explained_rf)) {
+  varimps[[i]] <- feature_importance(explained_rf[[i]], type = "ratio")
+}
+#, loss_function = '1-auc' type='ratio'
+
+varimps <- bind_rows(varimps, .id = "id")
+
+varimps <- varimps %>%
+  mutate(dropout_loss = ave(dropout_loss, id, variable, FUN = function(x) mean(x))) %>%
+  dplyr::select(id, 'feature' = variable, dropout_loss) %>%
+  mutate(condition = gsub("(.*)_.*$", "\\1", id),
+         tf = gsub(".*_.*_(.*$)", "\\1", id)) %>%
+  dplyr::select(-id) %>%
+  unique()
+
+for (i in unique(varimps$condition)) {
+  p <- ggplot_custom(varimps %>% filter(condition == i), aes(y = dropout_loss, x = feature)) +
+    geom_point()+
+    ylab("dropout loss (RMSE)") +
+    facet_wrap(~tf) +
+    theme_classic_lines_90() +
+    ggtitle(i)
+  print(p)
+}
+
+ggplot_custom(varimps, aes(x = feature, y = dropout_loss)) +
+  geom_boxplot() +
+  geom_quasirandom() +
+  theme_classic_lines_90()
+
 ```
 
 
 
+---
 
-### Heat map - display mean log2-activity for each TF in each condition
+## How to select the best reporter per tf?
+
+```{r}
+
+```
+
+---
+
+## Heat map - display activity for each TF in each condition
+
 ```{r tf_activity_heatmap, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 ## Prepare dataframe
 # Caculate mean TF activity per condition
 tf_activity_heatmap <- cDNA_df %>%
-  mutate(tf_activity = ave(reporter_activity, condition, tf, FUN = function(x) mean(x)),
-         tf_activity = log2(tf_activity),
-         tf_activity = ave(tf_activity, condition, FUN = function(x) (x-mean(x))/sd(x))) %>%
-  dplyr::select(-reporter_activity, -barcode) %>%
-  unique()
-
-tf_activity_heatmap <- dcast(tf_activity_heatmap, tf ~ condition, value.var="tf_activity")
-
-
-tf_activity_heatmap <- tf_activity_heatmap %>% 
-  remove_rownames %>% column_to_rownames(var="tf")
+  filter(condition %in% c("HepG2_DMSO", "K562_DMSO", "mES_2i_LIF", "mES_2i", "mES_N2B27", "mES_LIF_PD", "mES_LIF_CH"),
+         neg_ctrls == "No", commercial_reporter == "No") %>%
+  mutate(tf_activity = ave(reporter_activity_minP, condition, tf, FUN = function(x) mean(x))) %>%
+  #mutate(tf_activity = log2(tf_activity)) %>%
+        #mutate(tf_activity = ave(tf_activity, condition, FUN = function(x) (x-mean(x))/sd(x))) %>%
+  dplyr::select(tf_activity, condition, tf) %>%
+  unique() %>%
+  spread(condition, tf_activity) %>% 
+  remove_rownames %>% 
+  column_to_rownames(var="tf")
 
 # Keeping the scale in the pheatmap function
-myBreaks1 <- seq(0,3,0.03)
+myBreaks1 <- seq(0,6,0.06)
 
 # Keep only TFs that are in at least one condition above a certain threshold
-tf_activity_heatmap <- tf_activity_heatmap[rowSums(tf_activity_heatmap > 1.4) >= 1,] %>%
+tf_activity_heatmap <- tf_activity_heatmap[rowSums(tf_activity_heatmap > 4) >= 1,] %>%
   na.omit()
 
 tf_activity_heatmap <- tf_activity_heatmap[,c(2,1,6,7,3,8,4,5)]
-
 
 # pheatmap function
 pheatmap(as.matrix(t(tf_activity_heatmap)),
          color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100),
          breaks = myBreaks1, border_color = "black", 
-         cellwidth = 10, cellheight = 10,
-         angle_col = 45, cluster_rows = F)
+         cellwidth = 8, cellheight = 8,
+         angle_col = 90)
 ```
-*~10 of the 26 TFs in the library show promising activity at the first glimpse*
+
+---
+
+##
 
 ```{r}
 

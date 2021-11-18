@@ -218,19 +218,8 @@ bc_annotation <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf657
 
 ```{r cluster_compare, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
 # Generate one long data frame from the list of data frames
-for (i in 1:length(bc_files)) {
-  if (i == 1) {
-  bc_df <- data.frame(bc_files[i])
-  bc_df[3] <- names(bc_files[i])
-  names(bc_df) <- c("barcode", "starcode_counts", "sample_id")
-  }
-  else {
-  bc_df_i <- data.frame(bc_files[i])
-  bc_df_i[3] <- names(bc_files[i])
-  names(bc_df_i) <- c("barcode", "starcode_counts", "sample_id")
-  bc_df <- rbind(bc_df, bc_df_i)
-  }
-}
+bc_df <- bind_rows(bc_files, .id = "sample_id") %>%
+  dplyr::select(sample_id, "barcode" = V1, "starcode_counts" = V2)
 
 # Library 1 has barcodes of length 12 while library 2 has barcodes of length 13
 # For sequencing samples that have library 1 and 2 mixed I extracted barcodes of length >=12
@@ -245,11 +234,11 @@ bc_df <- merge(bc_df, bc_annotation, all = T)
 # Add experiment annotation to the data
 metadata_selected <- metadata_df %>%
   dplyr::select('sample_id' = id, gcf, replicate, condition, sample, library)
-bc_df <- merge(bc_df, metadata_selected, all = T)
+bc_df <- merge(bc_df, metadata_selected, all = T, by = "sample_id")
 
 bc_df$starcode_counts[is.na(bc_df$starcode_counts)] <- 0
 
-# First compute reads per million to estimate the relative counts in their respective sample
+# First compute reads per million to estimate the relative counts in the respective sample
 bc_df <- bc_df %>%
   mutate(rpm = ave(starcode_counts, sample_id, FUN = function(x) (x+1) / sum(x) *1e6 ))
 
@@ -446,27 +435,40 @@ plot_ly(n_highly_expressed, x = ~sample_id, y = ~as.numeric(n_bc), type = 'bar',
 bc_fraction <- bc_df %>%
   dplyr::select(sample_id, library) %>%
   unique() %>%
-  na.omit()
-bc_fraction$bcs_found <- ""
+  na.omit() 
 rpm_cutoff <- data.frame("cutoff" = seq(0.0001,15,3))
-bc_fraction <- merge(bc_fraction, rpm_cutoff)
+bc_fraction <- expand_grid(bc_fraction, rpm_cutoff)
+bc_fraction <- bc_fraction %>%
+  mutate(sample_id = paste(sample_id, library, sep = "_"))
+
 bc_annotation2 <- bc_annotation %>%
   mutate(nchar = nchar(bc_annotation$barcode))
+
 bc_counts_design <- data.frame("library" = c("1", "2", "1+2"),
                                "bc_counts" = c(nrow(bc_annotation2[bc_annotation2$nchar == 12,]),
                                                nrow(bc_annotation2[bc_annotation2$nchar == 13,]),
                                                nrow(bc_annotation2)))
 
-for (i in unique(bc_fraction$cutoff)) {
-  for (j in unique(bc_fraction$sample_id)) {
-    for (k in unique(bc_fraction$library)) {
-    bc_fraction$bcs_found[bc_fraction$cutoff == i & bc_fraction$sample == j & bc_fraction$library == k] <- 
-      nrow(bc_df_filt[bc_df_filt$rpm >= i & bc_df_filt$sample_id == j & bc_df_filt$library == k,])/
-      bc_counts_design$bc_counts[bc_counts_design$library == k] *100
-    }
-  }
+bc_fraction_list <- list()
+for (i in unique(bc_fraction$sample_id)) {
+  print(i)
+  test_x <- bc_df_filt %>%
+    mutate(sample_id = paste(sample_id, library, sep = "_")) %>%
+    filter(sample_id == i)
+  library <- unique(test_x$library)
+  
+  bc_fraction_list[[i]] <- lapply(unique(bc_fraction$cutoff), function(x) nrow(test_x[test_x$rpm >= x]) / bc_counts_design$bc_counts[bc_counts_design$library == library] *100)
+  names(bc_fraction_list[[i]]) <- unique(bc_fraction$cutoff)
 }
 
+bc_fraction_2 <- bind_rows(bc_fraction_list)
+rownames(bc_fraction_2) <- names(bc_fraction_list)
+bc_fraction_2 <- bc_fraction_2 %>%
+  rownames_to_column("sample_id") %>%
+  pivot_longer(-sample_id, names_to = "cutoff", values_to = "bcs_found") %>%
+  mutate(cutoff = as.numeric(cutoff))
+
+bc_fraction <- merge(bc_fraction, bc_fraction_2, by = c("sample_id", "cutoff"))
 
 
 ## How many reads match to designed barcodes?
@@ -475,41 +477,49 @@ bc_reads <- bc_df %>%
   unique() %>%
   na.omit()
 rpm_cutoff <- data.frame("cutoff" = seq(0.0001,15,3))
-bc_reads <- merge(bc_reads, rpm_cutoff)
+bc_reads <- expand_grid(bc_reads, rpm_cutoff) %>%
+  mutate(sample_id = paste(sample_id, library, sep = "_"))
 
 bc_df$match <- "Yes"
 bc_df$match[is.na(bc_df$library)] <- "No"
 
-for (i in unique(bc_reads$cutoff)) {
-  for (j in unique(bc_df$sample_id)) {
-    for (k in unique(bc_reads$library)) {
-      bc_reads$bc_reads[bc_reads$cutoff == i & bc_reads$sample_id == j & bc_reads$library == k] <- 
-        sum(na.omit(bc_df_filt$rpm[bc_df_filt$rpm >= i & bc_df_filt$sample_id == j & bc_df_filt$library == k]))/
-      sum(bc_df$rpm[bc_df$rpm >= i & bc_df$sample_id == j & (bc_df$library == k | bc_df$match == "No")]) *100
-    }
-  }
+bc_reads_list <- list()
+for (i in unique(bc_reads$sample_id)) {
+  print(i)
+  test_x <- bc_df_filt %>%
+    mutate(sample_id = paste(sample_id, library, sep = "_")) %>%
+    filter(sample_id == i)
+  test_y <- bc_df %>%
+    mutate(sample_id = paste(sample_id, library, sep = "_")) %>%
+    filter(sample_id == i)
+  bc_reads_list[[i]] <- lapply(unique(bc_reads$cutoff), function(x) sum(na.omit(test_x$rpm[test_x$rpm >= x])) / sum(test_y$rpm[test_y$rpm >= x])  *100)
+  names(bc_reads_list[[i]]) <- unique(bc_reads$cutoff)
 }
 
+bc_reads_2 <- bind_rows(bc_reads_list)
+rownames(bc_reads_2) <- names(bc_reads_list)
+bc_reads_2 <- bc_reads_2 %>%
+  rownames_to_column("sample_id") %>%
+  pivot_longer(-sample_id, names_to = "cutoff", values_to = "bc_reads") %>%
+  mutate(cutoff = as.numeric(cutoff))
+
+bc_reads <- merge(bc_reads, bc_reads_2, by = c("sample_id", "cutoff"))
 
 
-bc_fraction <- merge(bc_fraction, bc_reads, by = c("sample_id", "library", "cutoff"))
+bc_fraction <- merge(bc_fraction, bc_reads, by = c("sample_id", "cutoff"))
 bc_fraction$bcs_found <- as.numeric(bc_fraction$bcs_found)
 bc_fraction$bc_reads <- as.numeric(bc_fraction$bc_reads)
 
 #c("#1B998B", "#2D3047", "#FF9B71", "#ECDD7B")
 # Plot to evaluate data quality per cutoff
-for (i in unique(bc_fraction$library)) {
-p <- ggplot_custom(bc_fraction[bc_fraction$library == i,]) +
+ggplot_custom(bc_fraction) +
   geom_point(aes(x = cutoff, y = bcs_found), color = '#1B998B', size = 1) +
   geom_line(aes(x = cutoff, y = bcs_found), color = '#1B998B', size = 1) +
   geom_point(aes(x = cutoff, y = bc_reads), color = 'black', size = 1) +
   geom_line(aes(x = cutoff, y = bc_reads), color = 'black', size = 1) +
   xlab("rpm cutoff")+
   ylab("total barcodes (green) and matched barcode reads (black) detected (%)")+
-  facet_wrap(~sample_id)+
-  ggtitle(paste("library", i, sep = ": "))
-print(p)
-}
+  facet_wrap(~sample_id)
 
 ## 3: What is the correlation of the cDNA bc counts with the pDNA bc counts? 
 pMT02 <- bc_df_filt %>%
@@ -533,11 +543,11 @@ pMT09_02 <- bc_df_filt %>%
   mutate(pMT09_02 = (pMT09_02_r1_gcf6502 + pMT09_02_r1_gcf6578)/2) %>%
   dplyr::select(barcode, pMT09_02)
 
-pDNA <- merge(pMT02, pMT09, all = T)
-pDNA <- merge(pDNA, pMT09_02, all = T)
+pDNA <- merge(pMT02, pMT09, all = T, by = "barcode")
+pDNA <- merge(pDNA, pMT09_02, all = T, by = "barcode")
 
 
-bc_df_2 <- merge(pDNA, bc_df_filt, all = T)
+bc_df_2 <- merge(pDNA, bc_df_filt, all = T, by = "barcode")
 bc_df_2 <- bc_df_2[!is.na(bc_df_2$sample_id),]
 
 for (i in unique(bc_df_2$library)) {
@@ -834,12 +844,72 @@ bc_df_cDNA_filt_neg <- bc_df_cDNA_filt %>%
   mutate(activity = ave(activity, promoter, sample_id, FUN = function(x) mean(x))) %>%
   dplyr::select(-reporter_id) %>%
   unique() %>%
+  dplyr::select("tf_activity2" = activity, promoter, sample_id) %>%
+  unique()
+
+
+### For library 2 I don't have random motifs, so I will take the mean of the mutated motifs instead (get rid of the 2% highest active mutated controls)
+bc_df_cDNA_filt_neg2 <- bc_df_cDNA_filt %>%
+  dplyr::select(sample_id, reporter_id, tf, promoter, neg_ctrls, mean_activity) %>%
+  filter(neg_ctrls == "Yes") %>%
+  unique() %>%
+  group_by(sample_id, promoter) %>%
+  dplyr::top_frac(-0.75, mean_activity) %>%
+  mutate(activity = ave(mean_activity, promoter, sample_id, FUN = function(x) mean(x))) %>%
+  dplyr::select(-reporter_id) %>%
+  unique() %>%
   dplyr::select("tf_activity" = activity, promoter, sample_id) %>%
   unique()
 
-bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, bc_df_cDNA_filt_neg, by = c("sample_id", "promoter"))
+x <- merge(bc_df_cDNA_filt_neg, bc_df_cDNA_filt_neg2)
+plot(x$tf_activity, x$tf_activity2)
+### Normalization by random has some outliers (gcf6502) -> I can better for now normalize by mutated motifs since I also have data for all samples from that
+
+
+bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, bc_df_cDNA_filt_neg2, by = c("sample_id", "promoter"))
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
   mutate(minP_activity = activity / tf_activity)
+
+
+### Compute a p-value for each reporter with respect to the background minimal promoter activity
+bc_df_cDNA_filt$library[is.na(bc_df_cDNA_filt$library)] <- "1+2"
+bc_df_cDNA_filt_neg2 <- bc_df_cDNA_filt %>%
+  dplyr::select(sample_id, reporter_id, tf, promoter, neg_ctrls, mean_activity, condition, library) %>%
+  filter(neg_ctrls == "Yes") %>%
+  unique() %>%
+  group_by(sample_id, promoter) %>%
+  dplyr::top_frac(-0.75, mean_activity) %>%
+  mutate(id = paste(condition, promoter, library, sep = "_"))
+
+bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
+  mutate(reporter_id2 = gsub("(.*)_.*(_[1-3]{1}$)", "\\1\\2", reporter_id),
+         id = paste(condition, promoter, library, sep = "_"))
+
+
+pval_list <- list()
+for (i in unique(bc_df_cDNA_filt$reporter_id2)) {
+  print(i)
+  test_x <- bc_df_cDNA_filt[bc_df_cDNA_filt$reporter_id2 == i,]
+  ids <- unique(bc_df_cDNA_filt$id[bc_df_cDNA_filt$reporter_id2 == i])
+  pval_list[[i]] <- lapply(ids, function(x) t.test(test_x$activity[test_x$id == x], 
+                                                   bc_df_cDNA_filt_neg2$mean_activity[bc_df_cDNA_filt_neg2$id == x])$p.value)
+  names(pval_list[[i]]) <- ids
+}
+
+pval_df <- data.frame(bind_rows(pval_list))
+rownames(pval_df) <- names(pval)
+pval_df <- pval_df %>%
+  rownames_to_column("reporter_id2") %>%
+  pivot_longer(-reporter_id2, names_to = "id", values_to = "pval") %>%
+  mutate(id = gsub("1.2", "1+2", id)) %>%
+  na.omit()
+
+bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, pval_df, by = c("reporter_id2", "id"), all = T)
+bc_df_cDNA_filt <- bc_df_cDNA_filt[!is.na(bc_df_cDNA_filt$sample_id),]
+
+bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
+  mutate(pval_adj = p.adjust(p = pval))
+
 
 ## Compute activity relative to NFYA reporter
 bc_df_cDNA_filt_nfya <- bc_df_cDNA_filt %>%
@@ -881,6 +951,40 @@ bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, bc_df_cDNA_filt_mutated, by = c("repor
 bc_df_cDNA_filt <- bc_df_cDNA_filt[!is.na(bc_df_cDNA_filt$barcode),]
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
   mutate(mean_activity_sample_neg = mean_activity / mutated_activity)
+
+## Statistical significance of reporters vs negative control
+bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
+  mutate(reporter_id2 = gsub("_neg", "", reporter_id))
+
+pval_list <- list()
+for (i in unique(bc_df_cDNA_filt$reporter_id2)) {
+  print(i)
+  test_x <- bc_df_cDNA_filt[bc_df_cDNA_filt$reporter_id2 == i,]
+  ids <- intersect(unique(bc_df_cDNA_filt$id[bc_df_cDNA_filt$reporter_id2 == i & bc_df_cDNA_filt$neg_ctrls == "Yes"]),
+                     unique(bc_df_cDNA_filt$id[bc_df_cDNA_filt$reporter_id2 == i & bc_df_cDNA_filt$neg_ctrls == "No"]))
+    pval_list[[i]] <- lapply(ids, function(x) t.test(test_x$activity[test_x$id == x & test_x$neg_ctrls == "No"], 
+                                                   test_x$activity[test_x$id == x & test_x$neg_ctrls == "Yes"])$p.value)
+    names(pval_list[[i]]) <- ids
+}
+
+pval_list <- pval_list[lengths(pval_list) > 0]
+pval_df <- data.frame(bind_rows(pval_list))
+rownames(pval_df) <- names(pval_list)
+pval_df <- as.data.frame(pval_df)
+pval_df <- pval_df %>%
+  rownames_to_column("reporter_id2") %>%
+  pivot_longer(-reporter_id2, names_to = "id", values_to = "pval_neg") %>%
+  mutate(id = gsub("1.2", "1+2", id)) %>%
+  na.omit()
+
+bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, pval_df, by = c("reporter_id2", "id"), all = T)
+
+bc_df_cDNA_filt2 <- read_csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6578_gen2_stimulation-2/test2_try2.csv") %>%
+  dplyr::select(reporter_id, condition, 'pval_neg2' = pval_neg) %>%
+  unique()
+
+bc_df_cDNA_filt3 <- merge(bc_df_cDNA_filt, bc_df_cDNA_filt2, by = c("reporter_id", "condition"))
+plot(bc_df_cDNA_filt3$pval_neg, bc_df_cDNA_filt3$pval_neg2)
 ```
 
 
@@ -915,6 +1019,7 @@ double_reporters_df$barcode_number[double_reporters_df$barcode_number == 5] <- 1
 bc_df_cDNA_filt <- rbind(bc_df_cDNA_filt, double_reporters_df)
 
 ## Combine replicates in 8 different columns
+
 bc_df_rep <- bc_df_cDNA_filt %>% 
   filter(commercial_reporter == "No", rand_promoter == "No", native_enhancer == "No", hPGK == "No") %>%
   dplyr::select(barcode_number, activity, sample_id, reporter_id, neg_ctrls, library) %>%
