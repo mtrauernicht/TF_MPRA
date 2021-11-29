@@ -821,7 +821,7 @@ ggplot_custom(outlier, aes(x = barcode_number, y = activity)) +
 
 
 ## Choose arbitrary cutoff to get rid of most extreme outliers
-bc_df_cDNA_filt <- bc_df_cDNA[bc_df_cDNA$low_outlier > -0.3 & bc_df_cDNA$high_outlier > -2,]
+bc_df_cDNA_filt <- bc_df_cDNA[bc_df_cDNA$low_outlier > -0.3 & bc_df_cDNA$high_outlier > -2 & bc_df_cDNA$sd_activity < 100,]
 
 ## Recalculate mean and sd
 bc_df_cDNA_filt$mean_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id, 
@@ -897,7 +897,7 @@ for (i in unique(bc_df_cDNA_filt$reporter_id2)) {
 }
 
 pval_df <- data.frame(bind_rows(pval_list))
-rownames(pval_df) <- names(pval)
+rownames(pval_df) <- names(pval_list)
 pval_df <- pval_df %>%
   rownames_to_column("reporter_id2") %>%
   pivot_longer(-reporter_id2, names_to = "id", values_to = "pval") %>%
@@ -978,13 +978,6 @@ pval_df <- pval_df %>%
   na.omit()
 
 bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, pval_df, by = c("reporter_id2", "id"), all = T)
-
-bc_df_cDNA_filt2 <- read_csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6578_gen2_stimulation-2/test2_try2.csv") %>%
-  dplyr::select(reporter_id, condition, 'pval_neg2' = pval_neg) %>%
-  unique()
-
-bc_df_cDNA_filt3 <- merge(bc_df_cDNA_filt, bc_df_cDNA_filt2, by = c("reporter_id", "condition"))
-plot(bc_df_cDNA_filt3$pval_neg, bc_df_cDNA_filt3$pval_neg2)
 ```
 
 
