@@ -55,6 +55,7 @@ StartTime <-Sys.time()
 Date <- substr(gsub("-","",Sys.time()),1,8) 
 # libraries:
 library(GenomicRanges)
+library(rtracklayer)
 library(BSgenome.Hsapiens.UCSC.hg38)
 library(GenomicFeatures)
 library(BSgenome)
@@ -71,6 +72,7 @@ library(phylotools)
 library(plyr)
 library(tidyr)
 library(ggpubr)
+library(SummarizedExperiment)
 ```
 
 
@@ -215,27 +217,33 @@ get_pwm_feature_matrix <- function(motif_meta_fn, fimo_fn, db = 2) {
 
 
 theme_classic_lines <- function() {
-  theme_pubr(border = T, base_family = "Arial", legend = "top") +
+  theme_pubr(border = T, legend = "top") +
             theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.1),
                   strip.background = element_rect(fill = "#ced4da")
             )
 }
 
 theme_classic_lines_45 <- function() {
-  theme_pubr(border = T, base_family = "Arial", legend = "top", x.text.angle = 45) +
+  theme_pubr(border = T, legend = "top", x.text.angle = 45) +
             theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.1),
                   strip.background = element_rect(fill = "#ced4da")
             )
 }
 
 theme_classic_lines_90 <- function() {
-  theme_pubr(border = T, base_family = "Arial", legend = "top", x.text.angle = 90) +
+  theme_pubr(border = T, legend = "top", x.text.angle = 90) +
             theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.1),
                   strip.background = element_rect(fill = "#ced4da")
             )
 }
 
 theme_set(theme_classic_lines())
+
+colors_diverse <- c("#264653", "#9AC1AE", "#5D987B", "#f2cc8f", "#e76f51")
+
+ggplot_custom <- function(...) ggplot2::ggplot(...) + 
+  scale_color_manual(values = colors_diverse) + 
+  scale_fill_manual(values = colors_diverse)
 ```
 
 
@@ -289,12 +297,12 @@ exp <- readRDS("/DATA/usr/t.filipovska/projects/ATAC-seq_TF-footprinting/analysi
 thres_count <- 10
 thres_num <- 2
 
-seqinfo <- seqinfo(rowRanges(exp))
+seqinfo <- seqinfo(SummarizedExperiment::rowRanges(exp))
 seqinfo <- keepStandardChromosomes(seqinfo, "Homo_sapiens")
 seqnames <- seqnames(seqinfo)
 seqnames <- seqnames[seqnames != "chrM"]
 
-row_keep <- rowSums(assay(exp)) > thres_count
+row_keep <- rowSums(SummarizedExperiment::assay(exp)) > thres_count
 row_keep <- row_keep & seqnames(rowRanges(exp)) %in% seqnames
 row_keep <- row_keep & rowMeans(assay(exp)) < 1000
 
@@ -335,7 +343,6 @@ ggplot(exp_counts_m %>%
          filter(WT1 > 4),
        aes(x = condition, y = rpm)) +
   geom_quasirandom() +
-  theme_bw() +
   coord_flip()
 ```
 
@@ -396,14 +403,14 @@ tib_fimo_2 <- tib_fimo_2 %>%
   mutate(motif_id = toupper(motif_id)) %>%
   unique()
 
-for (i in unique(tib_fimo_2$motif_id)) {
-  write.table(tib_fimo_2[tib_fimo_2$motif_id == i,] %>% dplyr::select(-motif_id),
-              file = paste("/DATA/usr/m.trauernicht/projects/SuRE-TF/ATAC_seq_hepg2/motifs/exact_reporter_match_only/", i, ".bed", sep = ""),
-              row.names = F,
-              col.names = F,
-              quote = F,
-              sep = '\t')
-}
+# for (i in unique(tib_fimo_2$motif_id)) {
+#   write.table(tib_fimo_2[tib_fimo_2$motif_id == i,] %>% dplyr::select(-motif_id),
+#               file = paste("/DATA/usr/m.trauernicht/projects/SuRE-TF/ATAC_seq_hepg2/motifs/exact_reporter_match_only/", i, ".bed", sep = ""),
+#               row.names = F,
+#               col.names = F,
+#               quote = F,
+#               sep = '\t')
+# }
 
 ```
 
@@ -539,8 +546,10 @@ auc_k562/auc_hepg2
 ## DiffTF based TF activity computation
 ```{r}
 ## DiffTF was run, final output is imported:
-difftf_activity <- read_tsv("/DATA/usr/m.trauernicht/projects/SuRE-TF/ATAC_seq_hepg2/diffTF/output_rna_new/FINAL_OUTPUT/extension100/HepG2vsK562.top1000.summary.tsv") %>%
+difftf_activity <- read_tsv("/DATA/usr/m.trauernicht/projects/SuRE-TF/ATAC_seq_hepg2/diffTF/output_rna_top1000_inverse/FINAL_OUTPUT/extension100/HepG2vsK562.top1000.summary.tsv") %>%
   dplyr::select(TF, 'diffTF_activity' = weighted_meanDifference, 'classification' = classification_q0.001_final)
+difftf_activity$classification[difftf_activity$TF == "POU5F1::SOX2"] <- difftf_activity$classification[difftf_activity$TF == "POU5F1"]
+difftf_activity$classification[difftf_activity$TF == "RAR:RXR"] <- difftf_activity$classification[difftf_activity$TF == "RARA"]
 
 difftf_activity2 <- read_tsv("/DATA/usr/m.trauernicht/projects/SuRE-TF/ATAC_seq_hepg2/diffTF/output_rna_allTFBS/FINAL_OUTPUT/extension100/HepG2vsK562.top1000.summary.tsv") %>%
   dplyr::select(TF, 'diffTF_activity2' = weighted_meanDifference, 'classification2' = classification_q0.001_final)
@@ -559,21 +568,24 @@ ggplot(diff, aes(x = diffTF_activity, y = diffTF_activity2)) +
 
 
 # Import mean reporter activities per TF
-reporter_activity <- read_csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/ATAC_seq_hepg2/diffTF/tf_reporter_activity.csv")
-reporter_activity <- reporter_activity %>%
-  mutate(tf = gsub("_.*", "", tf), 
-         tf = toupper(tf))
-reporter_activity <- reporter_activity %>%
-  mutate(tf_activity = ave(tf_activity, tf, condition, FUN = function(x) mean(x))) %>%
+reporter_activity_all <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/ATAC_seq_hepg2/diffTF/tf_reporter_activities_ernst.csv")
+reporter_activity_all_mean <- reporter_activity_all %>%
+  pivot_wider(names_from = "condition", values_from = c("ernst_activity", "reporter_activity_minP")) %>%
+  mutate(dif_ernst = log2(ernst_activity_K562 / ernst_activity_HepG2),
+         dif_reporter = log2(reporter_activity_minP_K562 / reporter_activity_minP_HepG2)) %>%
+  dplyr::select(dif_ernst, dif_reporter, 'TF' = tf) %>%
   unique()
-reporter_activity <- reporter_activity %>%
-  spread(condition, tf_activity) %>%
-  dplyr::select('TF' = tf, HepG2_DMSO, HepG2_CDCA, K562_DMSO)
-reporter_activity_dif <- reporter_activity %>%
-  mutate(reporter_activity = log2(K562_DMSO / HepG2_DMSO)) %>%
-  dplyr::select(TF, reporter_activity)
+reporter_activity_all_mean$TF <- gsub("::.*", "_", reporter_activity_all_mean$TF)
+reporter_activity_all_mean$TF[reporter_activity_all_mean$TF == "POU5F1_"] <- "POU5F1::SOX2"
+reporter_activity_all_mean$TF[reporter_activity_all_mean$TF == "RARA:RXRA"] <- "RAR:RXR"
+reporter_activity_all_mean$TF[reporter_activity_all_mean$TF == "ETS1"] <- "ETS2"
+reporter_activity_all_mean$TF[reporter_activity_all_mean$TF == "NFATc1"] <- "NFATC1"
+reporter_activity_all_mean$TF[reporter_activity_all_mean$TF == "TCF3"] <- "TCF7L2"
+reporter_activity_all_mean$TF <- gsub("_", "", reporter_activity_all_mean$TF)
 
-activity_comp <- merge(difftf_activity, reporter_activity_dif)
+
+activity_comp <- merge(difftf_activity, reporter_activity_all_mean, by = "TF", all = T) %>%
+  na.omit()
 
 
 # Add RNA-seq data from HepG2 and K562
@@ -607,18 +619,20 @@ rnaseq_matrix <- rnaseq_matrix[idx_nocounts, ]
 #   dplyr::select(-hgnc_symbol)
 # write_tsv(rnaseq_matrix, "/DATA/usr/m.trauernicht/data/RNA_seq/hepG2_k562_counts.tsv")
 
-
-activity_comp <- merge(activity_comp, rnaseq_matrix, by.x = 'TF', by.y = 'hgnc_symbol')
-
 activity_comp <- activity_comp %>%
   mutate(diffTF_activity_norm = (diffTF_activity-mean(diffTF_activity))/sd(diffTF_activity),
          reporter_activity_norm = (reporter_activity-mean(reporter_activity))/sd(reporter_activity))
+
+activity_comp2 <- merge(activity_comp, rnaseq_matrix, by.x = 'TF', by.y = 'hgnc_symbol')
   
 # Import class of TF
 tf_class <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/garcia_tf-properties.csv") %>%
   dplyr::select(TF, chromatin_regulation_mode)
 
-activity_comp <- merge(activity_comp, tf_class)
+activity_comp <- merge(activity_comp, tf_class, all = T)
+activity_comp$chromatin_regulation_mode[activity_comp$TF == "POU5F1::SOX2"] <- activity_comp$chromatin_regulation_mode[activity_comp$TF == "POU5F1"]
+activity_comp$chromatin_regulation_mode[activity_comp$TF == "RAR:RXR"] <- activity_comp$chromatin_regulation_mode[activity_comp$TF == "RARA"]
+activity_comp <- activity_comp %>% na.omit()
 
 
 ggplot(activity_comp, aes(x = reporter_activity_norm, y = diffTF_activity_norm)) +
@@ -627,9 +641,46 @@ ggplot(activity_comp, aes(x = reporter_activity_norm, y = diffTF_activity_norm))
   geom_smooth(method = "lm", color = "grey", fill = "lightgrey") +
   xlab("Differential Reporter Activity (K562/HepG2)") +
   ylab("Differential Accessibility - diffTF (K562/HepG2)") +
-  scale_color_manual(values = colors_diverse) +
-  theme_bw()+
+  scale_color_manual(values = c("grey",colors_diverse[c(2,5,4)])) +
   facet_wrap(~classification)
+
+for (i in unique(activity_comp$classification)) {
+  print(paste("cor =", cor.test(activity_comp$reporter_activity_norm[activity_comp$classification == i], activity_comp$diffTF_activity_norm[activity_comp$classification == i])$estimate,
+              "| p-value =", cor.test(activity_comp$reporter_activity_norm[activity_comp$classification == i], activity_comp$diffTF_activity_norm[activity_comp$classification == i])$p.value,
+              "| classification =", i))
+}
+
+
+# Which of the TFs are correlating and which not?
+activity_comp3 <- activity_comp2 %>%
+  mutate(reporter_activity_norm = abs(reporter_activity_norm),
+         diffTF_activity_norm = abs(diffTF_activity_norm),
+         dif = reporter_activity_norm - diffTF_activity_norm,
+         dif_rna = K562_r1 - HepG2_r1) %>%
+  dplyr::select(dif, classification, TF, dif_rna) %>%
+  unique()
+
+ggplot(activity_comp3 %>% filter(classification != "not-expressed"), 
+       aes(x = classification, y = dif)) +
+  geom_quasirandom()
+
+activity_comp3 <- activity_comp2 %>%
+  mutate(dif_rna = K562_r1 - HepG2_r1) %>%
+  dplyr::select(reporter_activity_norm, diffTF_activity_norm, classification, TF, dif_rna) %>%
+  unique()
+
+ggplot(activity_comp3 %>% filter(classification != "not-expressed"), 
+       aes(x = reporter_activity_norm, y = dif_rna)) +
+  geom_point()+
+  geom_abline(linetype = "dashed") +
+  geom_smooth(method = "lm", color = "grey", fill = "lightgrey") 
+
+ggplot(activity_comp3 %>% filter(classification != "not-expressed"), 
+       aes(x = diffTF_activity_norm, y = dif_rna)) +
+  geom_point()  +
+  geom_abline(linetype = "dashed") +
+  geom_smooth(method = "lm", color = "grey", fill = "lightgrey") 
+
 
 
 # The same for DMSO vs CDCA
@@ -644,14 +695,29 @@ activity_comp_cdca <- merge(difftf_activity_cdca, reporter_activity_dif)
 
 
 ggplot(activity_comp_cdca, aes(x = diffTF_activity, y = reporter_activity)) +
-  geom_point() +
+  geom_point(color = ifelse(activity_comp_cdca$reporter_activity > 1, "red", "black")) +
   geom_abline() +
   geom_smooth(method = "lm") +
   xlab("Differential Accessibility - diffTF (CDCA/DMSO)") +
-  ylab("Differential Reporter Activity (CDCA/DMSO)") +
-  theme_bw()
+  ylab("Differential Reporter Activity (CDCA/DMSO)") 
 
 ```
+
+---
+
+## ChromVAR differential TF activity computation
+```{r}
+library(chromVAR)
+library(motifmatchr)
+library(Matrix)
+library(SummarizedExperiment)
+library(BiocParallel)
+set.seed(1252)
+
+```
+
+
+
 
 
 
