@@ -109,7 +109,7 @@ theme_classic_lines_90 <- function() {
 
 theme_set(theme_classic_lines())
 
-colors_diverse <- c("#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51")
+colors_diverse <- c("#264653", "#9AC1AE", "#5D987B", "#f2cc8f", "#e76f51")
 
 ggplot_custom <- function(...) ggplot2::ggplot(...) + 
   scale_color_manual(values = colors_diverse) + 
@@ -120,7 +120,12 @@ ggplot_custom <- function(...) ggplot2::ggplot(...) +
 
 ```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 # Import processed bc counts from the preprocessing step
-cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6578_gen2_stimulation-2/results/mt20211117_reporter_activity_filt_combined.csv", header = T)
+cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6578_gen2_stimulation-2/results/mt20211118_reporter_activity_filt_combined.csv", header = T)
+
+# Filter TP53 from library 1+2 K562 data
+cDNA_df2 <- cDNA_df %>%
+  filter(library == "1+2" & condition == "K562_DMSO" & tf == "TP53")
+cDNA_df <- anti_join(cDNA_df, cDNA_df2, by = c("reporter_id", "sample_id"))
 ```
 
 
@@ -153,12 +158,14 @@ for (i in unique(cDNA_df$condition)) {
 
 # Same plot for one condition only
 ggplot_custom(cDNA_df %>%
-                filter(condition == "HepG2_DMSO", neg_ctrls == "No", library == "1+2") %>%
+                filter(condition == "HepG2_CDCA", neg_ctrls == "No") %>%
                 dplyr::select(reporter_id, pval_adj, reporter_activity_minP, promoter) %>%
-                unique(),
-            aes(x = log(reporter_activity_minP), y = -log10(pval_adj), 
-                color = ifelse(log(reporter_activity_minP) > 1 & pval_adj < 0.05, "green", 
-                               ifelse(log(reporter_activity_minP) < -1 & pval_adj < 0.05, "yellow","black")))) +
+                unique() %>%
+                mutate(reporter_activity_minP = log2(reporter_activity_minP),
+                       pval_adj = -log10(pval_adj)),
+            aes(x = reporter_activity_minP, y = pval_adj, 
+                color = ifelse(reporter_activity_minP > 1 & pval_adj > -log10(0.05), ifelse(reporter_activity_minP > 3 & pval_adj > -log10(0.05), "green", "blue"), 
+                               ifelse(reporter_activity_minP < -1 & pval_adj > -log10(0.05), "yellow","black")))) +
   geom_point() +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
   geom_vline(xintercept = log2(2), linetype = "dashed") +
@@ -184,6 +191,7 @@ ggplot_custom(cDNA_df %>%
 # Show per condition how many reporters per TF are upregulated, downregulated, or unchanged
 cDNA_df$reporter_activity_class <- 0
 cDNA_df$reporter_activity_class[cDNA_df$pval_adj < 0.05 & cDNA_df$reporter_activity_minP > 2] <- 1
+cDNA_df$reporter_activity_class[cDNA_df$pval_adj < 0.05 & cDNA_df$reporter_activity_minP > 8] <- 2
 cDNA_df$reporter_activity_class[cDNA_df$pval_adj < 0.05 & cDNA_df$reporter_activity_minP < 0.5] <- -1
 
 
@@ -199,7 +207,7 @@ cDNA_df2 <- cDNA_df2 %>%
 for (i in unique(cDNA_df2$condition)) {
   p <- ggplot_custom(cDNA_df2 %>%
                        filter(condition == i),
-                     aes(x = reorder(tf, -class_count), fill = factor(reporter_activity_class, levels = c("0", "1", "-1")))) +
+                     aes(x = reorder(tf, -class_count), fill = factor(reporter_activity_class, levels = c("0", "1", "2", "-1")))) +
     geom_bar(position = "fill") +
     geom_hline(yintercept = 0.25, linetype = "dashed") +
     geom_hline(yintercept = 0.75, linetype = "dashed") +
@@ -209,6 +217,14 @@ for (i in unique(cDNA_df2$condition)) {
   
   print(p)
 }
+
+ggplot_custom(cDNA_df2 %>%
+                       filter(condition == "mES_2i_LIF"),
+                     aes(x = reorder(tf, -class_count), fill = factor(reporter_activity_class, levels = c("0", "1", "2", "-1")))) +
+    geom_bar(position = "fill") +
+    geom_hline(yintercept = 0.25, linetype = "dashed") +
+    geom_hline(yintercept = 0.75, linetype = "dashed") +
+    theme_classic_lines_90()
 
 
 ## Which reporters are significantly different between two conditions?
@@ -241,11 +257,14 @@ cDNA_df3 <- cDNA_df2 %>%
   unique() %>%
   spread(reporter_activity_class, class_count_rel)
 
-cDNA_df3$class[cDNA_df3$`0` >= 0.66] <- 0
-cDNA_df3$class[cDNA_df3$`1` >= 0.66] <- 2
-cDNA_df3$class[cDNA_df3$`-1` >= 0.66] <- -2
-cDNA_df3$class[cDNA_df3$`1` >= 0.33 & cDNA_df3$`1` < 0.66] <- 1
-cDNA_df3$class[cDNA_df3$`-1` >= 0.33 & cDNA_df3$`-1` < 0.66] <- -2
+cDNA_df3$class[cDNA_df3$`0` >= 0.75] <- 0
+cDNA_df3$class[cDNA_df3$`1` >= 0.75] <- 2
+cDNA_df3$class[cDNA_df3$`2` >= 0.75] <- 4
+cDNA_df3$class[cDNA_df3$`-1` >= 0.75] <- -2
+cDNA_df3$class[cDNA_df3$`1` >= 0.25 & cDNA_df3$`1` < 0.75] <- 1
+cDNA_df3$class[cDNA_df3$`1` < 0.25 & cDNA_df3$`2` < 0.25 & cDNA_df3$`1` + cDNA_df3$`2` >= 0.25] <- 1
+cDNA_df3$class[cDNA_df3$`2` >= 0.25 & cDNA_df3$`2` < 0.75] <- 3
+cDNA_df3$class[cDNA_df3$`-1` >= 0.25 & cDNA_df3$`-1` < 0.75] <- -2
 cDNA_df3$class[cDNA_df3$`1` >= 0.085 & cDNA_df3$`-1` >= 0.085] <- -1
 
 
@@ -262,19 +281,18 @@ cDNA_df4 <- cDNA_df3 %>%
 
 cDNA_df4 <- cDNA_df4 %>%
   spread(tf, class) %>%
-  column_to_rownames('condition') %>%
-  na.omit() 
+  column_to_rownames('condition')
 
 makeColorRampPalette <- function(colors, cutoff.fraction, num.colors.in.palette)
 {
-  stopifnot(length(colors) == 3)
+  stopifnot(length(colors) == 4)
   ramp1 <- colorRampPalette(colors[1:2])(num.colors.in.palette * cutoff.fraction)
-  ramp2 <- colorRampPalette(colors[2:3])(num.colors.in.palette * (1 - cutoff.fraction))
+  ramp2 <- colorRampPalette(colors[2:4])(num.colors.in.palette * (1 - cutoff.fraction))
   return(c(ramp1, ramp2))
 }
 
-cols <- makeColorRampPalette(c(colors_diverse[3], colors_diverse[1], colors_diverse[2]), # distances 3 to max(distmat) colored from green to black
-                             0.5,
+cols <- makeColorRampPalette(c(colors_diverse[4], colors_diverse[1], colors_diverse[2], colors_diverse[3]), 
+                             1-(4/6),
                              100)
 
 pheatmap(as.matrix(cDNA_df4),
@@ -301,11 +319,13 @@ cDNA_df_lm <- cDNA_df %>%
   dplyr::select(reporter_id, tf, reporter_activity_class, condition, promoter, spacing, background, distance) %>%
   unique()
 
+cDNA_df3[is.na(cDNA_df3)] <- 0
 mixed_classes <- cDNA_df3 %>%
   mutate(id = paste(condition, tf, sep = "_")) %>%
-  dplyr::select(id, class) %>%
-  filter(class == 1 | class == -2 | class == -1) %>%
-  unique()
+  dplyr::select(-class) %>%
+  #filter(class != 0) %>%
+  unique() %>%
+  filter(`1` < 0.95, `0` < 0.95, `2` < 0.95)
 
 ## Fitting the model for each condition and tf
 cDNA_df_lm$id <- paste(cDNA_df_lm$condition, cDNA_df_lm$tf, sep = "_")
@@ -386,7 +406,8 @@ ggplot_custom(lm_weights, aes(x = feature, y = weight)) +
 exp_features <- list()
 for (i in names(lm_features)) {
   exp_features[[i]] <- anova(lm_features[[i]]) %>%
-  dplyr::select('sum_sq' = `Sum Sq`) %>%
+  dplyr::select('sum_sq' = `Deviance`) %>%
+    na.omit() %>%
   mutate(sum = sum(sum_sq)) %>%
   mutate(rel_sum_sq = (sum_sq/sum)*100) %>%
   setnames("rel_sum_sq", "percent") %>%
@@ -412,11 +433,19 @@ ggplot_custom(exp_features,
   xlab("Variance explained (%)") + 
   ylab("") 
 
+classes <- cDNA_df3 %>%
+  mutate(id = paste(condition, tf, sep = "_")) %>%
+  dplyr::select(id, class) %>%
+  unique()
+
+exp_features <- merge(exp_features, classes, by = "id")
+
 ggplot_custom(exp_features, 
        aes(y = percent, x = feature, color = group)) +
   geom_quasirandom() + 
   xlab("Variance explained (%)") + 
-  ylab("") 
+  ylab("") +
+  facet_wrap(~class)
 
 # Keep features from good models only
 exp_features_good <- exp_features %>%
@@ -432,6 +461,10 @@ exp_features_good <- exp_features_good %>%
   filter(percent >= 50)
 exp_features_sel <- exp_features[exp_features$id %in% exp_features_good$id,]
 
+exp_features_sel <- exp_features_sel %>%
+  mutate(tf = gsub(".*_(.*)", "\\1", id),
+         condition = gsub("(.*)_.*", "\\1", id))
+
 # Plot again the features
 ggplot_custom(exp_features_sel, 
        aes(y = percent, x = feature, color = group)) +
@@ -439,15 +472,25 @@ ggplot_custom(exp_features_sel,
   xlab("Variance explained (%)") + 
   ylab("")
 
-ggplot(exp_features_sel %>%
-                filter(feature != "total") %>%
-                mutate(sum = ave(percent, id, FUN = function(x) sum(x))), 
+order <- exp_features_sel %>%
+                mutate(sum = ave(percent, id, FUN = function(x) sum(x))) %>%
+  dplyr::select(sum, tf) %>%
+  unique() %>%
+  group_by(tf) %>%
+  top_n(1, sum)
+
+exp_features_sel_ord <- merge(order, exp_features_sel, by = "tf") %>%
+  filter(feature != "total")
+  
+
+ggplot(exp_features_sel_ord %>%
+         filter(condition %in% c("K562_DMSO", "HepG2_DMSO", "mES_2i_LIF")), 
        aes(y = percent, x = reorder(id, -sum), fill = feature, group = feature)) +
   geom_bar(stat = "identity", position = "stack") + 
   xlab("Variance explained (%)") + 
   ylab("") +
   scale_fill_manual(values = c("#e07a5f", "#3d405b", "#81b29a", "#f2cc8f"))+
-  theme_classic_lines_90()
+  theme_classic_lines_90() 
 
 
 ggplot_custom(exp_features_sel, aes(x=feature, y=percent, color=group, group = id)) + 
@@ -455,16 +498,49 @@ ggplot_custom(exp_features_sel, aes(x=feature, y=percent, color=group, group = i
   geom_point()
 
 exp_features_sel_heatmap <- exp_features_sel %>%
-  dplyr::select(-group) %>%
+  filter(condition %in% c("mES_2i_LIF", "K562_DMSO", "HepG2_DMSO")) %>%
+  mutate(cell_type = gsub("(.*)_.*", "\\1", condition)) %>%
+  mutate(cell_type = gsub("(.*)_.*", "\\1", cell_type)) %>%
+  dplyr::select(-group, -condition) %>%
   filter(feature != "total") %>%
   spread(feature, percent) %>% 
-  column_to_rownames("id")
+  column_to_rownames("id") %>%
+  arrange(tf)
 
-pheatmap(as.matrix(t(exp_features_sel_heatmap)),
+cell_type <- exp_features_sel_heatmap %>%
+  dplyr::select(cell_type)
+
+colors_pheatmap <- list('cell_type' = c("K562" = colors_diverse[1], "HepG2" = colors_diverse[5], "mES" = colors_diverse[4]))
+
+pheatmap(as.matrix(t(exp_features_sel_heatmap %>% dplyr::select(-cell_type, -tf, -class))),
          color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100),
          border_color = "white", 
          cellwidth = 8, cellheight = 8,
-         angle_col = 90)
+         angle_col = 90, annotation_col = cell_type, cluster_cols = T,
+         annotation_colors = colors_pheatmap)
+
+# Explore selected ids
+ids_selected <- cDNA_df_lm %>%
+  filter(id %in% rownames(exp_features_sel_heatmap)) %>%
+  mutate(reporter_activity_class = as.character(reporter_activity_class),
+         sum_all = ave(id, id, FUN = function(x) length(x)),
+         sum_class = ave(id, id, reporter_activity_class, FUN = function(x) length(x))) %>%
+  mutate(sum_all = as.numeric(sum_all),
+         sum_class = as.numeric(sum_class),
+         frac = sum_class / sum_all)
+
+## GRHL1, POU5F1::SOX2, MAF::NFE2
+reporter_correlations <- cDNA_df %>%
+  filter(tf %in% c("GRHL1", "POU5F1::SOX2", "MAF::NFE2"),
+         condition %in% c("mES_2i_LIF", "K562_DMSO", "HepG2_DMSO")) %>%
+  dplyr::select(reporter_id, condition, tf, pval_adj) %>%
+  mutate(pval_adj = -log10(pval_adj)) %>%
+  unique() %>%
+  spread(condition, pval_adj)
+
+ggplot_custom(reporter_correlations, aes(x = K562_DMSO, y = mES_2i_LIF)) +
+  geom_point() +
+  facet_wrap(~tf, scales = "free")
 ```
 
 ---
@@ -594,7 +670,76 @@ ggplot_custom(varimps, aes(x = feature, y = dropout_loss)) +
 ## How to select the best reporter per tf?
 
 ```{r}
+# Extract TF activities for K562 & HepG2
+tf_activities <- cDNA_df %>%
+  filter(condition %in% c("K562_DMSO", "HepG2_DMSO"), neg_ctrls == "No") %>%
+  dplyr::select(reporter_id, reporter_activity_minP, condition, tf) %>%
+  unique() %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  spread(condition, reporter_activity_minP) %>%
+  mutate(dif = log2(K562_DMSO / HepG2_DMSO)) %>%
+  dplyr::select(tf, dif, reporter_id)
 
+#write_csv2(tf_activities, "/DATA/usr/m.trauernicht/projects/SuRE-TF/ATAC_seq_hepg2/diffTF/tf_reporter_activities_all.csv")
+
+# Correlate with RNA-seq
+load('/DATA/usr/m.martinez.ara/GitLab/gurten/gurten/data/fc181121_epsure_tadec_rnaseq_expr_joshi.RData')
+
+# remove Serum data and calculate mean expression
+tib_fpkm_joshi$twoi <- (tib_fpkm_joshi$twoi_1 + tib_fpkm_joshi$twoi_2)/2
+tib_fpkm_joshi <- tib_fpkm_joshi %>%
+  dplyr::select(gene_id, 'tf' = symbol, twoi)
+
+tf_activities2 <- cDNA_df %>%
+  filter(condition == "mES_2i_LIF", neg_ctrls == "No") %>%
+  dplyr::select(reporter_id, reporter_activity_minP, tf) %>%
+  unique() %>%
+  mutate(tf = gsub("_.*", "", tf),
+         tf_activity = ave(reporter_activity_minP, tf, FUN = function(x) mean(x))) %>%
+  dplyr::select(tf_activity, tf) %>%
+  unique()
+
+tf_activities2 <- merge(tf_activities2, tib_fpkm_joshi, by = "tf") %>%
+  mutate(tf_activity = (tf_activity-mean(tf_activity))/sd(tf_activity),
+         twoi = (twoi-mean(twoi))/sd(twoi))
+
+ggplot_custom(tf_activities2, aes(x = twoi, y = tf_activity)) +
+  geom_point()
+
+# Correlate with regulon
+
+
+# Correlate with TF activities from Ernst et al. (https://doi.org/10.1038/nbt.3678)
+ernst_activities <- read.table("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/ernst_tf_activities_hepg2_k562.csv", sep = ";", dec = ",", header = T, fill = T)
+
+ernst_activities <- ernst_activities %>%
+  dplyr::select('tf' = TF, avg_score_HepG2, avg_score_K562) %>%
+  mutate(avg_score_HepG2 = ave(avg_score_HepG2, tf, FUN = function(x) mean(x)),
+         avg_score_K562 = ave(avg_score_K562, tf, FUN = function(x) mean(x))) %>%
+  unique() %>%
+  pivot_longer(-tf, names_to = "condition", values_to = "ernst_activity") %>%
+  mutate(condition = gsub("avg_score_", "", condition))
+
+tf_activities <- cDNA_df %>%
+  filter(condition %in% c("K562_DMSO", "HepG2_DMSO"), neg_ctrls == "No") %>%
+  dplyr::select(reporter_activity_minP, condition, tf) %>%
+  mutate(tf = gsub("_.*", "", tf),
+         condition = gsub("_DMSO", "", condition),
+         reporter_activity_minP = ave(reporter_activity_minP, condition, tf, FUN = function(x) mean(x))) %>%
+  unique()
+
+ernst_activities <- merge(ernst_activities, tf_activities, by = c('tf', 'condition')) %>%
+  mutate(ernst_activity = (ernst_activity-mean(ernst_activity))/sd(ernst_activity),
+         reporter_activity_minP = (reporter_activity_minP-mean(reporter_activity_minP))/sd(reporter_activity_minP))
+
+ggplot_custom(ernst_activities, 
+              aes(x = ernst_activity, y = reporter_activity_minP)) +
+  geom_point() +
+  geom_abline(linetype = "dashed") +
+  geom_smooth(method = "lm", color = "grey", fill = "lightgrey") +
+  facet_wrap(~condition)
+
+write_csv2(ernst_activities, "/DATA/usr/m.trauernicht/projects/SuRE-TF/ATAC_seq_hepg2/diffTF/tf_reporter_activities_ernst.csv")
 ```
 
 ---
