@@ -1,5 +1,5 @@
 ---
-title: "genomic P53 response element scoring"
+title: "Systematic comparison of TF reporter activity with ATAC-seq-inferred TF activity"
 author: 
   - name: "Max Trauernicht"
     email: "m.trauernicht@nki.nl"
@@ -21,7 +21,8 @@ output:
 ---
 
 ### Aim
-I want to score the affinity genomic P53 response elements using the same algorithm that was used to create P53 reporters. I then want to conclude if I can say anything about P53 gene regulation with the P53 reporters that I generated or not.
+I performed reporter assays in HepG2 and K562 cells to directly measure the activity of 86 TFs. In parallel, I computed TF activities indirectly from accessibility using ATAC-seq. I now want to systematically compare these two measures in this script. 
+The first part of this script describes how the candidate regions for the accessibility analysis were selected. 
 
 ---
 
@@ -47,7 +48,7 @@ div.sourceCode {
 
 ### Libraries
 
-```{r setup, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+```{r setup, out.width= "80%", fig.align= "center", warning= FALSE, message=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 StartTime <-Sys.time()
 
@@ -78,7 +79,7 @@ library(SummarizedExperiment)
 
 ### Custom functions
 
-```{r, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+```{r, out.width= "80%", fig.align= "center"}
 SetFileName <- function(filename, initials) {
   # Set filename with extension and initials to make filename with date integrated.
   filename <- substitute(filename)
@@ -622,7 +623,7 @@ rnaseq_matrix <- rnaseq_matrix[idx_nocounts, ]
 
 activity_comp <- activity_comp %>%
   mutate(diffTF_activity_norm = (diffTF_activity-mean(diffTF_activity))/sd(diffTF_activity),
-         reporter_activity_norm = (reporter_activity-mean(reporter_activity))/sd(reporter_activity))
+         reporter_activity_norm = (dif_reporter-mean(dif_reporter))/sd(dif_reporter))
 
 activity_comp2 <- merge(activity_comp, rnaseq_matrix, by.x = 'TF', by.y = 'hgnc_symbol')
   
