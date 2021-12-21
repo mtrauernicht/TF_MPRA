@@ -910,7 +910,6 @@ bc_df_cDNA_filt <- bc_df_cDNA_filt[!is.na(bc_df_cDNA_filt$sample_id),]
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
   mutate(pval_adj = p.adjust(p = pval))
 
-
 ## Compute activity relative to NFYA reporter
 bc_df_cDNA_filt_nfya <- bc_df_cDNA_filt %>%
   dplyr::select(sample_id, activity, reporter_id, tf, promoter) %>%
