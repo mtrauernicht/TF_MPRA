@@ -570,6 +570,7 @@ ggplot(diff, aes(x = diffTF_activity, y = diffTF_activity2)) +
 # Import mean reporter activities per TF
 reporter_activity_all <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/ATAC_seq_hepg2/diffTF/tf_reporter_activities_ernst.csv")
 reporter_activity_all_mean <- reporter_activity_all %>%
+  unique() %>%
   pivot_wider(names_from = "condition", values_from = c("ernst_activity", "reporter_activity_minP")) %>%
   mutate(dif_ernst = log2(ernst_activity_K562 / ernst_activity_HepG2),
          dif_reporter = log2(reporter_activity_minP_K562 / reporter_activity_minP_HepG2)) %>%
