@@ -49,7 +49,7 @@ div.sourceCode {
 
 ### Libraries 
 
-```{r setup, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+```{r setup, out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 StartTime <-Sys.time()
 
@@ -83,7 +83,7 @@ library(pheatmap)
 
 ### Functions
 
-```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+```{r out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
 # Custom functions
 SetFileName <- function(filename, initials) {
   # Set filename with extension and initials to make filename with date integrated.
@@ -198,7 +198,7 @@ hline <- function(y = 0, color = "black") {
 
 ### Loading data
 
-```{r data import, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+```{r data import, out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
 # Load metadata file that contains all required information about the sequenced samples
 metadata_df <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6578_gen2_stimulation-2/mt20211025_metadata_all_experiments.csv")
 
@@ -216,7 +216,7 @@ bc_annotation <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf657
 
 ### Creating count data frames
 
-```{r cluster_compare, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+```{r cluster_compare, out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
 # Generate one long data frame from the list of data frames
 bc_df <- bind_rows(bc_files, .id = "sample_id") %>%
   dplyr::select(sample_id, "barcode" = V1, "starcode_counts" = V2)
@@ -249,7 +249,7 @@ bc_df_unmatched <- bc_df[is.na(bc_df$tf),]
 
 ## Correlate and cluster individual samples
 
-```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+```{r out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
 # Make dataframe to compare raw counts between conditions
 bc_df_filt <- bc_df_filt[!is.na(bc_df_filt$sample),]
 bc_df_cor <- bc_df_filt %>%
@@ -368,7 +368,7 @@ plot(1:15, wss, type = "b",
 
 ## Data quality plots
 
-```{r read count 2, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message= FALSE}
+```{r read count 2, out.width= "80%", fig.align= "center",  warning= FALSE, message= FALSE}
 # I want to show the following:
 ## 1: Read distribution of matched barcodes vs. unmatched barcode
 
@@ -687,7 +687,7 @@ print(p)
 
 ### Sample filtering
 
-```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+```{r out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
 # Remove samples with low dynamic range (this most likely is due to unhappy cells, pDNA contamination or some other mistake in the sample prep)
 for (i in unique(bc_df$sample_id)) {
   bc_df$n_bc[bc_df$sample_id == i] <- length(bc_df$barcode[bc_df$rpm > 500 & bc_df$sample_id == i])
@@ -715,7 +715,7 @@ bc_df <- bc_df[!is.na(bc_df$tf),]
 ### Normalization of barcode counts:  
 Divide cDNA barcode counts through pDNA barcode counts to get activity
 
-```{r normalization, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+```{r normalization, out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
 # Prepare pDNA data and remove all barcodes with less than 20 counts 
 pMT02 <- bc_df %>%
   filter(str_detect(sample_id, "pMT02"), library == "1") %>%
@@ -762,7 +762,7 @@ bc_df <- bc_df %>%
 
 ## Calculate mean activity - filter out outlier barcodes 
 
-```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+```{r out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
 # First identify and remove outlier barcodes - this removes the noise created by faulty barcode clustering etc. 
 ## Calculate mean and SD for each reporter
 bc_df_cDNA <- bc_df %>%
@@ -835,7 +835,7 @@ bc_df_cDNA_filt$sd_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$rep
 
 ### Scaling data 
 
-```{r out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE}
+```{r out.width= "80%", fig.align= "center",  warning= FALSE}
 ## Compute activity relative to minimal promoter background
 bc_df_cDNA_filt_neg <- bc_df_cDNA_filt %>%
   dplyr::select(sample_id, activity, reporter_id, tf, promoter) %>%
@@ -985,7 +985,7 @@ bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, pval_df, by = c("reporter_id2", "id"),
 
 ## Calculate correlations between technical replicates
 
-```{r correlations_2, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE}
+```{r correlations_2, out.width= "80%", fig.align= "center",  warning= FALSE}
 ## Identify and relabel double reporters
 bc_df_12 <- bc_df_cDNA_filt %>%
   filter(nchar == 12, library == "1+2")
@@ -1061,7 +1061,7 @@ print(plt)
 
 ## Correlation between replicates
 
-```{r correlations_3, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE}
+```{r correlations_3, out.width= "80%", fig.align= "center",  warning= FALSE}
 # Correlation plots of the replicates
 ## Combine replicates of normalized data in 3 different columns
 bc_df_rep <- bc_df_cDNA_filt %>% 
@@ -1121,7 +1121,7 @@ for (i in unique(bc_df_rep$library)) {
 ```
 
 
-```{r data export, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE}
+```{r data export, out.width= "80%", fig.align= "center",  warning= FALSE}
 # Mean of the three replicates
 bc_df_cDNA_filt$reporter_activity <- ave(bc_df_cDNA_filt$mean_activity_sample, bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$condition, FUN = function(x) mean(x))
 bc_df_cDNA_filt$reporter_activity_minP <- ave(bc_df_cDNA_filt$mean_activity_sample_minP, bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$condition, FUN = function(x) mean(x))
