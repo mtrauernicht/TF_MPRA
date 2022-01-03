@@ -45,6 +45,21 @@ In more than 100 samples, 35,500 reporters for 86 TFs were transfected into vari
 - pval_minP = p-value of t-test comparing activity distributions of individual reporters with the distribution of minimal promoter only reporters within the same condition
 - pval_neg = p-value of t-test comparing activity distributions of individual reporters with the distribution of the activities of its paired negative controls within the same condition
 
+
+### Main tested conditions:
+- mESC: 2i+LIF
+- mESC: 2i-LIF (STAT3 inactivation)
+- mESC: LIF+PD (TCF inactivation)
+- mESC: LIF+CH (MEK activation)
+- mESC: N2B27 (neural differentiation medium)
+- mESC: HQ (NRF activation)
+- NPC
+- HepG2
+- HepG2 + bile acids (NR activation)
+- K562
+
+*Data from TFs in library 1 in HepG2 cells was ignored for a large part of the analysis for now because the computed TF activities did not make sense, I will look into what happened there further*
+
 ---
 
 ## Setup {.tabset}
@@ -93,6 +108,7 @@ library(pROC)
 library(tidyr)
 library(stringr)
 library(randomForest)
+library(readr)
 ```
 
 ### Functions
@@ -529,43 +545,75 @@ pheatmap(as.matrix(t(exp_features_sel_heatmap %>% dplyr::select(-cell_type, -tf,
 ```{r reporter_correlations, out.width= "80%", fig.align= "center"}
 # Select conditions for which I have robust data, remove highly active reporters that I took over from library 1 and included in library 2 (because those distort the activity distributions)
 cDNA_df2 <- cDNA_df %>%
-  filter(condition %in% c("HepG2_DMSO", "K562_DMSO", "mES_2i_LIF", "mES_2i", "mES_N2B27", "mES_LIF_PD", "mES_LIF_CH"), library != "1+2")
+  filter(condition %in% c("HepG2_DMSO", "K562_DMSO", "mES_2i_LIF", "mES_2i", "mES_N2B27", "mES_LIF_PD", "mES_LIF_CH", "mES_HQ"), library != "1+2")
+
 tfs_lib1 <- cDNA_df %>%
   filter(library == "1") %>%
   dplyr::select(tf) %>% 
   unique()
   
 cDNA_df3 <- cDNA_df %>%
-  filter(condition %in% c("HepG2_DMSO", "K562_DMSO", "mES_2i_LIF", "mES_2i", "mES_N2B27", "mES_LIF_PD", "mES_LIF_CH"), library == "1+2")
+  filter(condition %in% c("HepG2_DMSO", "K562_DMSO", "mES_2i_LIF", "mES_2i", "mES_N2B27", "mES_LIF_PD", "mES_LIF_CH", "mES_HQ"), library == "1+2")
 
 cDNA_df3 <- cDNA_df3[!cDNA_df3$tf %in% tfs_lib1$tf,]
 
 cDNA_df<- rbind(cDNA_df2, cDNA_df3)
 
 
-
-# Explore the ids for which I was able to fit a good linear model
-ids_selected <- cDNA_df_lm %>%
-  filter(id %in% rownames(exp_features_sel_heatmap)) %>%
-  mutate(reporter_activity_class = as.character(reporter_activity_class),
-         sum_all = ave(id, id, FUN = function(x) length(x)),
-         sum_class = ave(id, id, reporter_activity_class, FUN = function(x) length(x))) %>%
-  mutate(sum_all = as.numeric(sum_all),
-         sum_class = as.numeric(sum_class),
-         frac = sum_class / sum_all)
-
-## Compare for some example tfs the activity fraction in different conditions
+## Compare the activities of TF reporters in different conditions
+### Select TFs for which I have good models
 reporter_correlations <- cDNA_df %>%
-  filter(tf %in% c("GRHL1", "POU5F1::SOX2", "MAF::NFE2"),
-         condition %in% c("mES_2i_LIF", "K562_DMSO", "HepG2_DMSO")) %>%
-  dplyr::select(reporter_id, condition, tf, pval_adj_minP) %>%
-  mutate(pval_adj_minP = -log10(pval_adj_minP)) %>%
+  mutate(id = paste(condition, tf, sep = "_")) %>%
+  filter(id %in% cDNA_df_lm$id) %>%
+  dplyr::select(reporter_id, condition, tf, reporter_activity_minP) %>%
   unique() %>%
-  spread(condition, pval_adj_minP)
+  spread(condition, reporter_activity_minP)
 
-ggplot_custom(reporter_correlations, aes(x = K562_DMSO, y = mES_2i_LIF)) +
+ggplot_custom(reporter_correlations %>% 
+                dplyr::select(-mES_2i_LIF) %>% 
+                na.omit(), aes(x = log2(K562_DMSO), y = log2(HepG2_DMSO))) +
   geom_point() +
-  facet_wrap(~tf, scales = "free")
+  facet_wrap(~tf) +
+  geom_abline(linetype = "dashed") +
+  geom_smooth(method = "lm", color = "grey", fill = "lightgrey") +
+  ggtitle('comparison of reporter activities between conditions')
+
+
+### Or for a single case: STAT3 upon JAK activation
+reporter_correlations <- cDNA_df %>%
+  dplyr::select(reporter_id, condition, tf, reporter_activity_minP) %>%
+  unique() %>%
+  spread(condition, reporter_activity_minP)
+
+ggplot_custom(reporter_correlations %>% 
+                filter(tf == "STAT3") %>%
+                dplyr::select(mES_2i_LIF, mES_2i, tf, reporter_id) %>% 
+                na.omit(), aes(x = log2(mES_2i_LIF), y = log2(mES_2i))) +
+  geom_point() +
+  geom_abline(linetype = "dashed") +
+  geom_smooth(method = "lm", color = "grey", fill = "lightgrey") +
+  ggtitle('STAT3 reporters upon JAK activation')
+# Differences in sensitivity and specificity
+
+ggplot_custom(reporter_correlations %>% 
+                filter(tf == "TCF3") %>%
+                dplyr::select(mES_2i_LIF, mES_LIF_PD, tf, reporter_id) %>% 
+                na.omit(), aes(x = log2(mES_2i_LIF), y = log2(mES_LIF_PD))) +
+  geom_point() +
+  geom_abline(linetype = "dashed") +
+  geom_smooth(method = "lm", color = "grey", fill = "lightgrey") +
+  ggtitle('TCF3 reporters upon WNT inactivation')
+# Differences in specificity
+
+ggplot_custom(reporter_correlations %>% 
+                filter(tf == "NFE2L2") %>%
+                dplyr::select(mES_2i_LIF, mES_HQ, tf, reporter_id) %>% 
+                na.omit(), aes(x = log2(mES_2i_LIF), y = log2(mES_HQ))) +
+  geom_point() +
+  geom_abline(linetype = "dashed") +
+  geom_smooth(method = "lm", color = "grey", fill = "lightgrey") +
+  ggtitle('NRF2 reporters upon oxidative stress induction')
+# Clear case of design doesn't matter
 ```
 
 
@@ -614,7 +662,7 @@ ggplot_custom(tf_activities2, aes(x = twoi, y = tf_activity)) +
   geom_point() +
   ggtitle('TF reporter activities vs. TF expression in mESCs')
 
-# Correlate with regulon (VIPER, Aerts)
+# Correlate with regulon data (VIPER, Aerts lab papers)
 
 
 # Correlate with TF activities from Ernst et al. (https://doi.org/10.1038/nbt.3678)
@@ -667,13 +715,12 @@ difftf_activity$classification[difftf_activity$TF == "POU5F1::SOX2"] <- difftf_a
 difftf_activity$classification[difftf_activity$TF == "RAR:RXR"] <- difftf_activity$classification[difftf_activity$TF == "RARA"]
 
 # Import mean reporter activities per TF
-reporter_activity_all <- ernst_activities
+reporter_activity_all <- tf_activities
 reporter_activity_all_mean <- reporter_activity_all %>%
   unique() %>%
-  pivot_wider(names_from = "condition", values_from = c("ernst_activity", "reporter_activity_minP")) %>%
-  mutate(dif_ernst = log2(ernst_activity_K562 / ernst_activity_HepG2),
-         dif_reporter = log2(reporter_activity_minP_K562 / reporter_activity_minP_HepG2)) %>%
-  dplyr::select(dif_ernst, dif_reporter, 'TF' = tf) %>%
+  pivot_wider(names_from = "condition", values_from = "reporter_activity_minP") %>%
+  mutate(dif_reporter = log2(K562 / HepG2)) %>%
+  dplyr::select(dif_reporter, 'TF' = tf) %>%
   unique()
 reporter_activity_all_mean$TF <- gsub("::.*", "_", reporter_activity_all_mean$TF)
 reporter_activity_all_mean$TF[reporter_activity_all_mean$TF == "POU5F1_"] <- "POU5F1::SOX2"
@@ -707,7 +754,8 @@ ggplot(activity_comp, aes(x = reporter_activity_norm, y = diffTF_activity_norm))
   xlab("Differential Reporter Activity (K562/HepG2)") +
   ylab("Differential Accessibility - diffTF (K562/HepG2)") +
   scale_color_manual(values = c("grey",colors_diverse[c(2,5,4)])) +
-  facet_wrap(~classification)
+  facet_wrap(~classification) +
+  ggtitle('TF reporter activity vs. diffTF activity')
 ```
 
 ---
