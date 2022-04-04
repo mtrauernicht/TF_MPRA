@@ -412,7 +412,7 @@ random_promoter_space <- random_promoter_space[,c(-1:-2)]
  
 ## Run FIMO script again 
 ```{bash run fimo db2_1, eval = FALSE}
-# motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
+# motfn=/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/20170320_pwms_selected.meme
 # odir=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/parameter_files/output/fimo/random_promoter
 # query=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/parameter_files/output/fimo/random_promoter.fasta
 
@@ -426,7 +426,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 
 ```{r build tf motif matrices db2: random_promoter, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # load motif Metadata --> PWM feature matrix
-tib_pwm_random_promoter  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+tib_pwm_random_promoter  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
                                         fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/random_promoter/fimo.tsv',
                                         db            = 2)
 ```
@@ -527,7 +527,7 @@ motif_primer_1_space_export <- motif_primer_1_space %>% dplyr::select(seq.name, 
  
 ## Run FIMO script again 
 ```{bash run fimo db2_2, eval = FALSE}
-# motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
+# motfn=/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/20170320_pwms_selected.meme
 # odir=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/primer_1_2
 # query=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/primer_1_2.fasta
 
@@ -541,7 +541,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 
 ```{r build tf motif matrices db2: primer_1, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # load motif Metadata --> PWM feature matrix
-tib_pwm_primer_1  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+tib_pwm_primer_1  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
                                         fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/primer_1_2/fimo.tsv',
                                         db            = 2)
 ```
@@ -635,7 +635,7 @@ motif_primer_2_space_export <- motif_primer_2_space[,c(-1:-2)]
  
 ## Run FIMO script again 
 ```{bash run fimo db2_3, eval = FALSE}
-# motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
+# motfn=/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/20170320_pwms_selected.meme
 # odir=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/primer_2
 # query=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/primer_2.fasta
 
@@ -649,7 +649,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 
 ```{r build tf motif matrices db2: primer_2, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # load motif Metadata --> PWM feature matrix
-tib_pwm_primer_2  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+tib_pwm_primer_2  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
                                         fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/primer_2/fimo.tsv',
                                         db            = 2)
 ```
@@ -757,7 +757,7 @@ motif_5bp_export <- motif_5bp[,c(-1:-5)]
 
 ## Run FIMO script
 ```{bash run fimo db2_4, eval = FALSE}
-# motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
+# motfn=/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/20170320_pwms_selected.meme
 # odir=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/space_1_3
 # query=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/5bp_spacer_2.fasta
 
@@ -771,7 +771,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 
 ```{r build tf motif matrices db2: 5bp_spacer, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # load motif Metadata --> PWM feature matrix
-tib_pwm_5bp_spacer  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+tib_pwm_5bp_spacer  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
                                         fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/space_1_3/fimo.tsv',
                                         db            = 2)
 ```
@@ -896,7 +896,7 @@ motif_10bp_space_export <- motif_10bp_space_export[,c(-1:-5)]
  
 ## Run FIMO script again 
 ```{bash run fimo db2_5, eval = FALSE}
-# motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
+# motfn=/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/20170320_pwms_selected.meme
 # odir=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/space_2_3
 # query=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/10bp_spacer_2_2.fasta
 
@@ -910,7 +910,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 
 ```{r build tf motif matrices db2: 10bp_spacer, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # load motif Metadata --> PWM feature matrix
-tib_pwm_10bp_spacer  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+tib_pwm_10bp_spacer  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
                                         fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/space_2_3/fimo.tsv',
                                         db            = 2)
 ```
@@ -1034,7 +1034,7 @@ motif_promoter_space_export <- motif_promoter_space_export[,c(-1:-5)]
  
 ## Run FIMO script again 
 ```{bash run fimo db2_6, eval = FALSE}
-# motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
+# motfn=/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/20170320_pwms_selected.meme
 # odir=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/promoter_space_1_5
 # query=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/promoter_spacer_1_3.fasta
 
@@ -1048,7 +1048,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 
 ```{r build tf motif matrices db2: promoter_spacer, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # load motif Metadata --> PWM feature matrix
-tib_pwm_promoter_spacer  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+tib_pwm_promoter_spacer  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
                                         fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/promoter_space_1_5/fimo.tsv',
                                         db            = 2)
 ```
@@ -1145,7 +1145,7 @@ motif_promoter_space_export <- motif_promoter_space_export[,c(-1:-5)]
  
 ## Run FIMO script again 
 ```{bash run fimo db2_7, eval = FALSE}
-# motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
+# motfn=/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/20170320_pwms_selected.meme
 # odir=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/promoter_space_2_5
 # query=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/promoter_spacer_2_2.fasta
 
@@ -1159,7 +1159,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 
 ```{r build tf motif matrices db2: promoter_spacer_2, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # load motif Metadata --> PWM feature matrix
-tib_pwm_promoter_spacer_2  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+tib_pwm_promoter_spacer_2  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
                                         fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/promoter_space_2_5/fimo.tsv',
                                         db            = 2)
 ```
@@ -1312,7 +1312,7 @@ random_motif_2_exp <- random_motif_2 %>% dplyr::select(seq.name, seq.text)
  
 ## Run FIMO script again 
 ```{bash run fimo db2_8, eval = FALSE}
-# motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
+# motfn=/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/20170320_pwms_selected.meme
 # odir=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/random_motif
 # query=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/random_motif.fasta
 
@@ -1326,7 +1326,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 
 ```{r build tf motif matrices db2: rd_motif, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
 # load motif Metadata --> PWM feature matrix
-tib_pwm_random_motif  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+tib_pwm_random_motif  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
                                         fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/random_motif/fimo.tsv',
                                         db            = 2)
 ```
@@ -1869,7 +1869,7 @@ tf.df.check <- unique(tf.df.check)
  
 ## Run FIMO script again 
 ```{bash run fimo db2_9, eval = FALSE}
-# motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
+# motfn=/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/20170320_pwms_selected.meme
 # odir=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/tf_check_6
 # query=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/tf_check_2.fasta
 
@@ -1883,7 +1883,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 
 ```{r build tf motif matrices db2: tf_check, out.width= "100%", fig.align= "center", echo=FALSE}
 # load motif Metadata --> PWM feature matrix
-tib_pwm_tf_check  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+tib_pwm_tf_check  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
                                         fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/tf_check_6/fimo.tsv',
                                         db            = 2)
 ```
@@ -2013,7 +2013,7 @@ names(tf_seq_oligos) <- c("seq.name","seq.text")
 
 ## Run FIMO script again 
 ```{bash run fimo db2_10, eval = FALSE}
-# motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
+# motfn=/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/20170320_pwms_selected.meme
 # odir=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/tf_seq
 # query=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/tf_seq.fasta
 
@@ -2027,7 +2027,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 
 ```{r build tf motif matrices db2: tf_seq, out.width= "100%", fig.align= "center", echo=FALSE}
 # load motif Metadata --> PWM feature matrix
-tib_pwm_tf_seq  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+tib_pwm_tf_seq  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
                                         fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/tf_seq/fimo.tsv',
                                         db            = 2)
 ```
@@ -2275,7 +2275,7 @@ tf.df_davis <- unique(tf.df_davis)
  
 ## Run FIMO script again 
 ```{bash run fimo db2_11, eval = FALSE}
-# motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
+# motfn=/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/20170320_pwms_selected.meme
 # odir=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/tf_bg_davis_3
 # query=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/tf_bg_davis.fasta
 
@@ -2289,7 +2289,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 
 ```{r build tf motif matrices db2: tf_bg_davis, out.width= "100%", fig.align= "center", echo=FALSE}
 # load motif Metadata --> PWM feature matrix
-tib_pwm_tf_bg_davis  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+tib_pwm_tf_bg_davis  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
                                         fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/tf_bg_davis_3/fimo.tsv',
                                         db            = 2)
 ```
@@ -2388,7 +2388,7 @@ barcode_selection_export <- barcode_selection_export[,c(-1:-4)]
 
 ## Run FIMO script again 
 ```{bash run fimo db2_12, eval = FALSE}
-# motfn=/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/20170320_pwms_selected.meme
+# motfn=/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/20170320_pwms_selected.meme
 # odir=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/barcodes
 # query=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/barcodes.fasta
 
@@ -2402,7 +2402,7 @@ We built a TF motif matrix using -log10 transformed FIMO scores. We used this fe
 
 ```{r build tf motif matrices db2: barcodes, out.width= "100%", fig.align= "center", echo=FALSE}
 # load motif Metadata --> PWM feature matrix
-tib_pwm_barcodes  <- get_pwm_feature_matrix(motif_meta_fn = '/home/f.comoglio/mydata/Annotations/TFDB/Curated_Natoli/update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+tib_pwm_barcodes  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
                                         fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/output/fimo/barcodes/fimo.tsv',
                                         db            = 2)
 ```

@@ -1,0 +1,631 @@
+---
+title: "Systematic transfection comparison (TF reporter characterization in HCT116)"
+author: 
+  - name: "Max Trauernicht"
+    email: "m.trauernicht@nki.nl"
+    affiliation: "Netherlands Cancer Institute - van Steensel lab"
+date: '`r format(Sys.time(), "%d/%m/%Y")`'
+output: 
+  html_document:
+    theme: united
+    highlight: pygments
+    fig_caption: yes
+    code_folding: hide
+    df_print: kable
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: false
+---
+
+---
+
+### Aim
+I transfected HCT116 cells using lipofections and nucleofections in different dish-formats to check how low I can go in cell number and to test the difference between transfection methods. In total 35,500 reporters for 86 TFs were transfected. To be more precise, the data consists of two different libraries, library 1, which is more focused on mES biology, and library 2, which is more focused on classical signaling pathways.
+
+In this script I will compare the different conditions to check how well lipofection and nucleofection correlate and to see if I can use less cells for my future experiments.
+
+Disclaimer: I sequenced the library using MiSeq Nano, which means that probably only highly expressed barcodes were picked up. 
+
+Additional info:
+N = Nucleofection, L = Lipofection, 6 = 6-well -> N6 = nucleofection in 6-well
+
+---
+
+## Setup {.tabset}
+
+<!-- little HTML script to do indentation of the table of contents -->
+<script>
+    $(document).ready(function() {
+      $items = $('div#TOC li');
+      $items.each(function(idx) {
+        num_ul = $(this).parentsUntil('#TOC').length;
+        $(this).css({'text-indent': num_ul * 10, 'padding-left': 0});
+      });
+
+    });
+</script>
+
+```{css, echo = FALSE}
+div.sourceCode {
+  overflow-x: hidden;
+}
+```
+
+
+### Libraries 
+
+```{r setup, out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+StartTime <-Sys.time()
+
+# 8-digit Date tag:
+Date <- substr(gsub("-","",Sys.time()),1,8) 
+# libraries:
+library(data.table)
+library(plyr)
+library(stringr)
+library(ggpubr)
+library(GGally)
+library(vwr)
+library(dplyr)
+library(tibble)
+library(plotly)
+library(ggbeeswarm)
+library(haven)
+library(readr)
+library(parallel)
+library(RColorBrewer)
+library(gridExtra)
+library(LncFinder)
+library(tidyr)
+library(grr)
+library(viridis)
+library(DESeq2)
+library(PCAtools)
+library(pheatmap)
+```
+
+
+### Functions
+
+```{r out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
+# Custom functions
+SetFileName <- function(filename, initials) {
+  # Set filename with extension and initials to make filename with date integrated.
+  filename <- substitute(filename)
+  initials <- substitute(initials)
+  filename <- paste0(initials, Date, filename)
+  filename
+}
+
+ReadFasta<-function(file) {
+   # Read the file line by line
+   fasta<-readLines(file)
+   # Identify header lines
+   ind<-grep(">", fasta)
+   # Identify the sequence lines
+   s<-data.frame(ind=ind, from=ind+1, to=c((ind-1)[-1], length(fasta)))
+   # Process sequence lines
+   seqs<-rep(NA, length(ind))
+   for(i in 1:length(ind)) {
+      seqs[i]<-paste(fasta[s$from[i]:s$to[i]], collapse="")
+   }
+   # Create a data frame 
+   DF<-data.frame(name=gsub(">", "", fasta[ind]), sequence=seqs)
+   # Return the data frame as a result object from the function
+   return(DF)
+}
+
+# From Fede:
+# ggpairs custom functions
+corColor <- function(data, mapping, color = I("black"), sizeRange = c(1, 3), ...) {
+
+  x   <- eval_data_col(data, mapping$x)
+  y   <- eval_data_col(data, mapping$y)
+  r   <- cor(x, y, "pairwise.complete.obs")
+  rt  <- format(r, digits = 3)
+  tt  <- as.character(rt)
+  cex <- max(sizeRange)
+
+  # helper function to calculate a useable size
+  percent_of_range <- function(percent, range) {
+    percent * diff(range) + min(range, na.rm = TRUE)
+  }
+
+  # plot correlation coefficient
+  p <- ggally_text(label = tt, mapping = aes(), xP = 0.5, yP = 0.5,
+                   size = I(percent_of_range(cex * abs(r), sizeRange)), color = color, ...) +
+    theme(panel.grid.minor=element_blank(),
+          panel.grid.major=element_blank())
+
+  corColors <- RColorBrewer::brewer.pal(n = 7, name = "RdYlBu")[2:6]
+
+  if (r <= boundaries[1]) {
+    corCol <- corColors[1]
+  } else if (r <= boundaries[2]) {
+    corCol <- corColors[2]
+  } else if (r < boundaries[3]) {
+    corCol <- corColors[3]
+  } else if (r < boundaries[4]) {
+    corCol <- corColors[4]
+  } else {
+    corCol <- corColors[5]
+  }
+
+  p <- p +
+    theme(panel.background = element_rect(fill = corCol))
+
+  return(p)
+}
+
+# Custom ggplot2 themes
+theme_classic_lines <- function() {
+  theme_pubr(border = T, legend = "top") +
+            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.1),
+                  strip.background = element_rect(fill = "#ced4da"))
+    
+}
+
+theme_classic_lines_45 <- function() {
+  theme_pubr(border = T, legend = "top", x.text.angle = 45) +
+            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.1),
+                  strip.background = element_rect(fill = "#ced4da"))
+}
+
+theme_classic_lines_90 <- function() {
+  theme_pubr(border = T,legend = "top", x.text.angle = 90) +
+            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.1),
+                  strip.background = element_rect(fill = "#ced4da"))
+}
+
+theme_set(theme_classic_lines())
+
+colors_diverse <- c("#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51")
+
+ggplot_custom <- function(...) ggplot2::ggplot(...) + 
+  scale_color_manual(values = colors_diverse) + 
+  scale_fill_manual(values = colors_diverse)
+
+
+hline <- function(y = 0, color = "black") {
+  list(
+    type = "line",
+    x0 = 0,
+    x1 = 1,
+    xref = "paper",
+    y0 = y,
+    y1 = y,
+    line = list(color = color)
+  )
+}
+```
+
+
+### Loading data
+
+```{r data import, out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
+# Load metadata file that contains all required information about the sequenced samples
+metadata_df <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6714_gen-1-2_hct116_test/mt20220214_metadata_all_experiments.csv")
+
+# Load in barcode counts
+bc_files <- paste(metadata_df$path, metadata_df$file, sep = "")
+bc_files <- lapply(bc_files, fread, header = FALSE)
+names(bc_files) <- metadata_df$id
+
+
+# Import barcode annotation of both libraries
+bc_annotation <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6578_gen2_stimulation-2/mt20211021_bc_annotation_combined.csv") %>%
+  dplyr::select(-library)
+```
+
+
+### Creating count data frames
+
+```{r cluster_compare, out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
+# Generate one long data frame from the list of data frames
+bc_df <- bind_rows(bc_files, .id = "sample_id") %>%
+  dplyr::select(sample_id, "barcode" = V1, "starcode_counts" = V2)
+
+# Library 1 has barcodes of length 12 while library 2 has barcodes of length 13
+# For sequencing samples that have library 1 and 2 mixed I extracted barcodes of length >=12
+# So, I will now filter out all barcodes with length >13, because those are not relevant
+bc_df$nchar <- nchar(bc_df$barcode)
+bc_df <- bc_df %>%
+  filter(nchar <= 13)
+
+# Add barcode annotation to the data
+bc_df <- merge(bc_df, bc_annotation, all = T)
+
+# Add experiment annotation to the data
+metadata_selected <- metadata_df %>%
+  dplyr::select('sample_id' = id, gcf, replicate, condition, sample, library)
+bc_df <- merge(bc_df, metadata_selected, all = T, by = "sample_id")
+
+bc_df$starcode_counts[is.na(bc_df$starcode_counts)] <- 0
+
+# First compute reads per million to estimate the relative counts in the respective sample
+bc_df <- bc_df %>%
+  mutate(rpm = ave(starcode_counts, sample_id, FUN = function(x) (x+1) / sum(x) *1e6 ))
+
+bc_df_filt <- bc_df[!is.na(bc_df$tf),]
+```
+
+
+---
+
+## Read counts per sample
+Are the samples sequenced equally deep?
+```{r read count 2, out.width= "80%", fig.align= "center",  warning= FALSE, message= FALSE}
+# I want to show the following:
+## 1: Read distribution of matched barcodes vs. unmatched barcode
+
+### a: total read counts per sample
+plot_ly(bc_df_filt %>%
+         mutate(sum_counts = ave(starcode_counts, condition, FUN = function(x) sum(x))) %>%
+         dplyr::select(condition, sum_counts) %>%
+         unique(), 
+        y = ~sum_counts, x = ~condition, type = 'bar',
+             marker = list(color = '#D6D5C9',
+                           line = list(color = 'rgb(8,48,107)', width = 1.5))) %>% 
+  layout(title = "Number of reads per sample",
+         yaxis = list(title = "Number of reads per sample"),
+         xaxis = list(title = "Sample"))
+```
+Conclusion: samples are more or less equally distributed.
+
+---
+
+## Number of unique barcodes per sample
+How many differenct barcodes can I recover from each sample? I will not be able to recover all barcodes because I only have a 4-fold coverage of each barcode in this sequencing run. 
+```{r, out.width= "80%", fig.align= "center",  warning= FALSE, message= FALSE}
+### b: number of unique barcodes (compare to downsampled samples from gcf6502)
+gcf6578_df <- read_csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6578_gen2_stimulation-2/bc_df_cDNA_filt.csv") %>%
+  filter(sample_id %in% c("HepG2_DMSO_FBS_r1_gcf6502", "HepG2_CDCA_r1_gcf6502")) %>%
+  distinct(barcode, starcode_counts, condition, tf, neg_ctrls, commercial_reporter, native_enhancer, rand_promoter, hPGK, nchar, library, pMT09_02, rpm)
+gcf6578_df$library <- "1+2"
+
+# downsample the data linearly (set sum of barcode counts to ~140K)
+gcf6578_df2 <-  gcf6578_df %>%
+  mutate(total_reads = ave(starcode_counts, condition, FUN = function(x) sum(x) / 140000)) %>%
+  mutate(starcode_counts = starcode_counts / total_reads) %>%
+  filter(starcode_counts > 0.5)
+
+gcf6578_df2 <- rbind.fill(gcf6578_df2, bc_df_filt)
+
+plot_ly(gcf6578_df2 %>%
+         mutate(bc_n = ave(barcode, condition, FUN = function(x) length(x))) %>%
+          mutate(bc_n = as.numeric(bc_n)) %>%
+         dplyr::select(condition, bc_n) %>%
+         unique(), 
+        y = ~bc_n, x = ~condition, type = 'bar',
+             marker = list(color = '#D6D5C9',
+                           line = list(color = 'rgb(8,48,107)', width = 1.5))) %>% 
+  layout(title = "Number of unique barcodes per sample",
+         yaxis = list(title = "Number of reads per sample"),
+         xaxis = list(title = "Sample"))
+
+## 2: How many barcodes can I find back at which cutoff? + What is the percentage of barcode reads that match the design at which cutoff?
+## Identify the unmapped fraction
+bc_fraction <- gcf6578_df2 %>%
+  distinct(condition) %>%
+  na.omit() 
+rpm_cutoff <- data.frame("cutoff" = seq(0.0001,15,1))
+bc_fraction <- expand_grid(bc_fraction, rpm_cutoff)
+
+bc_annotation2 <- bc_annotation %>%
+  mutate(nchar = nchar(bc_annotation$barcode))
+
+bc_counts_design <- data.frame("library" = c("1", "2", "1+2"),
+                               "bc_counts" = c(nrow(bc_annotation2[bc_annotation2$nchar == 12,]),
+                                               nrow(bc_annotation2[bc_annotation2$nchar == 13,]),
+                                               nrow(bc_annotation2)))
+
+bc_fraction_list <- list()
+for (i in unique(bc_fraction$condition)) {
+  print(i)
+  test_x <- gcf6578_df2 %>%
+    filter(condition == i)
+  library <- unique(test_x$library)
+  
+  bc_fraction_list[[i]] <- lapply(unique(bc_fraction$cutoff), function(x) nrow(test_x[test_x$starcode_counts >= x,]) / bc_counts_design$bc_counts[bc_counts_design$library == library] *100)
+  names(bc_fraction_list[[i]]) <- unique(bc_fraction$cutoff)
+}
+
+bc_fraction_2 <- bind_rows(bc_fraction_list)
+rownames(bc_fraction_2) <- names(bc_fraction_list)
+bc_fraction_2 <- bc_fraction_2 %>%
+  rownames_to_column("condition") %>%
+  pivot_longer(-condition, names_to = "cutoff", values_to = "bcs_found") %>%
+  mutate(cutoff = as.numeric(cutoff))
+
+bc_fraction <- merge(bc_fraction, bc_fraction_2, by = c("condition", "cutoff")) %>%
+  mutate(bcs_found = as.numeric(bcs_found))
+
+
+#c("#1B998B", "#2D3047", "#FF9B71", "#ECDD7B")
+# Plot to evaluate data quality per cutoff
+ggplot_custom(bc_fraction) +
+  geom_point(aes(x = cutoff, y = bcs_found), color = '#1B998B', size = 1) +
+  geom_line(aes(x = cutoff, y = bcs_found), color = '#1B998B', size = 1) +
+  xlab("rpm cutoff")+
+  ylab("total barcodes detected (%)")+
+  facet_wrap(~condition)
+```
+HepG2 samples were imported from previous sequencing run and downsampled to have equal amount of total reads per sample.
+
+Conclusion: Lipofection tends to have more unique barcodes per sample. Why is this? Less highly active TF reporters? Higher pDNA background?
+
+---
+
+## Read counts per TF per sample
+Which TFs have the most read counts per condition?
+```{r, out.width= "80%", fig.align= "center",  warning= FALSE, message= FALSE}
+### b: read counts per TF
+ggplot_custom(gcf6578_df2 %>%
+                filter(str_detect(condition, "Hep", negate = T)) %>%
+                filter(str_detect(condition, "96", negate = T)) %>%
+                filter(neg_ctrls == "No", commercial_reporter == "No", native_enhancer == "No", rand_promoter == "No", hPGK == "No") %>%
+                mutate(rpm_mean = ave(rpm, tf, condition, FUN = mean)) %>%
+                filter(rpm_mean > 150) %>%
+                distinct(tf, condition, rpm, rpm_mean), 
+              aes(y = rpm, x = tf)) +
+  geom_violin() +
+  ylim(0,6000) +
+  facet_wrap(~condition, ncol = 3) +
+  theme_classic_lines_90()
+```
+Conclusion: Biggest difference: Nucleofections have higher REL and FOS::JUN counts, Lipofections have higher TP53 counts. Why?
+
+---
+
+## Quality checks: Bias towards libraries or negative controls
+Where are most reads coming from? Are the libraries (1&2) differently active between conditions? Are the negative controls inactive in all conditions?
+```{r, out.width= "80%", fig.align= "center",  warning= FALSE, message= FALSE}
+### number of barcodes with high expression from the different libraries
+ggplot_custom(gcf6578_df2 %>%
+                filter(neg_ctrls == "No", commercial_reporter == "No", native_enhancer == "No", rand_promoter == "No", hPGK == "No") %>%
+                mutate(nchar = as.character(nchar)) %>% 
+                filter(rpm > 100) %>%  
+                distinct(nchar, condition, rpm, barcode) %>%
+                na.omit() %>%
+                mutate(n_bc = ave(barcode, condition, nchar, FUN = function(x) length(x))) %>%
+                mutate(n_bc = as.numeric(n_bc)) %>%
+                distinct(n_bc, condition, nchar), 
+              aes(y = n_bc, x = nchar)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~condition, ncol = 4) +
+  ggtitle("Active barcodes from library 1 reporters (nchar = 12) vs. library 2 reporters (nchar = 13)")
+
+### read counts of negative controls
+ggplot_custom(gcf6578_df2 %>%
+                filter(commercial_reporter == "No", native_enhancer == "No", rand_promoter == "No", hPGK == "No") %>%
+                filter(rpm > 100) %>%  
+                distinct(neg_ctrls, condition, rpm, barcode) %>%
+                na.omit() %>%
+                mutate(n_bc = ave(barcode, condition, neg_ctrls, FUN = function(x) length(x))) %>%
+                mutate(n_bc = as.numeric(n_bc)) %>%
+                distinct(n_bc, condition, neg_ctrls), 
+              aes(y = n_bc, x = neg_ctrls)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~condition, ncol = 4)+
+  ggtitle("Active barcodes from negative controls")
+```
+
+Conclusion: Lipofection has more active barcodes from library 1 (probably because REL/FOS::JUN are less active than in nucleofections). Activity does not come from negative controls in L6, L12, N6, N12 and N24. This shows that we cannot use the date from 96-wells and from the L24 condition.
+
+---
+
+## Correlation with pDNA input and between samples
+Are any samples correlating with the pDNA input (contamenation)? How well do Lipofection and Nucleofection correlate and how well the different well formats?
+```{r, out.width= "80%", fig.align= "center",  warning= FALSE, message= FALSE}
+## 3: What is the correlation of the cDNA bc counts with the pDNA bc counts? 
+pMT09_02 <- gcf6578_df2 %>%
+  distinct(pMT09_02, barcode) %>%
+  na.omit()
+
+gcf6578_df2 <- gcf6578_df2 %>%
+  dplyr::select(-pMT09_02)
+
+gcf6578_df2 <- merge(gcf6578_df2, pMT09_02)
+gcf6578_df2 <- gcf6578_df2[!is.na(gcf6578_df2$condition),]
+
+ggplot(gcf6578_df2, aes(x = pMT09_02, y = rpm)) +
+  geom_bin2d(bins = 100)+
+  xlim(0,500) +
+  ylim(0,1000)+
+  scale_color_viridis() +
+  facet_wrap(~condition)
+
+
+# Generate correlation heatmaps 
+gcf6578_df3 <- gcf6578_df2 %>%
+    distinct(condition, rpm, barcode, pMT09_02, tf)  %>% 
+    spread(condition, rpm) %>% 
+    filter_all(any_vars(!is.na(.))) %>%
+    column_to_rownames("barcode") 
+  
+x <- cor(gcf6578_df3 %>% dplyr::select(-tf), method = "pearson", use = "pairwise.complete.obs")
+  
+pheatmap(x, border = F)
+
+    
+
+
+## 4: Correlation plots of the replicates
+## Combine replicates of normalized data in 3 different columns
+boundaries <- seq(from = 0.8, by = 0.05, length.out = 4)
+n <- sample(1:nrow(gcf6578_df3), 5000)
+plt <- ggpairs(gcf6578_df3%>% dplyr::select(-tf),
+               upper = list(continuous = corColor),
+               lower = list(continuous = function(data, mapping, ...) {
+                   ggally_points(data = data[n,], mapping = mapping, alpha = 0.1, size = 0.5) +
+                   geom_abline(slope = 1, lty = "dashed", col = "red") +
+                   theme_bw()}),
+               diag = list(continuous = function(data, mapping, ...) {
+                   ggally_densityDiag(data = data, mapping = mapping, alpha = 0.3, fill = "red") +
+                   theme_bw()})) +
+  ggtitle("Correlation Between Technial Replicates") +
+  theme(text = element_text(size = 20)) +
+  xlab("Reporter activity") +
+  ylab("Reporter activity")
+
+print(plt)
+```
+
+Conclusion: None of the samples is contaminated with pDNA. The data from the 96-wells does not correlate with anything and is thus not trustworthy. Downsampling from 6-wells to 12-wells and 24-wells does work quite well since there is a high correlation. Because of the high negative control activity in L24 it is probably wise to stick to 12-wells for future experiments for now. Very interesting: Nucleofection and Lipofection do not correlate very well. L6 and L12 do even correlate better with the HepG2 samples than with the Nucleofection - why is this? Differential IFN-response?
+
+---
+## Compare read counts of different TFs between samples.
+Which TFs are more active in which condition? Is IFN-response explaining differences between Nucleofection and Lipofection?
+```{r, out.width= "80%", fig.align= "center",  warning= FALSE, message= FALSE}
+### P53 expression between replicates
+ggplot_custom(gcf6578_df3 %>%
+                filter(tf == "TP53"), 
+              aes(x = N6, y = L6)) +
+  geom_point() +
+  geom_abline() +
+  ggtitle("TP53")
+
+### REL expression between replicates
+ggplot_custom(gcf6578_df3 %>%
+                filter(tf == "REL"), 
+              aes(x = N6, y = L6)) +
+  geom_point() +
+  geom_abline()+
+  ggtitle("REL")
+
+### NFKB1 
+ggplot_custom(gcf6578_df3 %>%
+                filter(tf == "NFKB1"), 
+              aes(x = N6, y = L6)) +
+  geom_point() +
+  geom_abline()+
+  ggtitle("NFKB1")
+
+### FOS::JUN
+ggplot_custom(gcf6578_df3 %>%
+                filter(tf == "FOS::JUN"), 
+              aes(x = N6, y = L6)) +
+  geom_point() +
+  geom_abline()+
+  ggtitle("FOS::JUN")
+
+### NFE2L2
+ggplot_custom(gcf6578_df3 %>%
+                filter(tf == "NFE2L2"), 
+              aes(x = N6, y = L6)) +
+  geom_point() +
+  geom_abline()+
+  ggtitle("NFE2L2")
+
+
+### CREB1
+ggplot_custom(gcf6578_df3 %>%
+                filter(tf == "CREB1"), 
+              aes(x = N6, y = L6)) +
+  geom_point() +
+  geom_abline()+
+  ggtitle("CREB1")
+
+### SP1
+ggplot_custom(gcf6578_df3 %>%
+                filter(tf == "SP1"), 
+              aes(x = N6, y = L6)) +
+  geom_point() +
+  geom_abline()+
+  ggtitle("SP1")
+```
+
+Conclusion: TP53 is more active in lipofections, whereas REL and FOS::JUN are more active in nucleofections. This might indicate that nucleofection is inducing a stronger IFN-response than lipofection. The highly active REL and FOS::JUN reporters are probably also the reason why we do have a higher number of different barcodes in the lipofection samples (because there barcode reads are not sucked up by super-active reporters). TP53 might just be the most active TF in lipofection because it is the most active TF if the IFN-response TFs are less active. Normalizing against a IFN-unresponsive control should take care of this potential bias.
+
+---
+
+## Plotting normalized reporter activities
+By scaling the data using reporters that should be unaffected from the nucleofection method we can approximate the correct reporter activities. Is TP53 really more active in lipofections or is this just a cause of lack of other TF reporter activities?
+```{r warning = F}
+## Normalize to SP1 mean per condition
+sp1_df <- gcf6578_df2 %>%
+  filter(tf == "SP1") %>%
+  filter(promoter == "mCMV") %>%
+  mutate(rpm = ave(rpm, condition, FUN = mean)) %>%
+  distinct(rpm, condition) %>%
+  setnames('rpm', 'ctrl_rpm') %>%
+  mutate(ctrl = "SP1")
+
+
+## Normalize to NFYA mean per condition
+nfya_df <- gcf6578_df2 %>%
+  filter(tf == "NFYA") %>%
+  filter(promoter == "mCMV") %>%
+  mutate(rpm = ave(rpm, condition, FUN = mean)) %>%
+  distinct(rpm, condition) %>%
+  setnames('rpm', 'ctrl_rpm') %>%
+  mutate(ctrl = "NFYA")
+
+## Normalize to negative controls per condition
+hpgk_df <- bc_df_filt %>%
+  filter(hPGK == "Yes") %>%
+  mutate(rpm = ave(rpm, condition, FUN = mean)) %>%
+  distinct(rpm, condition) %>%
+  setnames('rpm', 'ctrl_rpm') %>%
+  na.omit() %>%
+  mutate(ctrl = "hPGK")
+
+ctrl_df <- rbind(sp1_df, nfya_df, hpgk_df)
+
+ggplot_custom(ctrl_df %>%
+         filter(condition %in% c("L6", "L12", "N6", "N12")), 
+       aes(x = condition, y = ctrl_rpm, fill = ctrl)) +
+  geom_bar(stat = "identity", position = "dodge")
+
+ctrl_df <- ctrl_df %>%
+  mutate(ctrl_rpm = ave(ctrl_rpm, condition, FUN = mean)) %>%
+  distinct(condition, ctrl_rpm)
+
+
+gcf6578_df4 <- merge(gcf6578_df2, sp1_df) %>%
+  filter(neg_ctrls == "No", commercial_reporter == "No", native_enhancer == "No", rand_promoter == "No", hPGK == "No") %>%
+  mutate(rpm_scaled = rpm / ctrl_rpm) %>%
+  distinct(condition, rpm_scaled, barcode, tf)
+  
+  
+gcf6578_df5 <- gcf6578_df4 %>%
+  spread(condition, rpm_scaled)
+
+x <- cor(gcf6578_df5 %>% dplyr::select(-tf) %>% column_to_rownames("barcode"), method = "pearson", use = "pairwise.complete.obs")
+  
+pheatmap(x, border = F)
+
+### P53 expression scaled
+ggplot_custom(gcf6578_df5 %>%
+                filter(tf == "TP53"), 
+              aes(x = N6, y = L6)) +
+  geom_point() +
+  geom_abline() +
+  ggtitle("TP53")
+
+ggplot_custom(gcf6578_df4 %>%
+                filter(str_detect(condition, "Hep", negate = T)) %>%
+                filter(condition %in% c("L6", "L12", "N6", "N12")) %>%
+                mutate(rpm_scaled_mean = ave(rpm_scaled, tf, condition, FUN = mean)) %>%
+                filter(rpm_scaled_mean > 2) #%>%  
+                #distinct(tf, condition, rpm, mean_tf_counts)
+              , 
+              aes(y = rpm_scaled, x = tf)) +
+  geom_violin() +
+  theme(axis.text.y = element_text(size = 6)) +
+  facet_wrap(~condition, ncol = 2) +
+  theme_classic_lines_90()
+```
+
+
+
+# Session Info
+```{r}
+paste("Run time: ",format(Sys.time()-StartTime))
+getwd()
+date()
+sessionInfo()
+```
+
