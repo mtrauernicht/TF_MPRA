@@ -234,6 +234,7 @@ bc_df <- merge(bc_df, bc_annotation, all = T)
 # Add experiment annotation to the data
 metadata_selected <- metadata_df %>%
   dplyr::select('sample_id' = id, gcf, replicate, condition, sample, library)
+bc_df <- bc_df[!is.na(bc_df$sample_id),]
 bc_df <- merge(bc_df, metadata_selected, all = T, by = "sample_id")
 
 bc_df$starcode_counts[is.na(bc_df$starcode_counts)] <- 0
@@ -284,7 +285,7 @@ bc_df_cor3 <- bc_df_cor %>%
 
 bc_df_cor4 <- bc_df_cor %>%
   filter(library == "1+2") %>%
-  dplyr::select(matches("barcode|gcf6502|pMT09_02_r1_gcf6578")) %>%
+  dplyr::select(matches("barcode|gcf6502|gcf6881|pMT09_02_r1_gcf6578")) %>%
   dplyr::select(-pMT09_r1_gcf6502, -pMT09_r2_gcf6502) %>%
   column_to_rownames("barcode") 
 
@@ -334,7 +335,7 @@ biplot(p,
 #   filter(mean > 200) %>%
 #   dplyr::select(-mean)
 
-cor_df <- cor(bc_df_cor3, method = "pearson")
+cor_df <- cor(bc_df_cor4, method = "pearson")
 
 pheatmap(cor_df, border_color = "black")
 
@@ -540,7 +541,7 @@ pMT09_02 <- bc_df_filt %>%
   filter(str_detect(sample_id, "pMT09_02"), library == "1+2") %>%
   dplyr::select(barcode, sample_id, rpm) %>%
   spread(sample_id, rpm) %>%
-  mutate(pMT09_02 = (pMT09_02_r1_gcf6502 + pMT09_02_r1_gcf6578)/2) %>%
+  mutate(pMT09_02 = (pMT09_02_r1_gcf6502 + pMT09_02_r1_gcf6578 + pMT09_02_r1_gcf6881 + pMT09_02_r2_gcf6881)/4) %>%
   dplyr::select(barcode, pMT09_02)
 
 pDNA <- merge(pMT02, pMT09, all = T, by = "barcode")
@@ -767,15 +768,22 @@ bc_df <- bc_df %>%
 ## Calculate mean and SD for each reporter
 bc_df_cDNA <- bc_df %>%
   filter(str_detect(sample_id, "pMT", negate = T), str_detect(sample_id, "pDNA", negate = T))
+
 bc_df_cDNA$reporter_id <- paste(bc_df_cDNA$tf, bc_df_cDNA$spacing, 
                                 bc_df_cDNA$distance, bc_df_cDNA$promoter,
                                 bc_df_cDNA$background, sep = "_")
+
+bc_df_cDNA <- bc_df_cDNA %>%
+  mutate(reporter_id = gsub("bc-[0-9]{1,2}_", "", reporter_id))
+
 bc_df_cDNA$mean_activity <- ave(bc_df_cDNA$activity, bc_df_cDNA$reporter_id, 
                                 bc_df_cDNA$sample_id, FUN =
                                   function(x) mean(x))
 bc_df_cDNA$sd_activity <- ave(bc_df_cDNA$activity, bc_df_cDNA$reporter_id, 
                               bc_df_cDNA$sample_id,  FUN =
                                   function(x) sd(x))
+
+
 
 ## Remove data points that are 2xSD away from the mean
 bc_df_cDNA$upper_activity <- bc_df_cDNA$mean_activity + (2 * bc_df_cDNA$sd_activity)
@@ -836,6 +844,16 @@ bc_df_cDNA_filt$sd_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$rep
 ### Scaling data 
 
 ```{r out.width= "80%", fig.align= "center",  warning= FALSE}
+## Correct native enhancer promoter names
+bc_df_cDNA_filt2 <- bc_df_cDNA_filt %>%
+  filter(native_enhancer == "Yes") %>%
+  mutate(promoter = gsub(".*(minP|mCMV|hBGm|Random).*", "\\1", promoter))
+
+bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
+  filter(native_enhancer == "No")
+
+bc_df_cDNA_filt <- rbind(bc_df_cDNA_filt, bc_df_cDNA_filt2)
+
 ## Compute activity relative to minimal promoter background
 bc_df_cDNA_filt_neg <- bc_df_cDNA_filt %>%
   dplyr::select(sample_id, activity, reporter_id, tf, promoter) %>%
@@ -860,6 +878,9 @@ bc_df_cDNA_filt_neg2 <- bc_df_cDNA_filt %>%
   unique() %>%
   dplyr::select("tf_activity" = activity, promoter, sample_id) %>%
   unique()
+
+bc_df_cDNA_filt$promoter[bc_df_cDNA_filt$hPGK == "Yes"] <- "minP"
+
 
 x <- merge(bc_df_cDNA_filt_neg, bc_df_cDNA_filt_neg2)
 plot(x$tf_activity, x$tf_activity2)
@@ -1136,7 +1157,7 @@ bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
 
 # Export bc_df for cDNA analysis
 filename <- SetFileName("_reporter_activity_filt_combined", "mt")
-setwd("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6578_gen2_stimulation-2/results/")
+setwd("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6881_gen2_all/results/")
 write.csv(bc_df_cDNA_filt, file = paste(filename,".csv", sep = ""), row.names = F)
 ```
 
