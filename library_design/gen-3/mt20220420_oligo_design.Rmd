@@ -1,0 +1,1341 @@
+---
+title: "Oligo Design - TF reporter screen gen 3"
+author: "Max Trauernicht"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output: 
+  prettydoc::html_pretty:
+    theme: leonids
+  #   highlight: github
+  #   toc: true
+  #   toc_float: true
+  #   code_folding: show
+  # editor_options:
+  #   chunk_output_type: console
+---
+
+*knitr document van Steensel lab*
+
+# Oligo Design - TF reporter screen gen 2
+
+## Introduction
+In this document, an oligo library of motif reporters will be generated. These oligos contain all unique motifs from vertebrate motif cluster analysis (https://www.vierstra.org/resources/motif_clustering), random inactive spacing between them, followed by minimal promoters.
+
+```{r setup, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+StartTime <-Sys.time()
+
+# 8-digit Date tag:
+Date <- substr(gsub("-","",Sys.time()),1,8) 
+# libraries:
+library(ggplot2)
+library(seqinr)
+library(seqLogo)
+library(universalmotif)
+library(Biostrings)
+library(SimRAD)
+library(gtools)
+library(DNABarcodes)
+library(phylotools)
+library(ape)
+library(magrittr)
+library(dplyr)
+library(readr)
+library(stringr)
+library(tidyr)
+library(heatmaply)
+library(pheatmap)
+library(tibble)
+library(ggseqlogo)
+library(RColorBrewer)
+library(data.table)
+library(vwr)
+library(ggbeeswarm)
+library(ggrepel)
+library(sjmisc)
+library(RcmdrMisc)
+library(LncFinder)
+library(ENCODExplorer)
+library(biomaRt)
+library(ggpubr)
+```
+
+
+
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+SetFileName <- function(filename, initials) {
+  # Set filename with extension and initials to make filename with date integrated.
+  filename <- substitute(filename)
+  initials <- substitute(initials)
+  filename <- paste0(initials, Date, filename)
+  filename
+}
+
+# Function to substring the right part of the motif
+substrRight <- function(x, n){
+  substr(x, nchar(x)-n+1, nchar(x))
+}
+
+
+# Function to load PWM matrix
+get_pwm_feature_matrix <- function(motif_meta_fn, fimo_fn, db = 2) {
+
+  # validate args
+  valid_dbs <- 1:2
+  if(!db %in% valid_dbs)
+    stop('Invalid db (database version). Please use db=1 (maintained for backward compatibility only) or db=2')
+
+  # db=1 is maintained for backward compatibility only
+  if(db == 1) {
+
+    # read in motif metadata
+    motif_meta    <- read.csv(motif_meta_fn)
+
+    # check whether motif metadata contain essential annotations
+    if(!all(c('PWM.ID', 'Cognate.TF') %in% colnames(motif_meta))) {
+      message('The motif metadata file does not contain the essential columns PWM.ID and Cognate.TF')
+    }
+
+    motif_minimal <- motif_meta[, c('PWM.ID', 'Cognate.TF')]
+
+    # load fimo output --> extract motif id, sequence id and p-value
+    df <- read.table(fimo_fn)
+    df <- df[, c(1, 2, 7)]
+
+    colnames(df) <- c('PWM.ID', 'seqid', 'pval')
+
+    # add TF id
+    df <- merge(df, motif_minimal, by = 'PWM.ID')
+
+    # group motif hits by sequence id
+    l <- split(df, df[['seqid']])
+
+    # multiple PWM and multiple hits possible. Reduce hits to one per TF, keeping best p-val only
+    l <- lapply(l, function(x) {
+      x_by_tf <- split(x, x[['Cognate.TF']], drop = TRUE)
+      x_by_tf <- lapply(x_by_tf, function(y) y[which.min(y$pval), ])
+      do.call('rbind', x_by_tf)
+    })
+
+    # initialize feature matrix
+    n_tf          <- motif_minimal[['Cognate.TF']] %>%
+      unique %>%
+      length
+    n_seq         <- length(l)
+    pwm           <- matrix(1, nrow = n_seq, ncol = n_tf)
+    colnames(pwm) <- (motif_minimal[['Cognate.TF']] %>% unique)
+
+    # replace :: from names of composite motifs
+    colnames(pwm) <- str_replace_all(colnames(pwm), '::', '_')
+
+    # fill in feature matrix
+    for(i in 1 : n_seq) {
+      pwm[i, l[[i]][['Cognate.TF']]] <- l[[i]]$pval
+    }
+
+    # -log10 transform
+    pwm           <- -1 * log10(pwm)
+
+    # coerce to tib and return
+    tib_fimo <- as_data_frame(pwm) %>%
+      mutate(id = names(l))
+      dplyr::select(id, everything())
+
+  }
+
+  # db = 2 (default)
+  else {
+
+    # load metadata
+    tib_meta    <- read_csv(motif_meta_fn) %>%
+      # extract tf symbol from motif id (Cognate_TF unsafe, it can be empty) and replace :: occurrences
+      mutate(tf_symbol = str_remove(ID, '_[0-9]*'),
+             tf_symbol = str_replace(tf_symbol, '::', '_')) %>%
+      dplyr::select(motif_id = `PWM ID`, tf_symbol)
+
+    # load fimo results
+    tib_fimo <- read_tsv(fimo_fn) %>%
+      # extract motif id, sequence id and p-value
+      dplyr::select(motif_id, sequence_name, pval = `p-value`)
+
+    # add tf symbol to fimo results
+    tib_fimo <- tib_fimo %>%
+      left_join(tib_meta, by = 'motif_id') %>%
+      # remove hits with missing motif id (composite pwms)
+      filter(!is.na(tf_symbol))
+
+    # select best hit for each motif and sequence
+    tib_fimo <- tib_fimo %>%
+      group_by(sequence_name, tf_symbol) %>%
+      dplyr::slice(which.min(pval)) %>%
+      ungroup()
+
+    # spread into feature matrix
+    tib_fimo <- tib_fimo %>%
+      mutate(pval = -1 * log10(pval)) %>%
+      dplyr::select(-motif_id) %>%
+      spread(key = tf_symbol, value = pval, fill = 0, drop = TRUE) %>%
+      # perform cosmetics on the id
+      mutate(id = sequence_name) %>%
+      dplyr::select(-c(sequence_name)) %>%
+      dplyr::select(id, everything())
+
+  }
+
+  return(tib_fimo)
+
+}
+
+ReadFasta<-function(file) {
+   # Read the file line by line
+   fasta<-readLines(file)
+   # Identify header lines
+   ind<-grep(">", fasta)
+   # Identify the sequence lines
+   s<-data.frame(ind=ind, from=ind+1, to=c((ind-1)[-1], length(fasta)))
+   # Process sequence lines
+   seqs<-rep(NA, length(ind))
+   for(i in 1:length(ind)) {
+      seqs[i]<-paste(fasta[s$from[i]:s$to[i]], collapse="")
+   }
+   # Create a data frame 
+   DF<-data.frame(name=gsub(">", "", fasta[ind]), sequence=seqs)
+   # Return the data frame as a result object from the function
+   return(DF)
+}
+```
+
+
+## Analysis
+
+### Motif filtering and characterization
+```{r out.width= "80%", fig.align= "center", echo = FALSE, warning = FALSE, message=FALSE}
+# # Jaspar individual motifs
+# motifs_jaspar <- read_transfac("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/jaspar_motifs.transfac")
+# 
+# motifs_jaspar2 <- list()
+# for (i in 1:length(motifs_jaspar)) {
+#   motifs_jaspar2[i] <- list(motifs_jaspar[[i]]@motif)
+#   names(motifs_jaspar2)[i] <- motifs_jaspar[[i]]@altname
+# }
+# 
+# seq <- data.frame("motif" = "")
+# for (i in 1:length(motifs_jaspar2)){
+#   seq_log <- t(data.frame(motifs_jaspar2[i]))
+#   seq[i,] <- paste(colnames(seq_log)[max.col(seq_log,ties.method="first")], collapse = "")
+# }
+# tf_motifs <- data.frame("TF" = names(motifs_jaspar2),
+#                         "motif" = seq)
+# 
+# znf <- c("ZNF", "BCL", "CG31670", "DPF1", "HIC", "HINFP1", "OSR", "OVOL", "PRDM", "SNAI", "ZBTB", "ZSCAN")
+# tf_motifs <- tf_motifs %>%
+#   mutate(TF = toupper(TF)) %>%
+#   filter(str_detect(TF, paste(znf, collapse = "|"), negate = T)) %>%
+#   distinct(motif, .keep_all = T)
+
+
+
+# Jaspar motif clusters: motifs were clustered based on similarity - yielding 258 different motifs
+clusters_jaspar <- read_transfac("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/jaspar_clusters.transfac")
+
+clusters_jaspar2 <- list()
+for (i in 1:length(clusters_jaspar)) {
+  clusters_jaspar2[i] <- list(clusters_jaspar[[i]]@motif)
+  names(clusters_jaspar2)[i] <- clusters_jaspar[[i]]@name
+}
+
+## Write out the consensus binding site per motif (highest affinity possible)
+seq <- data.frame("motif" = "")
+for (i in 1:length(clusters_jaspar2)){
+  seq_log <- t(data.frame(clusters_jaspar2[i]))
+  seq[i,] <- paste(colnames(seq_log)[max.col(seq_log,ties.method="first")], collapse = "")
+}
+tf_clusters <- data.frame("cluster" = names(clusters_jaspar2),
+                        "motif" = seq,
+                        "affinity" = 0)
+
+
+## Now I want to render 5 additional sequences per motif with different affinities, ranging from almost unchanged to low 
+tf_clusters_top5 <- data.frame("motif" = "", "cluster" = unique(names(clusters_jaspar2)))
+affinity <- data.frame("affinity" = 1:5)
+tf_clusters_top5 <- merge(tf_clusters_top5, affinity)
+for (i in unique(tf_clusters_top5$cluster)) {
+  tf_clusters_top5$affinity[tf_clusters_top5$cluster == i] <- round(seq(1, nchar(tf_clusters$motif[tf_clusters$cluster == i]),length.out = 5))
+}
+
+
+for (i in unique(names(clusters_jaspar2))){
+  seq_log <- t(data.frame(clusters_jaspar2[i]))
+  seq_log2 <- seq_log
+  seq_log2[seq_log2 == rowMaxs(seq_log2)] <- 0 # Create second data frame where the maximum value is zeroed out
+  dif <- rowMaxs(seq_log) - rowMaxs(seq_log2) 
+  seq_log <- data.frame(seq_log)
+  seq_log2 <- data.frame(seq_log2)
+  seq_log2$dif <- dif # Calculate difference between highest and second highest conserved base per position
+  seq_log3 <- seq_log2 %>% 
+    dplyr::select(-dif)
+  
+  # Iteratively identify the row that should be replaced with the second most conserved base (5 different stages based on difference between highest conserved and second highest conserved)
+  for (j in round(seq(1, nrow(seq_log3),length.out = 5))) {
+  max_row <- data.frame("row" = which(seq_log2$dif == sort(seq_log2$dif)[j], arr.ind = TRUE)) 
+  max_row <- max_row$row
+  
+  # Create new sequences with replaced bases
+  if (max_row == 1) {
+    seq_1 <- paste(colnames(seq_log3)[max.col(seq_log3[max_row,],ties.method="first")], collapse = "")
+    seq_mut <- ""
+  }
+  
+  else {
+  seq_1 <- paste(colnames(seq_log)[max.col(seq_log[1:(max_row-1),],ties.method="first")], collapse = "")
+  seq_mut <- paste(colnames(seq_log3)[max.col(seq_log3[max_row,],ties.method="first")], collapse = "")
+  }
+  
+  if (max_row < nrow(seq_log)) {
+    seq_2 <- paste(colnames(seq_log)[max.col(seq_log[(max_row+1):nrow(seq_log),],ties.method="first")], collapse = "")
+    tf_clusters_top5$motif[tf_clusters_top5$cluster == i & tf_clusters_top5$affinity == j] <- paste(seq_1, seq_mut, seq_2, collapse = "", sep = "")
+  }
+  
+  else {
+    tf_clusters_top5$motif[tf_clusters_top5$cluster == i & tf_clusters_top5$affinity == j] <- paste(seq_1, seq_mut, collapse = "", sep = "")
+  }
+  }
+}
+
+tf_clusters <- rbind(tf_clusters, tf_clusters_top5)
+
+
+## Mutated motif: mutate two bases with the highest conservation
+seq_mutated <- data.frame("motif" = "")
+for (i in 1:length(clusters_jaspar2)){
+  seq_log <- t(data.frame(clusters_jaspar2[i]))
+  max_rows <- rowMaxs(seq_log)
+  seq_log2 <- data.frame(seq_log)
+  seq_log2$dif <- -max_rows
+  
+  # Identify the two rows with the highest conserved bases
+  max_row <- data.frame(which(seq_log2 == min(seq_log2), arr.ind = TRUE)) 
+  max_row2 <- data.frame("row" = which(seq_log2$dif == sort(seq_log2$dif)[2], arr.ind = TRUE))
+  max_row <- max_row$row
+  max_row2 <- max_row2$row
+  max_row_first <- min(max_row, max_row2)
+  max_row_second <- max(max_row, max_row2)
+  
+  # Paste together sequences, exchanges the bases at the two most conserved positions with the least conserved base
+  if (max_row_first == 1) {
+    seq_1 <- paste(colnames(seq_log)[max.col(seq_log[max_row_first,],ties.method="first")], collapse = "")
+    seq_mut <- ""
+  }
+  
+  else {
+  seq_1 <- paste(colnames(seq_log)[max.col(seq_log[1:(max_row_first-1),],ties.method="first")], collapse = "")
+  seq_mut <- rownames(data.frame(which.min(seq_log[max_row_first,])))
+  }
+  
+  if (max_row_second < nrow(seq_log) & (max_row_first + 1) < max_row_second) {
+    seq_2 <- paste(colnames(seq_log)[max.col(data.frame(seq_log[(max_row_first+1):(max_row_second-1),]),ties.method="first")], collapse = "")
+    seq_3 <- rownames(data.frame(which.min(seq_log[max_row_second,])))
+    seq_4 <- paste(colnames(seq_log)[max.col(seq_log[(max_row_second+1):nrow(seq_log),],ties.method="first")], collapse = "")
+    seq_mutated[i,] <- paste(seq_1, seq_mut, seq_2, seq_3, seq_4, collapse = "", sep = "")
+    
+    if (max_row_second < nrow(seq_log) & (max_row_first + 1) == max_row_second) {
+    seq_2 <- rownames(data.frame(which(seq_log[max_row_second,] == min(seq_log[max_row_second,]), arr.ind = TRUE)))
+    seq_3 <- paste(colnames(seq_log)[max.col(seq_log[(max_row_second+1):nrow(seq_log),],ties.method="first")], collapse = "")
+    seq_mutated[i,] <- paste(seq_1, seq_mut, seq_2, seq_3, collapse = "", sep = "")
+    }
+  }
+  
+  else {
+    seq_2 <- paste(colnames(seq_log)[max.col(data.frame(seq_log[(max_row_first+1):(max_row_second-1),]),ties.method="first")], collapse = "")
+    seq_3 <- rownames(data.frame(which.min(seq_log[max_row_second,])))
+    seq_mutated[i,] <- paste(seq_1, seq_mut, seq_2, seq_3, collapse = "", sep = "")
+
+  }
+}
+
+tf_clusters_mutated <- data.frame("cluster" = names(clusters_jaspar2),
+                        "motif" = seq_mutated,
+                        "affinity" = -1)
+
+tf_clusters <- rbind(tf_clusters_mutated, tf_clusters)
+
+## Manually change binding sites that create many binding sites after mutations (identified in the next FIMO step)
+seq_mutated <- data.frame("motif" = "")
+for (i in c("cluster_232", "cluster_156", "cluster_55", "cluster_239", "cluster_184")){
+  seq_log <- t(data.frame(clusters_jaspar2[i]))
+  max_rows <- rowMaxs(seq_log)
+  seq_log2 <- data.frame(seq_log)
+  seq_log2$dif <- -max_rows
+  
+  # Identify the two rows with the highest conserved bases
+  max_row <- data.frame(which(seq_log2 == min(seq_log2), arr.ind = TRUE)) 
+  max_row2 <- data.frame("row" = which(seq_log2$dif == sort(seq_log2$dif)[2], arr.ind = TRUE))
+  max_row3 <- data.frame("row" = which(seq_log2$dif == sort(seq_log2$dif)[3], arr.ind = TRUE))
+  
+  max_row <- max_row$row
+  max_row2 <- max_row2$row
+  max_row3 <- max_row3$row
+  max_row_first <- min(max_row, max_row2, max_row3)
+  max_row_second <- median(max_row, max_row2, max_row3)
+  max_row_third <- max(max_row, max_row2, max_row3)
+  
+  # Paste together sequences, exchanges the bases at the two most conserved positions with the least conserved base
+  if (max_row_first == 1) {
+    seq_1 <- paste(colnames(seq_log)[max.col(seq_log[max_row_first,],ties.method="first")], collapse = "")
+    seq_mut <- ""
+  }
+  
+  else {
+  seq_1 <- paste(colnames(seq_log)[max.col(seq_log[1:(max_row_first-1),],ties.method="first")], collapse = "")
+  seq_mut <- rownames(data.frame(which.min(seq_log[max_row_first,])))
+  }
+  
+  if (max_row_third < nrow(seq_log) & (max_row_first + 1) < max_row_second & (max_row_second + 1) < max_row_third) {
+    seq_2 <- paste(colnames(seq_log)[max.col(data.frame(seq_log[(max_row_first+1):(max_row_second-1),]),ties.method="first")], collapse = "")
+    seq_3 <- rownames(data.frame(which.min(seq_log[max_row_second,])))
+    seq_4 <- paste(colnames(seq_log)[max.col(data.frame(seq_log[(max_row_second+1):(max_row_third-1),]),ties.method="first")], collapse = "")
+    seq_5 <- rownames(data.frame(which.min(seq_log[max_row_third,])))
+    seq_6 <- paste(colnames(seq_log)[max.col(seq_log[(max_row_third+1):nrow(seq_log),],ties.method="first")], collapse = "")
+    seq_mutated[i,] <- paste(seq_1, seq_mut, seq_2, seq_3, seq_4, seq_5, seq_6, collapse = "", sep = "")
+    
+    if (max_row_third < nrow(seq_log) & (max_row_first + 1) == max_row_second & (max_row_second + 1) < max_row_third) {
+    seq_2 <- rownames(data.frame(which(seq_log[max_row_second,] == min(seq_log[max_row_second,]), arr.ind = TRUE)))
+    seq_3 <- paste(colnames(seq_log)[max.col(data.frame(seq_log[(max_row_second+1):(max_row_third-1),]),ties.method="first")], collapse = "")
+    seq_4 <- rownames(data.frame(which.min(seq_log[max_row_third,])))
+    seq_5 <- paste(colnames(seq_log)[max.col(seq_log[(max_row_third+1):nrow(seq_log),],ties.method="first")], collapse = "")
+    seq_mutated[i,] <- paste(seq_1, seq_mut, seq_2, seq_3, seq_4, seq_5, collapse = "", sep = "")
+    
+    if (max_row_third < nrow(seq_log) & (max_row_first + 1) == max_row_second & (max_row_second + 1) == max_row_third) {
+    seq_2 <- rownames(data.frame(which(seq_log[max_row_second,] == min(seq_log[max_row_second,]), arr.ind = TRUE)))
+    seq_3 <- rownames(data.frame(which(seq_log[max_row_third,] == min(seq_log[max_row_third,]), arr.ind = TRUE)))
+    seq_4 <- paste(colnames(seq_log)[max.col(seq_log[(max_row_third+1):nrow(seq_log),],ties.method="first")], collapse = "")
+    seq_mutated[i,] <- paste(seq_1, seq_mut, seq_2, seq_3, seq_4, collapse = "", sep = "")
+    
+    if (max_row_third < nrow(seq_log) & (max_row_first + 1) < max_row_second & (max_row_second + 1) == max_row_third) {
+    seq_2 <- paste(colnames(seq_log)[max.col(data.frame(seq_log[(max_row_first+1):(max_row_second-1),]),ties.method="first")], collapse = "")
+    seq_3 <- rownames(data.frame(which.min(seq_log[max_row_second,])))
+    seq_4 <- rownames(data.frame(which.min(seq_log[max_row_third,])))
+    seq_5 <- paste(colnames(seq_log)[max.col(seq_log[(max_row_third+1):nrow(seq_log),],ties.method="first")], collapse = "")
+    seq_mutated[i,] <- paste(seq_1, seq_mut, seq_2, seq_3, seq_4, seq_5, collapse = "", sep = "")
+    }
+    }
+    }
+  }
+  
+  else {
+    seq_2 <- paste(colnames(seq_log)[max.col(data.frame(seq_log[(max_row_first+1):(max_row_second-1),]),ties.method="first")], collapse = "")
+    seq_3 <- rownames(data.frame(which.min(seq_log[max_row_second,])))
+    seq_mutated[i,] <- paste(seq_1, seq_mut, seq_2, seq_3, collapse = "", sep = "")
+
+  }
+}
+
+seq_mutated <- seq_mutated[-1,]
+
+tf_clusters_mutated <- data.frame("cluster" = c("cluster_232", "cluster_156", "cluster_55", "cluster_239", "cluster_184"),
+                        "motif" = seq_mutated,
+                        "affinity" = -2)
+
+tf_clusters2 <- rbind(tf_clusters_mutated, tf_clusters)
+
+```
+
+
+
+
+### Check motif abundance of chosen motifs and negative controls 
+```{r out.width= "80%", fig.align= "center", echo = FALSE, warning = FALSE, message=FALSE}
+motif_check <- tf_clusters %>%
+  mutate(seq.name = paste(cluster, affinity, sep = "_")) %>%
+  dplyr::select(seq.name, "seq.text" = motif)
+
+# Write fasta file to run on FIMO script
+dat2fasta(motif_check, outfile = "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-3/fimo/motif_check.fasta") 
+```
+
+
+### Run FIMO script
+```{bash run fimo db2_4, eval = FALSE}
+# motfn=/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/20170320_pwms_selected.meme
+# odir=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-3/fimo/motif_check
+# query=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-3/fimo/motif_check.fasta
+
+# nice -n 19 fimo --no-qvalue --thresh 1e-4 --verbosity 2 --o $odir $motfn $query
+```
+
+### Load FIMO results
+```{r build tf motif matrices db2: 5bp_spacer, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# load motif Metadata --> PWM feature matrix
+tib_pwm_motif_check  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-3/fimo/motif_check/fimo.tsv',
+                                        db            = 2)
+
+tib_pwm_motif_check$ctrl <- "No"
+tib_pwm_motif_check$ctrl[grep("-1", tib_pwm_motif_check$id)] <- "Yes"
+
+neg_ctrl <- tib_pwm_motif_check[tib_pwm_motif_check$ctrl == "Yes",]
+neg_ctrl <- neg_ctrl %>% column_to_rownames("id")
+neg_ctrl <- neg_ctrl[, -(which(colSums(neg_ctrl %>% dplyr::select(, -ctrl)) ==0))]
+heatmaply(as.matrix(neg_ctrl %>% dplyr::select(-ctrl)))
+```
+*It looks like the negative control bind relatively few important TFs - they should be able to serve as negative controls*
+
+
+### Adding dimensions to the DF - sequences will be added in later stages
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# Create whole df by merging all conditions
+# Import parameters
+spacings <- data.frame("spacing" = c("5bp", "10bp"))
+distances <- data.frame("distance" = c("10bp", "21bp"))
+promoters <- data.frame("promoter" = c("minP", "mCMV"))
+barcodes <- data.frame("n_barcode" = 1:5)
+background <- data.frame("background" = 1:3)
+tf.df <- tf.df %>% setnames(c("TF", "motif"))
+tf.df <- Reduce(function(x, y) merge(x, y, all=TRUE), list(tf.df, spacings, distances,
+                                                            barcodes, promoters, background))
+
+# Adding the DNA sequence from 5' to 3'
+
+## Constant 5' primer sequence
+tf.df$primer1_seq <- ""
+
+## Add motif placings and spacings between them
+tf.df$motif1 <- tf.df$motif
+tf.df$space1 <- ""
+tf.df$motif2 <- tf.df$motif
+tf.df$space2 <- ""
+tf.df$motif3 <- tf.df$motif
+tf.df$space3 <- ""
+tf.df$motif4 <- tf.df$motif
+  
+# Sequence from last TF-motif to start of minimal promoter
+tf.df$distance_seq <- ""
+
+## Minimal promoter
+tf.df$promoter_sequence <- "TAGAGGGTATATAATGGAAGCTCGACTTCCAG"
+tf.df$promoter_sequence[tf.df$promoter == "mCMV"] <- "GGCGTTTACTATGGGAGGTCTATATAAGCAGAGCTCGTTTAGTGAACCGTCAGATC"
+
+## S1 Illumina adapter
+tf.df$S1_primer <- "CACGACGCTCTTCCGATCT"
+
+## Barcode
+tf.df$barcode <- ""
+
+## 3' Primer sequence
+tf.df$primer2_seq <- ""
+```
+
+
+### Add random sequence promoter for some conditions
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# Add random 32 bp promoter
+rd.promoter <- tf.df
+rd.promoter <- rd.promoter[rd.promoter$spacing == "10bp" & rd.promoter$distance == "21bp" & 
+                             rd.promoter$background == 1 & rd.promoter$promoter == "minP",]
+rd.promoter$promoter <- "Random"
+rd.promoter$promoter_sequence <- "GGTTAGCGATCCAATTCAGCTAGATTTTAAGC" # Sequence generated in first library
+tf.df <- rbind(tf.df, rd.promoter)
+```
+
+
+### Add optimal 5' primer sequence - I checked that the previously used sequence still has no TF binding
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# Generate 2000 random 18bp primer adapters and test in combination with first motif
+tf.df$primer1_seq <- "CGGAGCGAACCGAGTTAG"
+```
+
+
+### Include 3' primer sequence from previous library
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+tf.df$primer2_seq <- "CATCGTCGCATCCAAGAG"
+```
+
+
+
+
+### Generate random spacings between TF motifs - screen those for TF binding
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+## Generate random spacings
+## Select top 9 backgrounds for 5 bp spacings (3 backgrounds * 3 spacings per background)
+
+# Subselect one spacing and neighboring TF motifs, make rows for random spacings that will be created
+motif <- tf.df %>% dplyr::select(TF, motif1, space1, motif2) %>% unique()
+iteration <- 1:2000
+motif <- merge(motif, iteration, all=T)
+
+# Generate 2000 random spacings between TF motifs (that's actually above the max with 5bp spacings)
+# GC content ~50%
+set.seed(9456)
+for (i in 1:2000) {
+  motif$space1[motif$y ==i] <- sim.DNAseq(5, GCfreq = 0.5)
+}
+
+motif_5bp <- motif
+
+# Assemble sequence to test: 4 rim bases of the TF motifs and the spacer sequence
+motif_5bp$seq.name <- paste(motif_5bp$TF, motif_5bp$y, sep = "_")
+motif_5bp$seq.text <- paste(substrRight(motif_5bp$motif1, 3), 
+                       motif_5bp$space1, substr(motif_5bp$motif2, 1, 3), sep = "")
+motif_5bp <- motif_5bp[!duplicated(motif_5bp$seq.text),]
+
+# Write fasta file to run on FIMO script
+motif_5bp_export <- motif_5bp %>% dplyr::select(seq.name, seq.text)
+#dat2fasta(motif_5bp_export, outfile = "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/fimo/5bp_spacer.fasta")       
+```
+
+
+### Run FIMO script
+```{bash run fimo db2_4, eval = FALSE}
+# motfn=/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/20170320_pwms_selected.meme
+# odir=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-2/fimo/5bp_spacer
+# query=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-2/fimo/5bp_spacer.fasta
+
+# nice -n 19 fimo --no-qvalue --thresh 1e-4 --verbosity 2 --o $odir $motfn $query
+```
+
+
+
+### load fimo results
+We built a TF motif matrix using -log10 transformed FIMO scores. We used this feature encoding throughout the rest of this analysis, unless otherwise stated. For some analysis, both Nanog and Klf2 libraries were combined.
+
+```{r build tf motif matrices db2: 5bp_spacer, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# load motif Metadata --> PWM feature matrix
+tib_pwm_5bp_spacer  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-2/fimo/5bp_spacer/fimo.tsv',
+                                        db            = 2)
+```
+
+
+### visualize fimo results
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+## We make a pre-selection of the top 9 spacers first to narrow down the selection
+# convert to binary
+tib_pwm_5bp_spacer_binary <- tib_pwm_5bp_spacer %>% mutate_if(is.numeric, function(x) ifelse((x==0 | is.na(x)),0,1)) 
+tib_pwm_5bp_spacer_binary_top <- tib_pwm_5bp_spacer_binary
+
+# compute rowsums to get cumulative binding
+tib_pwm_5bp_spacer_binary_top$binding <- rowSums(tib_pwm_5bp_spacer_binary_top[,2:ncol(tib_pwm_5bp_spacer_binary_top)])
+
+# select only cumulative binding and id
+tib_pwm_5bp_spacer_binary_top <- tib_pwm_5bp_spacer_binary_top %>%
+  dplyr::select(id,binding)
+
+# make third column wiht only the space_id - then sum up the binding scores per space_id
+tib_pwm_5bp_spacer_binary_top <- tib_pwm_5bp_spacer_binary_top %>%
+  mutate(space = gsub(".*_(.*)", "\\1", id)) %>%
+  dplyr::select(-id) %>%
+  mutate(cum_binding = ave(binding, space, FUN = sum)) %>%
+  dplyr::select(-binding) %>%
+  unique()
+
+# Identify spacers that were exlcuded from fimo script (due to 0 hits)
+space_id <- unique(tib_pwm_5bp_spacer_binary_top$space)
+sel_id <- unique(motif_5bp$y)
+space_nohit <- sel_id[!sel_id %in% space_id]
+ecori_nhei <- c("GAATTC","GCTAGC")
+remove_5bp <- motif_5bp[grep(paste(ecori_nhei, collapse = "|"), motif_5bp$seq.text),]
+remove_5bp <- unique(remove_5bp$y)
+space_nohit <- space_nohit[!space_nohit %in% remove_5bp]
+print(paste(length(space_nohit), "of the", length(iteration), "tested sequences have no TF motif"))
+```
+
+### Make final selection for 5bp spacers
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# Based on the heatmap above the following spacer IDs were chosen: 
+spacers_5bp_selected <- unique(motif_5bp$space1[motif_5bp$y %in% space_nohit]) 
+
+# Add to tf.df
+for (i in unique(tf.df$background)) {
+  tf.df$space1[tf.df$background == i & tf.df$spacing == "5bp"] <- spacers_5bp_selected[i]
+}
+spacers_5bp_selected <- spacers_5bp_selected[4:9]
+for (i in unique(tf.df$background)) {
+  tf.df$space2[tf.df$background == i & tf.df$spacing == "5bp"] <- spacers_5bp_selected[i]
+}
+spacers_5bp_selected <- spacers_5bp_selected[4:6]
+for (i in unique(tf.df$background)) {
+  tf.df$space3[tf.df$background == i & tf.df$spacing == "5bp"] <- spacers_5bp_selected[i]
+}
+```
+
+
+
+
+
+### Do the same for 10bp spacings
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+## Generate random spacings
+## Select top 9 backgrounds for 5 bp spacings (3 backgrounds * 3 spacings per background)
+
+# Subselect one spacing and neighboring TF motifs, make rows for random spacings that will be created
+motif <- tf.df %>% dplyr::select(TF, motif1, space1, motif2) %>% unique()
+iteration <- 1:2000
+motif <- merge(motif, iteration, all=T)
+
+# Generate 2000 random spacings between TF motifs
+# GC content ~50%
+set.seed(4125)
+for (i in 1:2000) {
+  motif$space1[motif$y ==i] <- sim.DNAseq(10, GCfreq = 0.5)
+}
+
+motif_10bp <- motif
+
+# Assemble sequence to test: 4 rim bases of the TF motifs and the spacer sequence
+motif_10bp$seq.name <- paste(motif_10bp$TF, motif_10bp$y, sep = "_")
+motif_10bp$seq.text <- paste(substrRight(motif_10bp$motif1, 4), 
+                       motif_10bp$space1, substr(motif_10bp$motif2, 1, 4), sep = "")
+motif_10bp <- motif_10bp[!duplicated(motif_10bp$seq.text),]
+
+# Write fasta file to run on FIMO script
+motif_10bp_export <- motif_10bp %>% dplyr::select(seq.name, seq.text)
+#dat2fasta(motif_10bp_export, outfile = "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/fimo/10bp_spacer.fasta")       
+```
+
+
+### Run FIMO script
+```{bash run fimo db2_4, eval = FALSE}
+# motfn=/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/20170320_pwms_selected.meme
+# odir=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-2/fimo/10bp_spacer
+# query=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-2/fimo/10bp_spacer.fasta
+
+# nice -n 19 fimo --no-qvalue --thresh 1e-4 --verbosity 2 --o $odir $motfn $query 
+```
+
+
+
+### load fimo results
+We built a TF motif matrix using -log10 transformed FIMO scores. We used this feature encoding throughout the rest of this analysis, unless otherwise stated. For some analysis, both Nanog and Klf2 libraries were combined.
+
+```{r build tf motif matrices db2: 5bp_spacer, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# load motif Metadata --> PWM feature matrix
+tib_pwm_10bp_spacer  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-2/fimo/10bp_spacer/fimo.tsv',
+                                        db            = 2)
+```
+
+
+### visualize fimo results
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+## We make a pre-selection of the top 9 spacers first to narrow down the selection
+# convert to binary
+tib_pwm_10bp_spacer_binary <- tib_pwm_10bp_spacer %>% mutate_if(is.numeric, function(x) ifelse((x==0 | is.na(x)),0,1)) 
+tib_pwm_10bp_spacer_binary_top <- tib_pwm_10bp_spacer_binary
+
+# compute rowsums to get cumulative binding
+tib_pwm_10bp_spacer_binary_top$binding <- rowSums(tib_pwm_10bp_spacer_binary_top[,2:ncol(tib_pwm_10bp_spacer_binary_top)])
+
+# select only cumulative binding and id
+tib_pwm_10bp_spacer_binary_top <- tib_pwm_10bp_spacer_binary_top %>%
+  dplyr::select(id,binding)
+
+# make third column wiht only the space_id - then sum up the binding scores per space_id
+tib_pwm_10bp_spacer_binary_top <- tib_pwm_10bp_spacer_binary_top %>%
+  mutate(space = gsub(".*_(.*)", "\\1", id)) %>%
+  dplyr::select(-id) %>%
+  mutate(cum_binding = ave(binding, space, FUN = sum)) %>%
+  dplyr::select(-binding) %>%
+  unique()
+
+# Identify spacers that were exlcuded from fimo script (due to 0 hits)
+space_id <- unique(tib_pwm_10bp_spacer_binary_top$space)
+space_nohit <- motif_10bp$y[!motif_10bp$y %in% space_id]
+remove_10bp <- motif_10bp[grep(paste(ecori_nhei, collapse = "|"), motif_10bp$seq.text),]
+remove_10bp <- unique(remove_10bp$y)
+space_nohit <- space_nohit[!space_nohit %in% remove_10bp]
+print(paste(length(space_nohit), "of the", length(iteration), "tested sequences have no TF motif"))
+
+# This revealed the best 0 hits - now add 9 more to complete 9 
+tib_pwm_10bp_spacer_binary_top <- tib_pwm_10bp_spacer_binary_top[order(tib_pwm_10bp_spacer_binary_top$cum_binding),]
+
+# Look at the top 12 to see which TF binds to them (as they all have 1 hit for a TF)
+low_binding_space <- tib_pwm_10bp_spacer_binary_top$space[1:9]
+low_binding_space <- low_binding_space[!low_binding_space %in% remove_10bp]
+
+# Subselect top 12 from original df
+low_binding_space2 <- merge(low_binding_space, unique(tf.df$TF))
+
+
+low_binding_space2$space <- paste(low_binding_space2$y, low_binding_space2$x, sep = "_")
+
+tib_pwm_10bp_spacer_binary_select <- tib_pwm_10bp_spacer_binary[tib_pwm_10bp_spacer_binary$id %in%
+                                                                low_binding_space2$space,]
+
+
+
+# convert to matrix - leave out id
+tib_pwm_10bp_spacer_binaryMatrix <- as.matrix(dplyr::select(tib_pwm_10bp_spacer_binary_select,-id))
+
+# assign ids as rownames of matrix
+rownames(tib_pwm_10bp_spacer_binaryMatrix) <- tib_pwm_10bp_spacer_binary_select$id
+```
+
+```{r, fig.height=10, fig.width=10, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+#remove columns with only 0s and plot heatmap
+heatmaply(tib_pwm_10bp_spacer_binaryMatrix[, colSums(tib_pwm_10bp_spacer_binaryMatrix != 0) > 0])
+```
+*There's still some TF binding even to the most neutral backgrounds, but I cannot fully prevent this with that many different motifs in the library*
+
+
+### Make final selection for 10bp spacers
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# Based on the heatmap above the following spacer IDs were chosen: 
+spacers_10bp_selected <- tib_pwm_10bp_spacer_binary_top$space[1:10]
+
+# Select sequences from original file
+spacers_10bp_selected <- unique(motif_10bp$space1[motif_10bp$y %in% spacers_10bp_selected])
+spacers_10bp_selected <- spacers_10bp_selected[-grep(paste(ecori_nhei, collapse = "|"), spacers_10bp_selected)]
+
+# Add to tf.df
+for (i in unique(tf.df$background)) {
+  tf.df$space1[tf.df$background == i & tf.df$spacing == "10bp"] <- spacers_10bp_selected[i]
+}
+spacers_10bp_selected <- spacers_10bp_selected[4:9]
+for (i in unique(tf.df$background)) {
+  tf.df$space2[tf.df$background == i & tf.df$spacing == "10bp"] <- spacers_10bp_selected[i]
+}
+spacers_10bp_selected <- spacers_10bp_selected[4:6]
+for (i in unique(tf.df$background)) {
+  tf.df$space3[tf.df$background == i & tf.df$spacing == "10bp"] <- spacers_10bp_selected[i]
+}
+```
+
+
+
+
+### Now we want to find 3 optimal spacings for in between the last TF motif and the core promoter - 10bp distance
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# Subselect one spacing and neighboring TF motifs, make rows for random spacings that will be created
+motif_promoter <- tf.df %>% 
+  dplyr::select(TF, motif, promoter_sequence) %>% unique()
+motif_promoter$dist1 <- ""
+iteration <- 1:1000
+motif_promoter <- merge(motif_promoter, iteration, all=T)
+
+# Generate 1000 random spacings between last TF motif and core promoter
+# GC content ~50%
+set.seed(4125)
+for (i in 1:1000) {
+  motif_promoter$dist1[motif_promoter$y ==i] <- sim.DNAseq(10, GCfreq = 0.5)
+}
+
+motif_promoter_space <- motif_promoter
+motif_promoter_space$seq.name <- paste(motif_promoter_space$TF, motif_promoter_space$y, sep = "_")
+
+
+# Assemble sequence to test: 4 rim bases of the TF motifs and the spacer sequence
+motif_promoter_space$seq.text <- paste(substrRight(motif_promoter_space$motif, 4), 
+                       motif_promoter_space$dist1, 
+                       substr(motif_promoter_space$promoter_sequence, 1, 4), sep = "")
+motif_promoter_space <- motif_promoter_space[!duplicated(motif_promoter_space$seq.text),]
+
+# Write fasta file to run on FIMO script
+motif_promoter_space_export <- motif_promoter_space
+motif_promoter_space_export <- motif_promoter_space_export %>% dplyr::select(seq.name, seq.text)
+#dat2fasta(motif_promoter_space_export, outfile = "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/fimo/promoter_spacer_1.fasta")     
+```
+
+
+ 
+### Run FIMO script again 
+```{bash run fimo db2_6, eval = FALSE}
+# motfn=/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/20170320_pwms_selected.meme
+# odir=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-2/fimo/promoter_spacer_1
+# query=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-2/fimo/promoter_spacer_1.fasta
+
+# nice -n 19 fimo --no-qvalue --thresh 1e-4 --verbosity 2 --o $odir $motfn $query 
+```
+
+
+### load fimo results
+We built a TF motif matrix using -log10 transformed FIMO scores. We used this feature encoding throughout the rest of this analysis, unless otherwise stated. For some analysis, both Nanog and Klf2 libraries were combined.
+
+```{r build tf motif matrices db2: promoter_spacer, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# load motif Metadata --> PWM feature matrix
+tib_pwm_promoter_spacer  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-2/fimo/promoter_spacer_1/fimo.tsv',
+                                        db            = 2)
+```
+
+
+### visualize fimo results
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+## We make a pre-selection of the top 9 spacers first to narrow down the selection
+# convert to binary
+tib_pwm_promoter_spacer_binary <- tib_pwm_promoter_spacer %>% mutate_if(is.numeric, function(x) ifelse((x==0 | is.na(x)),0,1)) 
+tib_pwm_promoter_spacer_binary_top <- tib_pwm_promoter_spacer_binary
+
+# compute rowsums to get cumulative binding
+tib_pwm_promoter_spacer_binary_top$binding <- rowSums(tib_pwm_promoter_spacer_binary_top[,2:ncol(tib_pwm_promoter_spacer_binary_top)])
+
+# select only cumulative binding and id
+tib_pwm_promoter_spacer_binary_top <- tib_pwm_promoter_spacer_binary_top %>%
+  dplyr::select(id,binding)
+
+# make third column wiht only the space_id - then sum up the binding scores per space_id
+tib_pwm_promoter_spacer_binary_top <- tib_pwm_promoter_spacer_binary_top %>%
+  mutate(space = gsub(".*_(.*)", "\\1", id)) %>%
+  dplyr::select(-id) %>%
+  mutate(cum_binding = ave(binding, space, FUN = sum)) %>%
+  dplyr::select(-binding) %>%
+  unique()
+
+
+# Identify spacers that were exlcuded from fimo script (due to 0 hits)
+space_id <- unique(tib_pwm_promoter_spacer_binary_top$space)
+space_nohit <- unique(motif_promoter_space$y[!motif_promoter_space$y %in% space_id])
+remove_10bp <- motif_promoter_space[grep(paste(ecori_nhei, collapse = "|"), motif_promoter_space$seq.text),]
+remove_10bp <- unique(remove_10bp$y)
+space_nohit <- space_nohit[!space_nohit %in% remove_10bp]
+print(paste(length(space_nohit), "of the", length(iteration), "tested sequences have no TF motif"))
+```
+
+
+### Make final selection for promoter spacers
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# Based on the heatmap above the following spacer ID was chosen
+spacers_selected_promoter_1 <- space_nohit[1:3]
+
+# Select sequences from original file
+spacers_selected_promoter_1 <- unique(motif_promoter_space[motif_promoter_space$y %in% spacers_selected_promoter_1,4])
+spacers_selected_promoter_1 <- subset(spacers_selected_promoter_1, !(spacers_selected_promoter_1 %in% ecori_nhei))
+
+# Add to tf.df
+for (i in unique(tf.df$background)) {
+  tf.df$distance_seq[tf.df$background == i & tf.df$distance == "10bp"] <- spacers_selected_promoter_1[i]
+}
+```
+
+
+
+
+
+
+### Do the same for 21 bp spacing
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# Subselect one spacing and neighboring TF motifs, make rows for random spacings that will be created
+motif_promoter <- tf.df %>% 
+  dplyr::select(TF, motif, promoter_sequence) %>% unique()
+motif_promoter$dist1 <- ""
+iteration <- 1:1000
+motif_promoter <- merge(motif_promoter, iteration, all=T)
+
+# Generate 1000 random spacings between last TF motif and core promoter
+# GC content ~50%
+set.seed(434853)
+for (i in 1:1000) {
+  motif_promoter$dist1[motif_promoter$y ==i] <- sim.DNAseq(21, GCfreq = 0.5)
+}
+
+motif_promoter_space_2 <- motif_promoter
+motif_promoter_space_2$seq.name <- paste(motif_promoter_space_2$TF, motif_promoter_space_2$y, sep = "_")
+
+
+# Assemble sequence to test: 4 rim bases of the TF motifs and the spacer sequence
+motif_promoter_space_2$seq.text <- paste(substrRight(motif_promoter_space_2$motif, 4), 
+                       motif_promoter_space_2$dist1, 
+                       substr(motif_promoter_space_2$promoter_sequence, 1, 4), sep = "")
+motif_promoter_space_2 <- motif_promoter_space_2[!duplicated(motif_promoter_space_2$seq.text),]
+
+# Write fasta file to run on FIMO script
+motif_promoter_space_2_export <- motif_promoter_space_2
+motif_promoter_space_2_export <- motif_promoter_space_2_export %>% dplyr::select(seq.name, seq.text)
+#dat2fasta(motif_promoter_space_2_export, outfile = "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/fimo/promoter_spacer_2.fasta")     
+```
+
+
+ 
+### Run FIMO script again 
+```{bash run fimo db2_6, eval = FALSE}
+# motfn=/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/20170320_pwms_selected.meme
+# odir=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-2/fimo/promoter_spacer_2
+# query=/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-2/fimo/promoter_spacer_2.fasta
+
+# nice -n 19 fimo --no-qvalue --thresh 1e-4 --verbosity 2 --o $odir $motfn $query 
+```
+
+
+### load fimo results
+We built a TF motif matrix using -log10 transformed FIMO scores. We used this feature encoding throughout the rest of this analysis, unless otherwise stated. For some analysis, both Nanog and Klf2 libraries were combined.
+
+```{r build tf motif matrices db2: promoter_spacer, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# load motif Metadata --> PWM feature matrix
+tib_pwm_promoter_spacer  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-2/fimo/promoter_spacer_2/fimo.tsv',
+                                        db            = 2)
+```
+
+
+### visualize fimo results
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+## We make a pre-selection of the top 9 spacers first to narrow down the selection
+# convert to binary
+tib_pwm_promoter_spacer_binary <- tib_pwm_promoter_spacer %>% mutate_if(is.numeric, function(x) ifelse((x==0 | is.na(x)),0,1)) 
+tib_pwm_promoter_spacer_binary_top <- tib_pwm_promoter_spacer_binary
+
+# compute rowsums to get cumulative binding
+tib_pwm_promoter_spacer_binary_top$binding <- rowSums(tib_pwm_promoter_spacer_binary_top[,2:ncol(tib_pwm_promoter_spacer_binary_top)])
+
+# select only cumulative binding and id
+tib_pwm_promoter_spacer_binary_top <- tib_pwm_promoter_spacer_binary_top %>%
+  dplyr::select(id,binding)
+
+# make third column wiht only the space_id - then sum up the binding scores per space_id
+tib_pwm_promoter_spacer_binary_top <- tib_pwm_promoter_spacer_binary_top %>%
+  mutate(space = gsub(".*_(.*)", "\\1", id)) %>%
+  dplyr::select(-id) %>%
+  mutate(cum_binding = ave(binding, space, FUN = sum)) %>%
+  dplyr::select(-binding) %>%
+  unique()
+
+# Identify spacers that were exlcuded from fimo script (due to 0 hits)
+space_id <- unique(tib_pwm_promoter_spacer_binary_top$space)
+space_nohit <- unique(motif_promoter_space_2$y[!motif_promoter_space_2$y %in% space_id])
+remove_promoter <- motif_promoter_space_2[grep(paste(ecori_nhei, collapse = "|"), motif_promoter_space_2$seq.text),]
+remove_promoter <- unique(remove_promoter$y)
+space_nohit <- space_nohit[!space_nohit %in% remove_promoter]
+print(paste(length(space_nohit), "of the", length(iteration), "tested sequences have no TF motif"))
+
+# This revealed the best 0 hits - now find 9 more
+tib_pwm_promoter_spacer_binary_top <- tib_pwm_promoter_spacer_binary_top[order(tib_pwm_promoter_spacer_binary_top$cum_binding),]
+
+# Look at the top 12 to see which TF binds to them (as they all have 1 hit for a TF)
+low_binding_space <- tib_pwm_promoter_spacer_binary_top$space[1:5]
+low_binding_space <- low_binding_space[!low_binding_space %in% remove_10bp]
+
+# Subselect top 12 from original df
+low_binding_space2 <- merge(low_binding_space, unique(tf.df$TF))
+
+
+low_binding_space2$space <- paste(low_binding_space2$y, low_binding_space2$x, sep = "_")
+
+tib_pwm_promoter_spacer_binary_select <- tib_pwm_promoter_spacer_binary[tib_pwm_promoter_spacer_binary$id %in%
+                                                                low_binding_space2$space,]
+
+
+
+# convert to matrix - leave out id
+tib_pwm_promoter_spacer_binaryMatrix <- as.matrix(dplyr::select(tib_pwm_promoter_spacer_binary_select,-id))
+
+# assign ids as rownames of matrix
+rownames(tib_pwm_promoter_spacer_binaryMatrix) <- tib_pwm_promoter_spacer_binary_select$id
+```
+
+### Visualize results
+```{r, fig.height=10, fig.width=10, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+#remove columns with only 0s and plot heatmap
+heatmaply(tib_pwm_promoter_spacer_binaryMatrix[, colSums(tib_pwm_promoter_spacer_binaryMatrix != 0) > 0])
+```
+
+### Make final selection for 10bp spacers
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# Based on the heatmap above the following spacer IDs were chosen: 
+promoters_selected <- tib_pwm_promoter_spacer_binary_top$space[3:5]
+
+# Select sequences from original file
+promoters_selected <- motif_promoter_space_2$dist1[motif_promoter_space_2$y %in% promoters_selected] %>% unique()
+promoters_selected <- subset(promoters_selected, !(promoters_selected %in% ecori_nhei))
+
+# Add to tf.df
+for (i in unique(tf.df$background)) {
+  tf.df$distance_seq[tf.df$background == i & tf.df$distance == "21bp"] <- promoters_selected[i]
+}
+```
+
+
+
+### Include positive control (chunk of the hPGK promoter)
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+# Import sequence from previous library
+pgk <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/output/mt20200416_pgk.csv")
+colnames(pgk) <- colnames(tf.df)
+tf.df <- rbind(tf.df, pgk)
+```
+
+
+### Include all previously published reporters for the selected TFs (from which I found sequences) - I also included some other reporter sequences for non-selected TFs
+```{r out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE}
+published_reporters <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018//mt20210111_published_reporter_sequences.csv")
+published_reporters_long <- published_reporters[grep("long", published_reporters$TF),]
+published_reporters <- published_reporters[-grep("long", published_reporters$TF),]
+tf.df.pub <- tf.df[tf.df$TF == "AR" & tf.df$spacing == "5bp" & tf.df$background == "3",] %>%
+  mutate(TF = "",
+         spacing = "",
+         background = "",
+         motif = "",
+         motif1 = "",
+         space1 = "",
+         motif2 = "",
+         space2 = "",
+         motif3 = "",
+         space3 = "",
+         motif4 = "")
+tf.df.pub <- merge(tf.df.pub, published_reporters$TF) %>%
+  mutate(TF = y) %>%
+  dplyr::select(-y) 
+tf.df.pub <- merge(tf.df.pub, published_reporters) %>%
+  mutate(motif2 = sequence) %>%
+  dplyr::select(-sequence) 
+
+tf.df.pub_long <- tf.df[tf.df$TF == "AR" & tf.df$spacing == "5bp" & tf.df$background == "3" & tf.df$distance == "10bp",] %>%
+  mutate(TF = "",
+         spacing = "",
+         background = "",
+         motif = "",
+         motif1 = "",
+         space1 = "",
+         motif2 = "",
+         space2 = "",
+         motif3 = "",
+         space3 = "",
+         motif4 = "",
+         distance_seq = "")
+tf.df.pub_long <- merge(tf.df.pub_long, published_reporters_long$TF) %>%
+  mutate(TF = y) %>%
+  dplyr::select(-y) 
+tf.df.pub_long <- merge(tf.df.pub_long, published_reporters_long) %>%
+  mutate(motif2 = sequence) %>%
+  dplyr::select(-sequence) 
+
+# Include background sequence in front of RE sequence to have similar oligo lengths (to prevent PCR biases)
+tf.df.pub$nchar_add <- 208 - nchar(paste(tf.df.pub$primer1_seq, tf.df.pub$motif2, tf.df.pub$distance_seq, 
+                                         tf.df.pub$promoter_sequence, tf.df.pub$S1_primer, tf.df.pub$primer2_seq, sep = ""))
+tf.df.pub$nchar_add[tf.df.pub$nchar_add < 0] <- 0
+tf.df.pub$space_add <- "GCTAACTTACTAGTGACCGCACTGTAGGTAGGTCTTCATGTATAACCCAGCCCAACCATTGGGTTCCGTCCTGTACAAAGGCGGTTCCATAAGCAGCCTGTGCGAAGTGGAGTACCAATA" # inactive spacer from pMT06
+tf.df.pub$space1 <- substr(tf.df.pub$space_add, 1, tf.df.pub$nchar_add)
+tf.df.pub <- tf.df.pub %>%
+  dplyr::select(-nchar_add, -space_add)
+
+tf.df <- rbind(tf.df, tf.df.pub, tf.df.pub_long)
+```
+
+
+
+
+
+
+### Include from each TF from pMT02 the 2 most robust reporters (in case I want to probe this library alone - this can be handy to have more TF reporter data)
+```{r out.width= "100%", fig.align= "center", echo=FALSE}
+pMT02_reporter <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf5927_stimulation-1/results/mt20201209_reporter_activity_filt.csv") %>%
+  dplyr::filter(neg_ctrls == "No",
+                hPGK == "No",
+                native_enhancer == "No",
+                rand_promoter == "No",
+                condition == "2i_pos_LIF",
+                promoter != "hBGm") %>%
+  dplyr::select(TF, reporter_id, reporter_activity) %>%
+  unique()
+
+# Select top 2 reporters for each TF
+pMT02_reporter <- pMT02_reporter %>%
+  dplyr::arrange(desc(reporter_activity)) %>%
+  dplyr::group_by(TF) %>%
+  dplyr::slice(1:2)
+
+# Also include negative controls
+pMT02_reporter_neg <- pMT02_reporter %>%
+  mutate(reporter_id = gsub("^([^_]+)", "_neg", reporter_id),
+         reporter_id = paste(TF, reporter_id, sep = ""))
+pMT02_reporter <- rbind(pMT02_reporter, pMT02_reporter_neg)
+
+# Extract sequences
+pMT02_reporter_seq <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/output/mt20210111_tf-array.csv") %>%
+  mutate(reporter_id = paste(TF, Spacing, Distance, Promoter, Background, sep = "_"))
+pMT02_reporter_seq <- pMT02_reporter_seq[pMT02_reporter_seq$reporter_id %in% pMT02_reporter$reporter_id,] %>%
+  dplyr::select(-reporter_id) %>%
+  filter(Barcode <= 5)
+colnames(pMT02_reporter_seq) <- colnames(tf.df)
+pMT02_reporter_seq$TF <- str_to_upper(pMT02_reporter_seq$TF)
+pMT02_reporter_seq$TF <- gsub("NEG", "neg", pMT02_reporter_seq$TF)
+pMT02_reporter_seq$TF <- gsub("^", "pMT02-", pMT02_reporter_seq$TF)
+
+tf.df <- rbind(tf.df, pMT02_reporter_seq)
+```
+
+
+
+
+
+
+
+## Add barcodes
+```{r out.width= "100%", fig.align= "center", echo=FALSE}
+## Randomizing barcodes
+barcode_list <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/parameter_files/barc_selected.csv") %>%
+  dplyr::select(barcode = x)
+barcode_list <- barcode_list[-grep("GCTAG", barcode_list$barcode),]
+set.seed(123)
+barcode_list <- sample(barcode_list)
+tf.df$barcode <- barcode_list[1:nrow(tf.df)]
+
+# Check if there are any duplicate barcodes
+paste("duplicate barcodes: ", nrow(tf.df[duplicated(tf.df$barcode),]), sep ="")
+
+# Save for later export
+tf.df.long.export <- tf.df
+```
+
+
+
+
+# Check-up & Visualizations
+```{r out.width= "100%", fig.align= "center", echo=FALSE}
+# Length distribution
+# Save intermediate df for later purpose
+tf.array <- tf.df
+tf.df[is.na(tf.df)] <- ""
+tf.df$seq.text <- paste(tf.df$primer1_seq, tf.df$motif1, tf.df$space1, tf.df$motif2,
+                    tf.df$space2, tf.df$motif3, tf.df$space3, tf.df$motif4, 
+                    tf.df$distance_seq, tf.df$promoter_sequence, tf.df$S1_primer,
+                    tf.df$barcode, tf.df$primer2_seq, sep = "")
+print(nrow(tf.df[grep(paste(ecori_nhei, collapse = "|"),tf.df$seq.text),]))
+
+
+tf.df$nchar <- nchar(tf.df$seq.text)
+
+ggplot(tf.df, aes(x = nchar)) +
+   geom_histogram(aes(y=..count..), colour="black", fill="#E69F00", binwidth = 5)+ 
+  xlab("Length Oligo (binwidth = 5)") + ylab("Frequency") +
+    labs(title = "Overview of oligo lengths in pool", 
+         subtitle = paste("Total oligos =", nrow(tf.df), "|",
+                          "max oligo length =", max(nchar(tf.df$seq.text)), "|",
+                          "min oligo length = ", min(nchar(tf.df$seq.text)), "|",
+                          "mean oligo length = ", round(mean(nchar(tf.df$seq.text))))) +
+  theme_classic()
+```
+
+
+
+## Exporting potential data. 
+```{r}
+## Exporting
+tf.df$seq.name <- paste(tf.df$TF, "_s-", tf.df$spacing, "_d-", tf.df$distance, "_bg-", tf.df$background,
+                        "_", tf.df$promoter, "_bc-", tf.df$n_barcode, sep = "")
+tf.df.export <- tf.df %>% dplyr::select(seq.name, seq.text) %>% unique() %>%
+  mutate(seq.name = gsub("s-NA_", "", seq.name),
+         seq.name = gsub("d-NA_", "", seq.name),
+         seq.name = gsub("bg-NA_", "", seq.name),
+         seq.name = gsub("bg-_", "", seq.name),
+         seq.name = gsub("s-_", "", seq.name))
+
+paste("duplicate sequence names: ", nrow(tf.df.export[duplicated(tf.df.export$seq.name),]), sep ="")
+paste("duplicate sequences: ", nrow(tf.df.export[duplicated(tf.df.export$seq.text),]), sep ="")
+
+
+# Compute GC-content of complete sequences
+tf_df_fasta <- tf.df.export
+dat2fasta(tf_df_fasta, outfile = "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/output/gen-2_tf_df_fasta.fasta") 
+tf_df_fasta <- seqinr::read.fasta("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/output/gen-2_tf_df_fasta.fasta")
+gc <- compute_GC(tf_df_fasta)
+
+# Plot gc distribution
+density <- density(gc$GC.content)
+
+plot_ly(x = ~density$x, y = ~density$y, type = 'scatter', mode = 'lines', fill = 'tozeroy') %>% 
+  layout(xaxis = list(title = 'GC content'),
+         yaxis = list(title = 'Density'))
+
+# Write csv file
+filename <- SetFileName("_oligo_pool_gen2", "mt")
+setwd("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/")
+write.csv(tf.df.export, file = paste(filename,".csv", sep = ""), row.names = F)
+
+# Write fasta file
+setwd("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/")
+dat2fasta(tf.df.export, outfile = paste(filename,".fasta", sep = ""))  
+
+```
+
+
+
+
+## Addition: Scan all the reporters again (especially the negative controls) to ensure that only the desired TFs are binding
+```{r}
+# Select sequence in front of core promoter
+tf.df.check <- ReadFasta("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/mt20210114_oligo_pool_gen2.fasta") %>%
+  mutate(name = gsub("(.*bg-[1-3]{1})_.*", "\\1", name)) %>%
+  filter(str_detect(name, "TF-seq", negate = T), 
+         str_detect(name, "romanov", negate = T),
+         str_detect(name, "promega", negate = T),
+         str_detect(name, "TF-seq", negate = T),
+         str_detect(name, "hPGK", negate = T))
+
+tf.df.check <- tf.df.check %>%
+  mutate(sequence2 = gsub("CGGAGCGAACCGAGTTAG", "", sequence),
+         sequence3 = gsub("TAGAGGGTATATAATGGAAGCTCGACTTCCAG.*", "", sequence2),
+         sequence4 = gsub("GGCGTTTACTATGGGAGGTCTATATAAGCAGAGCTCGTTTAGTGAACCGTCAGATC.*", "", sequence3),
+         sequence5 = gsub("GGTTAGCGATCCAATTCAGCTAGATTTTAAGC.*", "", sequence4)) %>%
+  dplyr::select("seq.name" = name, "seq.text" = sequence5) %>%
+  unique()
+
+
+dat2fasta(tf.df.check, outfile = "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/fimo/tf_check.fasta")   
+```
+
+## Run FIMO script again 
+```{bash run fimo db2_9, eval = FALSE}
+# motfn=/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/20170320_pwms_selected.meme
+# odir=//DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/fimo/reporter_check
+# query=/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/gen-2/fimo/tf_check.fasta
+
+# nice -n 19 fimo --no-qvalue --thresh 1e-4 --verbosity 1 --o $odir $motfn $query 
+```
+
+
+
+## load fimo results
+We built a TF motif matrix using -log10 transformed FIMO scores. We used this feature encoding throughout the rest of this analysis, unless otherwise stated. 
+
+```{r build tf motif matrices db2: tf_check, out.width= "100%", fig.align= "center", echo=FALSE}
+# load motif Metadata --> PWM feature matrix
+tib_pwm_tf_check  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-2/fimo/reporter_check/fimo.tsv',
+                                        db            = 2)
+```
+
+
+```{r, fig.height=4, fig.width=4, out.width= "100%", fig.align= "center", echo=FALSE, eval=FALSE}
+# Generate heatmaps in a loop for each TF
+# Select only hits
+tib_pwm_tf_check$TF <- gsub("[.*.|_].*","\\1",tib_pwm_tf_check$id)
+
+tib_pwm_tf_check_2 <- tib_pwm_tf_check %>% 
+  remove_rownames %>% column_to_rownames(var="id")
+
+# Create breaks for heatmap (to make legend between heatmaps comparable)
+myBreaks1 <- seq(0,8,0.08)
+
+ # Prepare annotation for the heatmap rows
+tib_pwm_tf_check_3 <- tib_pwm_tf_check_2
+tib_pwm_tf_check_3$neg <- "disrupted"
+tib_pwm_tf_check_3$neg[-grep("neg", rownames(tib_pwm_tf_check_3))] <- "high-affinity"
+neg <- tib_pwm_tf_check_3[,which(colnames(tib_pwm_tf_check_3) == "neg"),drop=FALSE]
+colors <- list(
+   neg = c("high-affinity"= "#B3E2CD", "disrupted"="#FDCDAC"))
+
+
+# Create heatmaps for each TF
+tib_pwm_tf_check_2 <- tib_pwm_tf_check_2 %>% filter(str_detect(TF, "Random", negate = TRUE))
+for (i in unique(tib_pwm_tf_check_2$TF)) {
+  data <- tib_pwm_tf_check_2[tib_pwm_tf_check_2$TF == i,]
+  data <- data[,colSums(data != 0) > 0]
+p <- pheatmap(as.matrix(data %>% dplyr::select(-TF)), 
+              main = paste(i),
+              border_color = "#000000",
+              annotation_row = neg,
+              annotation_colors = colors,
+              breaks = myBreaks1)
+print(p)
+}
+```
+
+
+
+
+# Session Info
+```{r}
+paste("Run time: ",format(Sys.time()-StartTime))
+getwd()
+date()
+sessionInfo()
+```
+
