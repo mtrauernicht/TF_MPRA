@@ -13,7 +13,7 @@ include:
 
 rule all:
     input:
-        expand('results/{ecn}_barcode_counts.tsv', ecn = ECN)
+        expand('results2/{ecn}_barcode_counts.tsv', ecn = ECN)
 
 
 # Extract barcodes from cDNA/pDNA SE fastq files
@@ -21,9 +21,9 @@ rule extract_barcodes_from_fq:
     input:
         fq = ECN_DIR + S1
     output:
-        tsv = 'results/{ecn}_barcodes.tsv'
+        tsv = 'results2/{ecn}_barcodes.tsv'
     log:
-        'logs/{ecn}_extract_barcodes_from_fq.log'
+        'logs2/{ecn}_extract_barcodes_from_fq.log'
     conda:
         'environment.yaml'
     script:
@@ -33,11 +33,11 @@ rule extract_barcodes_from_fq:
 
 rule cluster_ecn_barcodes:
     input:
-        starcode_in = 'results/{ecn}_barcodes.tsv'
+        starcode_in = 'results2/{ecn}_barcodes.tsv'
     output:
-        ofn = 'results/{ecn}_barcode_counts.tsv',
+        ofn = 'results2/{ecn}_barcode_counts.tsv',
     log:
-        'logs/{ecn}_cluster_ecn_barcodes.log'
+        'logs2/{ecn}_cluster_ecn_barcodes.log'
     conda:
         'environment.yaml'
     threads: 12

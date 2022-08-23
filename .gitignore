@@ -7,6 +7,9 @@ results/
 data/
 */*.csv
 */._*
+*/*/._*
+*/*/*/._*
+*/*/*/.*/
 
 ### R ###
 # History files
