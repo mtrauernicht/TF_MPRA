@@ -319,7 +319,12 @@ tfs_selected_filt <- tfs_selected_filt %>% dplyr::select(TF, CIS.BP.ID) %>%
   rbind(composite_motifs) %>%
   rbind(special_motifs)
 
-
+# tfs_selected_filt <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/HumanTFs_Lambert_curated.csv") %>%
+#   filter(best_motif == "TRUE") %>%
+#   mutate(motif_id = paste(`CIS-BP_ID`, ".txt", sep = "")) %>%
+#   mutate(TF = gsub("(.*?)_.*", "\\1", motif_ID)) %>%
+#   mutate(TF = gsub("V\\$","", TF)) %>%
+#   distinct(TF, motif_id)
 
 # Visualize all motifs
 seq_logos <- list()
