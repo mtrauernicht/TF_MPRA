@@ -206,6 +206,11 @@ bc_files <- paste(metadata_df$path, metadata_df$file, sep = "")
 bc_files <- lapply(bc_files, fread, header = FALSE)
 names(bc_files) <- metadata_df$id
 
+# Import pDNA barcode counts
+bc_files2 = '/DATA/usr/m.trauernicht/projects/P53_reporter_scan/data/gcf6992/raw-data-analysis/results/6992_5_E1961_pDNA_pMT02_09_GGCTTAAG-TCGATATC_S5_barcode_counts.tsv'
+bc_list <- lapply(bc_files2, fread, header = FALSE)
+names(bc_list)<- "E1961_pDNA"
+bc_files <- c(bc_files, bc_list)
 
 # Import barcode annotation of both libraries
 bc_annotation <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6578_gen2_stimulation-2/mt20211021_bc_annotation_combined.csv") %>%
@@ -250,24 +255,25 @@ bc_df_unmatched <- bc_df[is.na(bc_df$tf),]
 ## Correlate and cluster individual samples
 
 ```{r out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
-# # Make dataframe to compare raw counts between conditions
-# bc_df_filt <- bc_df_filt[!is.na(bc_df_filt$sample),]
-# bc_df_cor <- bc_df_filt %>%
-#   dplyr::select(-starcode_counts)
-# 
-# bc_df_cor <- bc_df_cor %>%
-#   dplyr::select(sample_id, barcode, library, rpm) %>%
-#   unique() %>%
-#   mutate(rpm = as.integer(rpm)) %>%
-#   spread(sample_id, rpm) 
-# 
-# bc_df_cor[is.na(bc_df_cor)] <- 0
-# 
-# 
-# ## Here I want to take a quick look how well individual samples correlate
-# # Compare pDNA data
-# plot(bc_df_cor$ATF2_r1_gcf6952, bc_df_cor$ATF4_r1_gcf6952)
-# plot(bc_df_cor$`pMT02-09_v3_r1_gcf6952`, bc_df_cor$`pMT02-09_v2_r1_gcf6952`)
+# Make dataframe to compare raw counts between conditions
+bc_df_filt <- bc_df_filt[!is.na(bc_df_filt$sample_id),]
+bc_df_cor <- bc_df_filt %>%
+  dplyr::select(-starcode_counts)
+
+bc_df_cor <- bc_df_cor %>%
+  filter(sample_id %in% c("pMT02_3_r1_gcf6952", "pMT02_r1_gcf6952", "pMT02_v2_r1_gcf6952", "pMT02_v3_r1_gcf6952", "pMT02-09_v2_r1_gcf6952", "pMT02-09_v3_r1_gcf6952", "E1961_pDNA")) %>%
+  dplyr::select(sample_id, barcode, rpm) %>%
+  unique() %>%
+  mutate(rpm = as.integer(rpm)) %>%
+  spread(sample_id, rpm)
+
+bc_df_cor[is.na(bc_df_cor)] <- 0
+
+
+## Here I want to take a quick look how well individual samples correlate
+# Compare pDNA data
+plot(bc_df_cor$ATF2_r1_gcf6952, bc_df_cor$ATF4_r1_gcf6952)
+plot(bc_df_cor$`pMT02-09_v3_r1_gcf6952`, bc_df_cor$`pMT02-09_v2_r1_gcf6952`)
 # 
 # 
 # # Convert into data.frame with row.names for deseq2
@@ -506,11 +512,11 @@ ggplot_custom(bc_fraction) +
 
 ## 3: What is the correlation of the cDNA bc counts with the pDNA bc counts? 
 pMT09_02 <- bc_df_filt %>%
-  filter(str_detect(sample_id, "pMT02-09_v2_r1_gcf6952"), library == "1+2") %>%
+  filter(str_detect(sample_id, "E1961_pDNA"), library == "1+2") %>%
   dplyr::select(barcode, sample_id, rpm) %>%
   spread(sample_id, rpm) %>%
   #mutate(pMT09_02 = (`pMT02-09_v2_r1_gcf6952` + `pMT02-09_v3_r1_gcf6952`)/2) %>%
-  dplyr::select(barcode, "pMT09_02" = `pMT02-09_v2_r1_gcf6952`)
+  dplyr::select(barcode, "pMT09_02" = `E1961_pDNA`)
 
 
 bc_df_2 <- merge(pMT09_02, bc_df_filt, all = T, by = "barcode")
@@ -616,7 +622,7 @@ Divide cDNA barcode counts through pDNA barcode counts to get activity
 ```{r normalization, out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
 # Prepare pDNA data and remove all barcodes with less than 20 counts
 pMT09_02_1 <- bc_df %>%
-  filter(sample_id == "pMT02-09_v2_r1_gcf6952") %>%
+  filter(sample_id == "E1961_pDNA") %>%
    filter(starcode_counts > 10) %>%
    dplyr::select(barcode, "pMT09_02_v2" = rpm)
 
