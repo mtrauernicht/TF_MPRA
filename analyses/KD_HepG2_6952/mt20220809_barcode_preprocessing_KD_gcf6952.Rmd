@@ -77,6 +77,7 @@ library(viridis)
 library(DESeq2)
 library(PCAtools)
 library(pheatmap)
+library(IHW)
 ```
 
 
@@ -206,12 +207,6 @@ bc_files <- paste(metadata_df$path, metadata_df$file, sep = "")
 bc_files <- lapply(bc_files, fread, header = FALSE)
 names(bc_files) <- metadata_df$id
 
-# Import pDNA barcode counts
-bc_files2 = '/DATA/usr/m.trauernicht/projects/P53_reporter_scan/data/gcf6992/raw-data-analysis/results/6992_5_E1961_pDNA_pMT02_09_GGCTTAAG-TCGATATC_S5_barcode_counts.tsv'
-bc_list <- lapply(bc_files2, fread, header = FALSE)
-names(bc_list)<- "E1961_pDNA"
-bc_files <- c(bc_files, bc_list)
-
 # Import barcode annotation of both libraries
 bc_annotation <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6578_gen2_stimulation-2/mt20211021_bc_annotation_combined.csv") %>%
   dplyr::select(-library)
@@ -225,15 +220,18 @@ bc_annotation <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf657
 bc_df <- bind_rows(bc_files, .id = "sample_id") %>%
   dplyr::select(sample_id, "barcode" = V1, "starcode_counts" = V2)
 
+# Add barcode annotation to the data (also include barcodes that have 0 counts)
+bc_annotation <- merge(bc_annotation, unique(bc_df$sample_id), all = T) %>%
+  setnames("y", "sample_id")
+
+bc_df <- merge(bc_df, bc_annotation, all = T, by = c("barcode", "sample_id"))
+
 # Library 1 has barcodes of length 12 while library 2 has barcodes of length 13
 # For sequencing samples that have library 1 and 2 mixed I extracted barcodes of length >=12
 # So, I will now filter out all barcodes with length >13, because those are not relevant
 bc_df$nchar <- nchar(bc_df$barcode)
 bc_df <- bc_df %>%
   filter(nchar <= 13)
-
-# Add barcode annotation to the data
-bc_df <- merge(bc_df, bc_annotation, all = T)
 
 # Add experiment annotation to the data
 metadata_selected <- metadata_df %>%
@@ -261,7 +259,7 @@ bc_df_cor <- bc_df_filt %>%
   dplyr::select(-starcode_counts)
 
 bc_df_cor <- bc_df_cor %>%
-  filter(sample_id %in% c("pMT02_3_r1_gcf6952", "pMT02_r1_gcf6952", "pMT02_v2_r1_gcf6952", "pMT02_v3_r1_gcf6952", "pMT02-09_v2_r1_gcf6952", "pMT02-09_v3_r1_gcf6952", "E1961_pDNA")) %>%
+  filter(sample_id %in% c("pMT02_3_r1_gcf6952", "pMT02_r1_gcf6952", "pMT02_v2_r1_gcf6952", "pMT02_v3_r1_gcf6952", "pMT02-09_v2_r1_gcf6952", "pMT02-09_v3_r1_gcf6952", "E1961_pDNA_r1_gcf6992")) %>%
   dplyr::select(sample_id, barcode, rpm) %>%
   unique() %>%
   mutate(rpm = as.integer(rpm)) %>%
@@ -272,8 +270,7 @@ bc_df_cor[is.na(bc_df_cor)] <- 0
 
 ## Here I want to take a quick look how well individual samples correlate
 # Compare pDNA data
-plot(bc_df_cor$ATF2_r1_gcf6952, bc_df_cor$ATF4_r1_gcf6952)
-plot(bc_df_cor$`pMT02-09_v3_r1_gcf6952`, bc_df_cor$`pMT02-09_v2_r1_gcf6952`)
+plot(bc_df_cor$E1961_pDNA_r1_gcf6992, bc_df_cor$`pMT02-09_v2_r1_gcf6952`)
 # 
 # 
 # # Convert into data.frame with row.names for deseq2
@@ -512,11 +509,11 @@ ggplot_custom(bc_fraction) +
 
 ## 3: What is the correlation of the cDNA bc counts with the pDNA bc counts? 
 pMT09_02 <- bc_df_filt %>%
-  filter(str_detect(sample_id, "E1961_pDNA"), library == "1+2") %>%
+  filter(str_detect(sample_id, "E1961_pDNA_r1_gcf6992"), library == "1+2") %>%
   dplyr::select(barcode, sample_id, rpm) %>%
   spread(sample_id, rpm) %>%
   #mutate(pMT09_02 = (`pMT02-09_v2_r1_gcf6952` + `pMT02-09_v3_r1_gcf6952`)/2) %>%
-  dplyr::select(barcode, "pMT09_02" = `E1961_pDNA`)
+  dplyr::select(barcode, "pMT09_02" = `E1961_pDNA_r1_gcf6992`)
 
 
 bc_df_2 <- merge(pMT09_02, bc_df_filt, all = T, by = "barcode")
@@ -596,12 +593,12 @@ for (i in unique(bc_df$sample_id)) {
   bc_df$n_bc[bc_df$sample_id == i] <- length(bc_df$barcode[bc_df$rpm > 500 & bc_df$sample_id == i])
 }
 bc_df <- bc_df %>%
-  filter(n_bc > 75 | str_detect(sample_id, "pMT")) %>% 
+  filter(n_bc > 75 | str_detect(sample_id, "pMT") | str_detect(sample_id, "pDNA")) %>% 
   dplyr::select(-n_bc)
 
 # Remove samples with high pDNA contamination (most likely those samples were already removed in the previous step as this is a bit redundant)
 bc_df <- bc_df %>%
-  filter(cor <= 0.5 | str_detect(sample_id, "pMT")) %>% 
+  filter(cor <= 0.5 | str_detect(sample_id, "pMT")| str_detect(sample_id, "pDNA")) %>% 
            dplyr::select(-cor)
 
 # Manually remove CREB1 (too little reads)
@@ -621,17 +618,16 @@ Divide cDNA barcode counts through pDNA barcode counts to get activity
 
 ```{r normalization, out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
 # Prepare pDNA data and remove all barcodes with less than 20 counts
-pMT09_02_1 <- bc_df %>%
-  filter(sample_id == "E1961_pDNA") %>%
+pMT09_02 <- bc_df %>%
+  filter(sample_id == "E1961_pDNA_r1_gcf6992") %>%
    filter(starcode_counts > 10) %>%
-   dplyr::select(barcode, "pMT09_02_v2" = rpm)
+   dplyr::select(barcode, "E1961_pDNA" = rpm)
 
 # Add pDNA data as separate column - for both library 1 and library 2
 bc_df <- merge(bc_df, pMT09_02, by = "barcode")
-bc_df <- merge(bc_df, pMT09_02_1, by = "barcode")
 
 # Compute activity by dividing cDNA bc counts through pDNA bc counts
-bc_df$activity <- bc_df$rpm / bc_df$pMT09_02_v2
+bc_df$activity <- bc_df$rpm / bc_df$E1961_pDNA
 
 # Remove rows that could not be computed due to too little pDNA counts
 bc_df <- bc_df %>%
@@ -658,19 +654,17 @@ bc_df_cDNA <- bc_df_cDNA %>%
 
 bc_df_cDNA$mean_activity <- ave(bc_df_cDNA$activity, bc_df_cDNA$reporter_id, 
                                 bc_df_cDNA$sample_id, FUN =
-                                  function(x) mean(x))
-bc_df_cDNA$sd_activity <- ave(bc_df_cDNA$activity, bc_df_cDNA$reporter_id, 
-                              bc_df_cDNA$sample_id,  FUN =
-                                  function(x) sd(x))
+                                  function(x) quantile(x, 0.5))
 
 
+## Remove data points that are 3xSD away from 50% quantile
+bc_df_cDNA$deviation <- bc_df_cDNA$activity / bc_df_cDNA$mean_activity
 
-## Remove data points that are 2xSD away from the mean
-bc_df_cDNA$upper_activity <- bc_df_cDNA$mean_activity + (2 * bc_df_cDNA$sd_activity)
-bc_df_cDNA$lower_activity <- bc_df_cDNA$mean_activity - (2 * bc_df_cDNA$sd_activity)
+# Remove reporters where I only have 2 or less reporters
+bc_df_cDNA$n_reporters <- ave(bc_df_cDNA$reporter_id, bc_df_cDNA$reporter_id, 
+                                bc_df_cDNA$sample_id, FUN =
+                                  function(x) as.numeric(length(x)))
 
-bc_df_cDNA$low_outlier <- bc_df_cDNA$activity - bc_df_cDNA$lower_activity
-bc_df_cDNA$high_outlier <- bc_df_cDNA$upper_activity - bc_df_cDNA$activity
 
 ## Plot effect of highest outlier bc -> SNP in minP promoter
 outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "ZFP42_5bp_21bp_minP_3",] %>% 
@@ -709,31 +703,25 @@ ggplot_custom(outlier, aes(x = barcode_number, y = activity)) +
 
 
 ## Choose arbitrary cutoff to get rid of most extreme outliers
-bc_df_cDNA_filt <- bc_df_cDNA[bc_df_cDNA$low_outlier > -0.3 & bc_df_cDNA$high_outlier > -2 & bc_df_cDNA$sd_activity < 100,]
+bc_df_cDNA_filt <- bc_df_cDNA[bc_df_cDNA$deviation > 0.25 & bc_df_cDNA$deviation < 4 & bc_df_cDNA$n_reporters > 2,]
+
+bc_df_cDNA_filt$n_reporters <- ave(bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$reporter_id, 
+                                bc_df_cDNA_filt$sample_id, FUN =
+                                  function(x) as.numeric(length(x)))
+
+bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
+  filter(n_reporters >= 2)
 
 ## Recalculate mean and sd
 bc_df_cDNA_filt$mean_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id, 
                                 bc_df_cDNA_filt$sample_id, FUN =
                                   function(x) mean(x))
-bc_df_cDNA_filt$sd_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id, 
-                              bc_df_cDNA_filt$sample_id,  FUN =
-                                  function(x) sd(x))
 ```
 
 
 ### Scaling data 
 
 ```{r out.width= "80%", fig.align= "center",  warning= FALSE}
-## Correct native enhancer promoter names
-bc_df_cDNA_filt2 <- bc_df_cDNA_filt %>%
-  filter(native_enhancer == "Yes") %>%
-  mutate(promoter = gsub(".*(minP|mCMV|hBGm|Random).*", "\\1", promoter))
-
-bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
-  filter(native_enhancer == "No")
-
-bc_df_cDNA_filt <- rbind(bc_df_cDNA_filt, bc_df_cDNA_filt2)
-
 ## Compute activity relative to minimal promoter background
 bc_df_cDNA_filt_neg <- bc_df_cDNA_filt %>%
   dplyr::select(sample_id, activity, reporter_id, tf, promoter) %>%
@@ -802,14 +790,11 @@ rownames(pval_df) <- names(pval_list)
 pval_df <- pval_df %>%
   rownames_to_column("reporter_id2") %>%
   pivot_longer(-reporter_id2, names_to = "id", values_to = "pval") %>%
-  mutate(id = gsub("1.2", "1+2", id)) %>%
+  mutate(id = gsub("1[.]2", "1+2", id)) %>%
   na.omit()
 
 bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, pval_df, by = c("reporter_id2", "id"), all = T)
 bc_df_cDNA_filt <- bc_df_cDNA_filt[!is.na(bc_df_cDNA_filt$sample_id),]
-
-bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
-  mutate(pval_adj = p.adjust(p = pval))
 
 ## Compute activity relative to NFYA reporter
 bc_df_cDNA_filt_nfya <- bc_df_cDNA_filt %>%
@@ -874,7 +859,7 @@ pval_df <- as.data.frame(pval_df)
 pval_df <- pval_df %>%
   rownames_to_column("reporter_id2") %>%
   pivot_longer(-reporter_id2, names_to = "id", values_to = "pval_neg") %>%
-  mutate(id = gsub("1.2", "1+2", id)) %>%
+  mutate(id = gsub("1[.]2", "1+2", id)) %>%
   na.omit()
 
 bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, pval_df, by = c("reporter_id2", "id"), all = T)
@@ -998,10 +983,43 @@ bc_df_cDNA_filt$reporter_activity_nfya <- ave(bc_df_cDNA_filt$mean_activity_samp
 bc_df_cDNA_filt$reporter_activity_neg <- ave(bc_df_cDNA_filt$mean_activity_sample_neg, bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$condition, FUN = function(x) mean(x))
 
 # Polish export dataframe
-bc_df_cDNA_filt <- bc_df_cDNA_filt %>% 
-  dplyr::select(-upper_activity, -lower_activity, 
-         -high_outlier, -low_outlier, -match, -pMT09_02_v2, -pMT09_02, -mean_activity, -sd_activity)
+bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
+  dplyr::select(-match, -E1961_pDNA, -mean_activity, -deviation, -n_reporters)
 
+# Critical step: for reporters that have a high negative control value - change to minP values instead
+bc_df_cDNA_filt2 <- bc_df_cDNA_filt %>%
+  dplyr::filter(neg_ctrls == "No", native_enhancer == "No", hPGK == "No", commercial_reporter == "No") %>%
+  distinct(reporter_id, condition, tf, reporter_activity_minP, reporter_activity_neg) %>%
+  mutate(reporter_activity_minP_mean = ave(reporter_activity_minP, tf, condition, FUN = function(x) mean(x, na.rm = T))) %>%
+  mutate(reporter_activity_neg_mean = ave(reporter_activity_neg, tf, condition, FUN = function(x) mean(x, na.rm = T))) %>%
+  mutate(dif = reporter_activity_minP_mean / reporter_activity_neg_mean) %>%
+  group_by(tf, condition) %>%
+  mutate(cor = cor(reporter_activity_minP, reporter_activity_neg, use = "pairwise.complete.obs")) %>%
+  ungroup() %>%
+  mutate(neg_active = ifelse(dif > 3 | cor < 0.5, "yes", "no")) %>%
+  distinct(tf, condition, neg_active) 
+
+
+# bc_df_cDNA_filt3 <- bc_df_cDNA_filt %>%
+#   filter(neg_ctrls == "Yes", native_enhancer == "No", hPGK == "No", commercial_reporter == "No") %>%
+#   distinct(reporter_id, condition, tf, reporter_activity_minP) %>%
+#   mutate(tf = gsub("_neg", "", tf)) %>%
+#   mutate(neg_activity = ave(reporter_activity_minP, tf, condition, FUN = mean)) %>%
+#   distinct(tf, condition, neg_activity)
+
+# bc_df_cDNA_filt4 <- merge(bc_df_cDNA_filt3, bc_df_cDNA_filt2)
+
+
+
+bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, bc_df_cDNA_filt2, by = c("tf", "condition"), all = T) %>%
+  mutate(reporter_activity_neg = ifelse(neg_active == "yes" | is.na(reporter_activity_neg), reporter_activity_minP, reporter_activity_neg)) %>%
+  mutate(pval_neg = ifelse(neg_active == "yes" | is.na(pval_neg), pval, pval_neg)) 
+
+
+## p-value adjustment
+bc_df_cDNA_filt$reporter_rpm <- ave(bc_df_cDNA_filt$rpm, bc_df_cDNA_filt$reporter_id, FUN = mean)
+bc_df_cDNA_filt$pval_adj_minP <- adj_pvalues(ihw(pval ~ reporter_rpm,  data = bc_df_cDNA_filt, alpha = 0.1))
+bc_df_cDNA_filt$pval_adj_neg <- adj_pvalues(ihw(pval_neg ~ reporter_rpm,  data = bc_df_cDNA_filt, alpha = 0.1))
 
 # Export bc_df for cDNA analysis
 filename <- SetFileName("_reporter_activity_filt_combined", "mt")

@@ -159,8 +159,8 @@ ggplot_custom <- function(...) ggplot2::ggplot(...) +
 
 ```{r out.width= "80%", fig.align= "center"}
 # Import processed bc counts from the preprocessing step
-cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6952_KD_HepG2/results/mt20220825_reporter_activity_filt_combined.csv", header = T) %>%
-  dplyr::select(-tf_activity, -reporter_id2, 'pval_minP' = pval, -pval_adj, -mutated_activity)
+cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6952_KD_HepG2/results/mt20220901_reporter_activity_filt_combined.csv", header = T) %>%
+  dplyr::select(-tf_activity, -reporter_id2, 'pval_minP' = pval, -mutated_activity)
 
 # The siRNA of TP53 & JUN were empty, so this can be essentially counted as NT
 cDNA_df$sample[cDNA_df$condition == "TP53"] <- "NT_r3"
@@ -178,43 +178,6 @@ cDNA_df[nm1] <- lapply(cDNA_df[nm1], gsub, pattern = "STAT1", replacement = "STA
 cDNA_df[nm1] <- lapply(cDNA_df[nm1], gsub, pattern = "^NFE2_", replacement = "MAF::NFE2_")
 cDNA_df[nm1] <- lapply(cDNA_df[nm1], gsub, pattern = "^NFE2$", replacement = "MAF::NFE2")
 cDNA_df[nm1] <- lapply(cDNA_df[nm1], gsub, pattern = "TFCP2L2", replacement = "GRHL1")
-
-# Critical step: for reporters that have a high negative control value - change to minP values instead
-cDNA_df2 <- cDNA_df %>%
-  dplyr::filter(neg_ctrls == "No", native_enhancer == "No", hPGK == "No", commercial_reporter == "No") %>%
-  distinct(reporter_id, condition, tf, reporter_activity_minP, reporter_activity_neg) %>%
-  mutate(reporter_activity_minP_mean = ave(reporter_activity_minP, tf, condition, FUN = function(x) mean(x, na.rm = T))) %>%
-  mutate(reporter_activity_neg_mean = ave(reporter_activity_neg, tf, condition, FUN = function(x) mean(x, na.rm = T))) %>%
-  mutate(dif = reporter_activity_minP_mean / reporter_activity_neg_mean) %>%
-  group_by(tf, condition) %>%
-  mutate(cor = cor(reporter_activity_minP, reporter_activity_neg, use = "pairwise.complete.obs")) %>%
-  ungroup() %>%
-  mutate(neg_active = ifelse(dif > 3 | cor < 0.5, "yes", "no")) %>%
-  distinct(tf, condition, neg_active) 
-
-
-# cDNA_df3 <- cDNA_df %>%
-#   filter(neg_ctrls == "Yes", native_enhancer == "No", hPGK == "No", commercial_reporter == "No") %>%
-#   distinct(reporter_id, condition, tf, reporter_activity_minP) %>%
-#   mutate(tf = gsub("_neg", "", tf)) %>%
-#   mutate(neg_activity = ave(reporter_activity_minP, tf, condition, FUN = mean)) %>%
-#   distinct(tf, condition, neg_activity)
-
-# cDNA_df4 <- merge(cDNA_df3, cDNA_df2)
-
-
-
-cDNA_df <- merge(cDNA_df, cDNA_df2, by = c("tf", "condition"), all = T) %>%
-  mutate(reporter_activity_neg = ifelse(neg_active == "yes" | is.na(reporter_activity_neg), reporter_activity_minP, reporter_activity_neg)) %>%
-  mutate(pval_neg = ifelse(neg_active == "yes" | is.na(pval_neg), pval_minP, pval_neg)) 
-
-
-## Match KD with target TF(s)
-
-## p-value adjustment
-cDNA_df$reporter_rpm <- ave(cDNA_df$rpm, cDNA_df$reporter_id, FUN = mean)
-cDNA_df$pval_adj_minP <- adj_pvalues(ihw(pval_minP ~ reporter_rpm,  data = cDNA_df, alpha = 0.1))
-cDNA_df$pval_adj_neg <- adj_pvalues(ihw(pval_neg ~ reporter_rpm,  data = cDNA_df, alpha = 0.1))
 ```
 
 ---
@@ -374,12 +337,6 @@ Conclusion: KDs worked to varying degrees. Some were efficient and specific, oth
 Aim: Display reporter activities relative to background activity per tf and condition. Get an overview over all reporter activities per condition.
 
 ```{r reporter_activities, out.width= "80%", fig.align= "center"}
-# Same plot for one condition only
-cDNA_df5 <- merge(cDNA_df4, nt_df, all = T) %>%
-  na.omit() %>%
-  mutate(reporter_FC = log2(reporter_activity_minP/nt_activity)) %>%
-  distinct(tf, condition, reporter_FC)
-
 nt_df <- cDNA_df %>%
   dplyr::filter(condition == "NT") %>%
   dplyr::select(reporter_id, "nt_reporter_activity_minP" = reporter_activity_minP) %>%
@@ -387,8 +344,9 @@ nt_df <- cDNA_df %>%
 
 cDNA_df2 <- merge(cDNA_df, nt_df, all = T) %>%
   #na.omit() %>%
+  filter(neg_ctrls == "No") %>%
   mutate(reporter_FC = log2(reporter_activity_minP/nt_reporter_activity_minP)) %>%
-  distinct(tf, reporter_id, condition, reporter_FC) %>%
+  distinct(tf, reporter_id, condition, reporter_FC, commercial_reporter) %>%
   mutate(mean_tf_activity = ave(reporter_FC, tf, condition, FUN = mean))
 
 tf_kd_targets <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6952_KD_HepG2/tf_kd_targets.csv") %>%
@@ -416,6 +374,9 @@ tf_kd_targets <- tf_kd_targets %>%
 #   print(p)
 # }
 
+tf_kd_targets <- tf_kd_targets %>%
+  mutate(tf = gsub("_.*", "", tf))
+
 tf_kd_targets2 <- tf_kd_targets %>%
   filter(tf %in% cDNA_df4$tf)
 
@@ -423,9 +384,8 @@ for (i in unique(tf_kd_targets2$condition)) {
   print(i)
   p <- ggplot(tf_kd_targets2 %>%
                 filter(condition == i),
-              mapping = aes(x = reorder(tf, -mean_tf_activity), y = reporter_FC, color = is_target)) +
-    geom_boxplot(aes(alpha = 0.7)) +
-    geom_quasirandom(aes(alpha = 0.7)) +
+              mapping = aes(x = reorder(tf, -mean_tf_activity), y = reporter_FC, color = is_target, group = commercial_reporter)) +
+    geom_quasirandom(aes(alpha = 0.7), dodge.width = .75) +
     scale_color_manual(values = c(colors_diverse[1], colors_diverse[3])) +
     ggtitle(i) +
     theme_classic_lines_90()
@@ -438,6 +398,7 @@ for (i in unique(tf_kd_targets2$condition)) {
 Conclusion: Interesting distribution, there seem to be many activating reporters, but also a fraction of repressive reporters.
 
 ---
+
 
 
 
@@ -1071,339 +1032,443 @@ Conclusion: Interesting distribution, there seem to be many activating reporters
 
 
 
-<!-- ## Figure 3: Linear model - TF reporter grammar -->
+## Figure 3: Linear model - TF reporter grammar
 
-<!-- Aim: For all significant linear models I want to show which features are important per TF. Is there a general feature driving expression for most TFs, or does each TF require a special reporter design? -->
+Aim: For all significant linear models I want to show which features are important per TF. Is there a general feature driving expression for most TFs, or does each TF require a special reporter design?
 
-<!-- ```{r log-linear-model-5, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE} -->
-<!-- cDNA_df_TF <- cDNA_df %>% -->
-<!--   filter(condition %in% c("HepG2_CDCA", "HepG2_DMSO", "K562_DMSO", "mES_2i_LIF", "mES_2i", "mES_HQ", "mES_LIF_CH", "mES_LIF_PD", "mES_N2B27")) %>% -->
-<!--   filter(hPGK == "No", commercial_reporter == "No", native_enhancer == "No", neg_ctrls == "No") %>% -->
-<!--   filter(promoter != "Random") %>% -->
-<!--   filter(!is.na(reporter_activity_minP)) %>% -->
-<!--   mutate(pval_minP_adj = p.adjust(pval_minP, method = "fdr")) %>% -->
-<!--   mutate(tf_condition = paste(tf, condition, sep = "_")) %>% -->
-<!--   distinct(reporter_activity_minP, tf, condition, tf_condition, reporter_id, promoter, spacing, distance, background) %>% -->
-<!--   filter(tf_condition %in% lm_pval_df_sign$tf_condition) %>% -->
-<!--   mutate(background = as.character(background)) -->
+```{r log-linear-model-5, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
+nt_df <- cDNA_df %>%
+  dplyr::filter(condition == "NT") %>%
+  dplyr::select(reporter_id, "nt_reporter_activity_minP" = reporter_activity_minP) %>%
+  mutate(nt_reporter_activity_minP = ave(nt_reporter_activity_minP, reporter_id, FUN = mean)) %>%
+  distinct()
 
-<!-- ## Fit linear model with design features for actual data -->
-<!-- exp_variance <- data.frame("feature" = c("promoter", "spacing", "distance", "background", "Residuals")) -->
-<!-- weight <- data.frame("feature" = c("(Intercept)", "promoterminP", "promoterhBGm", "promotermCMV",  -->
-<!--                   "spacing10bps","spacing5bp", "distance10bp","distance21bp", "background1","background2", "background3")) -->
+cDNA_df_TF <- merge(cDNA_df, nt_df, all = T) %>%
+  filter(hPGK == "No", commercial_reporter == "No", native_enhancer == "No", neg_ctrls == "No") %>%
+  filter(promoter != "Random") %>%
+  filter(condition != "NT") %>%
+  filter(!is.na(reporter_activity_minP)) %>%
+  mutate(reporter_FC = log2(reporter_activity_minP/nt_reporter_activity_minP)) %>%
+  mutate(tf_condition = paste(tf, condition, sep = "_")) %>%
+  distinct(reporter_FC, tf, condition, tf_condition, reporter_id, promoter, spacing, distance, background) %>%
+  mutate(background = as.character(background))
 
-<!-- cDNA_df_TF$promoter <- factor(cDNA_df_TF$promoter, levels = c("minP", "mCMV", "hBGm")) -->
-<!-- cDNA_df_TF$row <- rownames(cDNA_df_TF) -->
-<!-- cDNA_df_TF3 <- data.frame() -->
+tf_kd_targets2 <- tf_kd_targets %>%
+  distinct(condition, tf, is_target)
 
-<!-- for (i in unique(cDNA_df_TF$tf_condition)) { -->
-<!--   print(i) -->
-<!--   x <- lm(log2(reporter_activity_minP) ~  -->
-<!--                        promoter +  -->
-<!--                        spacing +  -->
-<!--                        distance +  -->
-<!--                        background, -->
-<!--                 cDNA_df_TF[cDNA_df_TF$tf_condition == i,]) -->
+cDNA_df_TF <- merge(cDNA_df_TF, tf_kd_targets2)
 
-<!--   y <- data.frame(x$fitted.values) %>% rownames_to_column() -->
-<!--   names(y) <- c("row", "activity_predicted") -->
-<!--   cDNA_df_TF2 <- y %>% -->
-<!--     left_join(cDNA_df_TF) -->
-<!--   cDNA_df_TF3 <- rbind(cDNA_df_TF3, cDNA_df_TF2) -->
+## Fit linear model with design features for actual data
+exp_variance <- data.frame("feature" = c("promoter", "spacing", "distance", "background", "Residuals"))
+weight <- data.frame("feature" = c("(Intercept)", "promoterminP", "promoterhBGm", "promotermCMV",
+                  "spacing10bps","spacing5bp", "distance10bp","distance21bp", "background1","background2", "background3"))
 
-<!--   w <- data.frame('weight' = x$coefficients, 'pval' = summary(x)$coefficients[,4], tf_condition = i) %>% rownames_to_column('feature') -->
-<!--   weight <- merge(weight, w, all = T) -->
+cDNA_df_TF$promoter <- factor(cDNA_df_TF$promoter, levels = c("minP", "mCMV", "hBGm"))
+cDNA_df_TF$row <- rownames(cDNA_df_TF)
+cDNA_df_TF3 <- data.frame()
 
-<!--   x <- anova(x) %>% rownames_to_column("feature") %>% -->
-<!--     setnames(c("Sum Sq", "Pr(>F)"), c("sum_sq", "pval")) %>% -->
-<!--     distinct(feature, sum_sq, pval) %>% -->
-<!--     mutate(sum = sum(sum_sq)) %>% -->
-<!--     mutate(rel_sum_sq = (sum_sq/sum)*100) %>% -->
-<!--     mutate(tf_condition = i) %>% -->
-<!--     distinct(tf_condition, rel_sum_sq, pval, feature) -->
+for (i in unique(cDNA_df_TF$tf_condition)) {
+  if (nrow(cDNA_df_TF[cDNA_df_TF$tf_condition == i,]) > 20) {
+  print(i)
+  x <- lm(reporter_FC ~
+                       promoter +
+                       spacing +
+                       distance +
+                       background,
+                cDNA_df_TF[cDNA_df_TF$tf_condition == i,])
+  
+    f <- summary(x)$fstatistic
+    p <- pf(f[1],f[2],f[3],lower.tail=F)
+    names(p) <- "pval"
 
-<!--   exp_variance <- merge(exp_variance, x, all = T) -->
-<!-- } -->
+  y <- data.frame(x$fitted.values) %>% 
+    rownames_to_column() %>%
+    cbind(p)
+  names(y) <- c("row", "activity_predicted", "pval")
+  cDNA_df_TF2 <- y %>%
+    left_join(cDNA_df_TF)
+  cDNA_df_TF3 <- rbind(cDNA_df_TF3, cDNA_df_TF2)
 
+  w <- data.frame('weight' = x$coefficients, 'pval' = summary(x)$coefficients[,4], tf_condition = i) %>% rownames_to_column('feature')
+  weight <- merge(weight, w, all = T)
 
+  x <- anova(x) %>% rownames_to_column("feature") %>%
+    setnames(c("Sum Sq", "Pr(>F)"), c("sum_sq", "pval")) %>%
+    distinct(feature, sum_sq, pval) %>%
+    mutate(sum = sum(sum_sq)) %>%
+    mutate(rel_sum_sq = (sum_sq/sum)*100) %>%
+    mutate(tf_condition = i) %>%
+    distinct(tf_condition, rel_sum_sq, pval, feature)
 
-<!-- ## Fine-tune dfs -->
-<!-- exp_variance$group <- "no residual" -->
-<!-- exp_variance$group[grep("Residual", exp_variance$feature)] <- "residual" -->
-<!-- prediction <- cDNA_df_TF3 %>%  -->
-<!--   dplyr::select(-row) %>%  -->
-<!--   na.omit() -->
-<!-- weight <- weight %>%  -->
-<!--   filter(feature != "(Intercept)")  -->
-<!-- categorie <- c("mutated", "condition", "promoter", -->
-<!--                "spacing", "distance", "background") -->
-<!-- weight$features <- gsub(paste(categorie, collapse="|"), "",weight$feature) -->
-<!-- ml <- length(unique(weight$features)) -->
-<!-- feature <- unique(weight$features) -->
-<!-- weight$condition <- gsub(paste(feature, collapse = "|"), "", weight$feature) -->
-<!-- weight <- weight %>% dplyr::select(-feature) -->
-
-
-
-<!-- # Model parameters -->
-<!-- exp_variance$rel_sum_sq[exp_variance$feature == "Residuals"] <- 100 - exp_variance$rel_sum_sq[exp_variance$feature == "Residuals"] -->
-<!-- exp_variance$feature <- revalue(exp_variance$feature, c("Residuals"="total")) -->
-
-<!-- ggplot(exp_variance, -->
-<!--        aes(x = reorder(feature, -rel_sum_sq), y = rel_sum_sq, fill = group)) + -->
-<!--   scale_fill_manual(values = c("#1B998B", "#2D3047")) + -->
-<!--   geom_bar(stat = "identity") + -->
-<!--   ylab("Variance explained (%)") + xlab("") + -->
-<!--   labs(title = "Linear variance modelling", -->
-<!--        subtitle = "Expression variance predicted by features") + -->
-<!--   theme(text = element_text(size = 12)) + -->
-<!--   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12), -->
-<!--         axis.text.y = element_text(size = 10)) + -->
-<!--   facet_wrap(~tf_condition) -->
+  exp_variance <- merge(exp_variance, x, all = T)
+  }
+}
 
 
 
-
-<!-- ## Plot weights of parameters in model - this helps to understand the model -->
-<!-- level_order <- c("minP", "mCMV", "hBGm", -->
-<!--                  "2", "3", "10bps", "5bp", "10bp", "21bp") -->
-
-
-
-
-
-<!-- ## Final overview - model fit for each TF -->
-<!-- # Feature importance overview for each TF in a single plot (bar-chart including mean activities per feature) -->
-
-
-<!-- for (i in unique(cDNA_df_TF$tf_condition)) { -->
-
-<!--   # Plot to show prediction accuracy -->
-<!--   sp <- ggplot(prediction %>% -->
-<!--                  filter(tf_condition == i) %>% -->
-<!--                  mutate(reporter_activity_minP = log2(reporter_activity_minP)), -->
-<!--                aes(x = reporter_activity_minP, y = activity_predicted)) +  -->
-<!--     geom_smooth(color = "black", fill = "lightgrey", method = "lm") + -->
-<!--     geom_point() + -->
-<!--     ylab("Predicted activity (log2)") + -->
-<!--     xlab("Average activity (log2)") +  -->
-<!--     scale_color_manual(values = c(colors_diverse[1],colors_diverse[2],colors_diverse[4])) -->
+## Fine-tune dfs
+exp_variance$group <- "no residual"
+exp_variance$group[grep("Residual", exp_variance$feature)] <- "residual"
+prediction <- cDNA_df_TF3 %>%
+  dplyr::select(-row) %>%
+  na.omit()
+weight <- weight %>%
+  filter(feature != "(Intercept)")
+categorie <- c("mutated", "condition", "promoter",
+               "spacing", "distance", "background")
+weight$features <- gsub(paste(categorie, collapse="|"), "",weight$feature)
+ml <- length(unique(weight$features))
+feature <- unique(weight$features)
+weight$condition <- gsub(paste(feature, collapse = "|"), "", weight$feature)
+weight <- weight %>% dplyr::select(-feature)
 
 
-<!--   # Feature importance overview for each TF (including mean activities per feature) -->
-<!--   fp <- ggplot(exp_variance[exp_variance$tf_condition == i,] %>% -->
-<!--                                  na.omit() %>% -->
-<!--                  mutate(sign = ifelse(pval < 0.05, "Yes", "No")), -->
-<!--        aes(x = reorder(feature, -rel_sum_sq), y = rel_sum_sq, fill = group, alpha = sign)) + -->
-<!--   scale_fill_manual(values = c("#1B998B", "#2D3047")) + -->
-<!--   geom_bar(stat = "identity") + -->
-<!--   ylab("Variance explained (%)") + xlab("") + -->
+cDNA_df_TF3 <- cDNA_df_TF3 %>%
+  mutate(pval_adj = p.adjust(pval, method = "fdr"))
 
-<!--   theme(text = element_text(size = 12)) + -->
-<!--   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12), -->
-<!--         axis.text.y = element_text(size = 10)) + -->
-<!--     guides(fill = F) -->
+## Pval distribution
+ggplot_custom(cDNA_df_TF3 %>% 
+         distinct(tf_condition, pval_adj, is_target),
+       aes(x = -log10(pval_adj), color = is_target)) +
+  geom_density() +
+  geom_vline(xintercept = -log10(0.01), lty = 2)
 
-<!--   # Plot weights of parameters in model - this helps to understand the model -->
-<!--   p <- ggplot(weight[weight$tf_condition == i,] %>% -->
-<!--                 na.omit() %>% -->
-<!--                  mutate(sign = ifelse(pval < 0.05, "Yes", "No")), -->
-<!--        aes(x = factor(features, level = level_order), y = weight, alpha = sign, fill = condition)) + -->
-<!--   scale_fill_manual(values = c("#1B998B", "#2D3047", "#FF9B71", "#ECDD7B", "#C2B2B4", "#A54657")) + -->
-<!--   geom_bar(stat = "identity") + -->
-<!--   ylab("Weight") + xlab("") + -->
+ggplot(cDNA_df_TF3 %>% 
+         distinct(tf_condition, pval_adj, is_target),
+       aes(y = -log10(pval_adj), x = is_target)) +
+  geom_quasirandom() +
+  geom_boxplot(alpha = .7) +
+  geom_hline(yintercept = -log10(0.01), lty = 2)
 
-<!--   theme(text = element_text(size = 12)) + -->
-<!--   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 10), -->
-<!--         axis.text.y = element_text(size = 10)) -->
+ggplot(cDNA_df_TF3 %>%
+         distinct(tf_condition, pval_adj, is_target, reporter_FC) %>%
+         mutate(reporter_FC = ave(reporter_FC, tf_condition, FUN = mean)) %>%
+         distinct(),
+       aes(x = reporter_FC, y = -log10(pval_adj))) +
+  geom_point() +
+  facet_wrap(~is_target)+
+  geom_hline(yintercept = -log10(0.01), lty = 2)
 
-<!--   # Combine all plots -->
-<!--   sp.plot <- arrangeGrob(sp,fp,p, nrow = 1) -->
-<!--   grid.arrange(sp.plot) -->
-<!-- } -->
+# Model parameters
+exp_variance$rel_sum_sq[exp_variance$feature == "Residuals"] <- 100 - exp_variance$rel_sum_sq[exp_variance$feature == "Residuals"]
+exp_variance$feature <- revalue(exp_variance$feature, c("Residuals"="total"))
 
-<!-- # Plot features in a heatmap -->
-<!-- exp_variance_heatmap <- exp_variance %>% -->
-<!--   mutate(rel_sum_sq = ifelse(pval < 0.05 | is.na(pval), rel_sum_sq, 0)) %>% -->
-<!--   mutate(min_pval = ave(pval, tf_condition, FUN = function(x) min(x, na.rm = T))) %>% -->
-<!--   filter(min_pval < 0.05) %>% -->
-<!--   dplyr::select(-group, -pval) %>% -->
-<!--   spread(feature, rel_sum_sq) %>% -->
-<!--   filter(total >= 75) %>% -->
-<!--   mutate(tf = gsub("(^.*)_.*_.*", "\\1", tf_condition)) %>% -->
-<!--   mutate(tf = gsub("(^.*)_.*", "\\1", tf)) %>% -->
-<!--   mutate(condition = gsub("^.*_(.*)+", "\\1", tf_condition)) -->
+tf_kd_targets3 <- cDNA_df_TF3 %>%
+  distinct(tf_condition, is_target, pval_adj)
 
-<!-- for (i in unique(exp_variance_heatmap$condition)) { -->
-<!--   p <- pheatmap(exp_variance_heatmap %>% -->
-<!--                   filter(condition == i) %>% -->
-<!--                   column_to_rownames("tf") %>% -->
-<!--                   dplyr::select(-condition, -tf_condition, -total) %>% -->
-<!--                   t(), -->
-<!--          cellwidth = 8, -->
-<!--          cellheight = 8, -->
-<!--          border_color = F, -->
-<!--          color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100), -->
-<!--          angle_col = 90,  -->
-<!--          main = i) -->
-<!--   print(p) -->
-<!-- } -->
+exp_variance <- exp_variance %>%
+  left_join(tf_kd_targets3)
 
-<!-- ## Correlation between cell types - is the variability the same between individual cell types? -->
-<!-- ### Implement still: select only TFs that are active in both conditions -->
-<!-- exp_variance_heatmap2 <- exp_variance %>% -->
-<!--   filter(tf_condition %in% exp_variance_heatmap$tf_condition) %>% -->
-<!--   filter(pval < 0.05) %>% -->
-<!--   dplyr::select(-group, -pval) %>% -->
-<!--   mutate(tf = gsub("(^.*)_.*_.*", "\\1", tf_condition)) %>% -->
-<!--   mutate(tf = gsub("(^.*)_.*", "\\1", tf)) %>% -->
-<!--   mutate(condition = gsub("^.*_(.*)+", "\\1", tf_condition)) %>% -->
-<!--   dplyr::select(-tf_condition) %>% -->
-<!--   spread(key = "condition", value = "rel_sum_sq") %>% -->
-<!--   filter(feature != "total") -->
+ggplot(exp_variance %>%
+         filter(is_target == T),
+       aes(x = reorder(feature, -rel_sum_sq), y = rel_sum_sq, fill = group)) +
+  scale_fill_manual(values = c("#1B998B", "#2D3047")) +
+  geom_bar(stat = "identity") +
+  ylab("Variance explained (%)") + xlab("") +
+  labs(title = "Linear variance modelling",
+       subtitle = "Expression variance predicted by features") +
+  theme(text = element_text(size = 12)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12),
+        axis.text.y = element_text(size = 10)) +
+  facet_wrap(~tf_condition)
 
-<!-- ggplot(exp_variance_heatmap2, -->
-<!--        aes(x = HepG2_DMSO, y = K562_DMSO)) + -->
-<!--   geom_point() + -->
-<!--   geom_smooth(method = "lm") + -->
-<!--   xlab("feature importance HepG2") + -->
-<!--   ylab("feature importance K562") + -->
-<!--   facet_wrap(~feature) -->
+exp_variance2 <- exp_variance %>%
+  filter(pval_adj <= 0.01, is_target == T) %>%
+  distinct(tf_condition, feature, rel_sum_sq) %>%
+  spread(key = "feature", value = "rel_sum_sq") %>%
+  filter(total >= 70) %>%
+  column_to_rownames("tf_condition")
 
-<!-- ggplot(exp_variance_heatmap2, -->
-<!--        aes(x = mES_2i_LIF, y = K562_DMSO)) + -->
-<!--   geom_point() + -->
-<!--   geom_smooth(method = "lm") + -->
-<!--   xlab("feature importance mES") + -->
-<!--   ylab("feature importance K562") -->
+pheatmap(exp_variance2 %>%
+                  t(),
+         cellwidth = 10,
+         cellheight = 10,
+         border_color = F,
+         color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100),
+         angle_col = 90)
 
+exp_variance2 <- exp_variance %>%
+  filter(pval_adj <= 0.01) %>%
+  distinct(tf_condition, feature, rel_sum_sq) %>%
+  spread(key = "feature", value = "rel_sum_sq") %>%
+  filter(total >= 80) %>%
+  column_to_rownames("tf_condition")
 
-<!-- exp_variance_heatmap <- exp_variance_heatmap %>% -->
-<!--   filter(str_detect(condition, "mES")) %>% -->
-<!--   group_by(tf) %>% -->
-<!--   top_n(1, total) %>% -->
-<!--   ungroup() -->
+pheatmap(exp_variance2 %>%
+                  t(),
+         cellwidth = 10,
+         cellheight = 10,
+         border_color = F,
+         color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100),
+         angle_col = 90)
 
-<!-- conditions <- exp_variance_heatmap %>% -->
-<!--   distinct(tf, condition) %>% -->
-<!--   column_to_rownames("tf") -->
+## Investigate individual KDs
+cDNA_df_TF4 <- cDNA_df_TF3 %>%
+  filter(tf_condition %in% c("PAX6_PAX6", "PAX6_THRB")) %>%
+  distinct(tf_condition, reporter_FC, reporter_id) %>%
+  spread(key = "tf_condition", value = "reporter_FC")
 
-<!-- condition_colors <- list(condition = c("mES_N2B27" = "black",  -->
-<!--                       "mES_LIF_CH" = "grey10", -->
-<!--                       "mES_LIF_PD" = "grey30", -->
-<!--                       "mES_2i" = "grey50", -->
-<!--                       "mES_2i_LIF" = "grey70", -->
-<!--                       "mES_HQ" = "grey90", -->
-<!--                       "K562_DMSO" = "#e76f51", -->
-<!--                       "HepG2_CDCA" = "#9AC1AE", -->
-<!--                       "HepG2_DMSO" = "#f2cc8f")) -->
+ggplot(cDNA_df_TF3,
+       aes(x = PAX6_PAX6, y = PAX6_THRB)) +
+  geom_point() +
+  geom_abline(lty = 2) +
+  xlim(-2.5,1) +
+  ylim(-2.5,1)
 
-<!-- pheatmap(exp_variance_heatmap %>% -->
-<!--                   column_to_rownames("tf") %>% -->
-<!--                   dplyr::select(-condition, -tf_condition, -total) %>% -->
-<!--                   t(), -->
-<!--          cellwidth = 8, -->
-<!--          cellheight = 8, -->
-<!--          border_color = F, -->
-<!--          color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100), -->
-<!--          angle_col = 90, -->
-<!--          annotation_col = conditions, -->
-<!--          annotation_colors = condition_colors) -->
+cDNA_df_TF4 <- cDNA_df_TF3 %>%
+  filter(tf_condition %in% c("NFKB1_NFKB1", "NFKB1_REL")) %>%
+  distinct(tf_condition, reporter_FC, reporter_id) %>%
+  spread(key = "tf_condition", value = "reporter_FC")
 
-<!-- # Plot weights in a heatmap -->
-<!-- weight_heatmap <- weight %>% -->
-<!--   distinct(tf_condition, weight, features) %>% -->
-<!--   mutate(total = ave(weight, tf_condition, FUN = function(x) sum(x, na.rm = T))) %>% -->
-<!--   filter(!feature %in% c("hBGm", "10bp", "10bps", "1")) %>% -->
-<!--   spread(features, weight) %>% -->
-<!--   #filter(total >= 60) %>% -->
-<!--   mutate(tf = gsub("(^.*)_.*_.*", "\\1", tf_condition)) %>% -->
-<!--   mutate(tf = gsub("(^.*)_.*", "\\1", tf)) %>% -->
-<!--   mutate(condition = gsub("^.*_(.*)+", "\\1", tf_condition)) -->
-
-<!-- weight_heatmap[is.na(weight_heatmap)] <- 0 -->
-
-<!-- for (i in unique(weight_heatmap$condition)) { -->
-<!--   p <- pheatmap(weight_heatmap %>% -->
-<!--                   filter(condition == i) %>% -->
-<!--                   column_to_rownames("tf") %>% -->
-<!--                   dplyr::select(-condition, -tf_condition, -total) %>% -->
-<!--                   t(), -->
-<!--          cellwidth = 8, -->
-<!--          cellheight = 8, -->
-<!--          border_color = F, -->
-<!--          color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100), -->
-<!--          angle_col = 90,  -->
-<!--          main = i) -->
-<!--   print(p) -->
-<!-- } -->
-
-
-<!-- weight_heatmap2 <- weight %>% -->
-<!--   filter(tf_condition %in% weight_heatmap$tf_condition) %>% -->
-<!--   filter(pval < 0.05) %>% -->
-<!--   dplyr::select(-pval) %>% -->
-<!--   mutate(tf = gsub("(^.*)_.*_.*", "\\1", tf_condition)) %>% -->
-<!--   mutate(tf = gsub("(^.*)_.*", "\\1", tf)) %>% -->
-<!--   mutate(condition = gsub("^.*_(.*)+", "\\1", tf_condition)) %>% -->
-<!--   dplyr::select(-tf_condition) %>% -->
-<!--   spread(key = "condition", value = "weight") -->
-
-<!-- ggplot(weight_heatmap2, -->
-<!--        aes(x = HepG2_DMSO, y = K562_DMSO)) + -->
-<!--   geom_point() + -->
-<!--   geom_smooth(method = "lm") + -->
-<!--   xlab("feature importance HepG2") + -->
-<!--   ylab("feature importance K562") + -->
-<!--   facet_wrap(~features) -->
-
-<!-- for (i in unique(weight_heatmap2$features)) { -->
-<!--   pc_data <- weight_heatmap2 %>% filter(features == i) %>% dplyr::select(-features) %>% replace(is.na(.), 0) -->
-<!--   pca_res <- prcomp(pc_data %>% column_to_rownames('tf'), scale. = TRUE) -->
-<!--   p <- ggbiplot(pca_res, ellipse = T) + ggtitle(i) -->
-<!--   print(p) -->
-<!-- } -->
+ggplot(cDNA_df_TF3,
+       aes(x = NFKB1_NFKB1, y = NFKB1_REL)) +
+  geom_point() +
+  geom_abline(lty = 2) +
+  xlim(-2.5,1) +
+  ylim(-2.5,1)
 
 
 
-<!-- weight_heatmap <- weight_heatmap %>% -->
-<!--   group_by(tf) %>% -->
-<!--   top_n(1, total) %>% -->
-<!--   ungroup() -->
-
-<!-- conditions <- weight_heatmap %>% -->
-<!--   distinct(tf, condition) %>% -->
-<!--   column_to_rownames("tf") -->
-
-<!-- condition_colors <- list(condition = c("mES_N2B27" = "black",  -->
-<!--                       "mES_LIF_CH" = "grey10", -->
-<!--                       "mES_LIF_PD" = "grey30", -->
-<!--                       "mES_2i" = "grey50", -->
-<!--                       "mES_2i_LIF" = "grey70", -->
-<!--                       "mES_HQ" = "grey90", -->
-<!--                       "K562_DMSO" = "#e76f51", -->
-<!--                       "HepG2_CDCA" = "#9AC1AE", -->
-<!--                       "HepG2_DMSO" = "#f2cc8f")) -->
-
-<!-- pheatmap(weight_heatmap %>% -->
-<!--                   column_to_rownames("tf") %>% -->
-<!--                   dplyr::select(-condition, -tf_condition, -total) %>% -->
-<!--                   t(), -->
-<!--          cellwidth = 8, -->
-<!--          cellheight = 8, -->
-<!--          border_color = F, -->
-<!--          #color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100), -->
-<!--          angle_col = 90, -->
-<!--          annotation_col = conditions, -->
-<!--          annotation_colors = condition_colors) -->
+## Plot weights of parameters in model - this helps to understand the model
+level_order <- c("minP", "mCMV", "hBGm",
+                 "2", "3", "10bps", "5bp", "10bp", "21bp")
 
 
 
 
-<!-- ``` -->
+
+## Final overview - model fit for each TF
+# Feature importance overview for each TF in a single plot (bar-chart including mean activities per feature)
 
 
-<!-- --- -->
+for (i in unique(cDNA_df_TF$tf_condition[cDNA_df_TF$is_target == T])) {
+
+  # Plot to show prediction accuracy
+  sp <- ggplot(prediction %>%
+                 filter(tf_condition == i),
+               aes(x = reporter_FC, y = activity_predicted)) +
+    geom_smooth(color = "black", fill = "lightgrey", method = "lm") +
+    geom_point() +
+    ylab("Predicted KD FC (log2)") +
+    xlab("Average KD FC (log2)") +
+    scale_color_manual(values = c(colors_diverse[1],colors_diverse[2],colors_diverse[4])) +
+    ggtitle(i)
+
+
+  # Feature importance overview for each TF (including mean activities per feature)
+  fp <- ggplot(exp_variance[exp_variance$tf_condition == i,] %>%
+                                 na.omit() %>%
+                 mutate(sign = ifelse(pval < 0.05, "Yes", "No")),
+       aes(x = reorder(feature, -rel_sum_sq), y = rel_sum_sq, fill = group, alpha = sign)) +
+  scale_fill_manual(values = c("#1B998B", "#2D3047")) +
+  geom_bar(stat = "identity") +
+  ylab("Variance explained (%)") + xlab("") +
+
+  theme(text = element_text(size = 12)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12),
+        axis.text.y = element_text(size = 10)) +
+    guides(fill = F)
+
+  # Plot weights of parameters in model - this helps to understand the model
+  p <- ggplot(weight[weight$tf_condition == i,] %>%
+                na.omit() %>%
+                 mutate(sign = ifelse(pval < 0.05, "Yes", "No")),
+       aes(x = factor(features, level = level_order), y = weight, alpha = sign, fill = condition)) +
+  scale_fill_manual(values = c("#1B998B", "#2D3047", "#FF9B71", "#ECDD7B", "#C2B2B4", "#A54657")) +
+  geom_bar(stat = "identity") +
+  ylab("Weight") + xlab("") +
+
+  theme(text = element_text(size = 12)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 10),
+        axis.text.y = element_text(size = 10))
+
+  # Combine all plots
+  sp.plot <- arrangeGrob(sp,fp,p, nrow = 1)
+  grid.arrange(sp.plot)
+}
+
+# Plot features in a heatmap
+exp_variance_heatmap <- exp_variance %>%
+  mutate(rel_sum_sq = ifelse(pval < 0.05 | is.na(pval), rel_sum_sq, 0)) %>%
+  mutate(min_pval = ave(pval, tf_condition, FUN = function(x) min(x, na.rm = T))) %>%
+  filter(min_pval < 0.05) %>%
+  dplyr::select(-group, -pval) %>%
+  spread(feature, rel_sum_sq) %>%
+  filter(total >= 75) %>%
+  mutate(tf = gsub("(^.*)_.*_.*", "\\1", tf_condition)) %>%
+  mutate(tf = gsub("(^.*)_.*", "\\1", tf)) %>%
+  mutate(condition = gsub("^.*_(.*)+", "\\1", tf_condition))
+
+for (i in unique(exp_variance_heatmap$condition)) {
+  p <- pheatmap(exp_variance_heatmap %>%
+                  filter(condition == i) %>%
+                  column_to_rownames("tf") %>%
+                  dplyr::select(-condition, -tf_condition, -total) %>%
+                  t(),
+         cellwidth = 8,
+         cellheight = 8,
+         border_color = F,
+         color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100),
+         angle_col = 90,
+         main = i)
+  print(p)
+}
+
+## Correlation between cell types - is the variability the same between individual cell types?
+### Implement still: select only TFs that are active in both conditions
+exp_variance_heatmap2 <- exp_variance %>%
+  filter(tf_condition %in% exp_variance_heatmap$tf_condition) %>%
+  filter(pval < 0.05) %>%
+  dplyr::select(-group, -pval) %>%
+  mutate(tf = gsub("(^.*)_.*_.*", "\\1", tf_condition)) %>%
+  mutate(tf = gsub("(^.*)_.*", "\\1", tf)) %>%
+  mutate(condition = gsub("^.*_(.*)+", "\\1", tf_condition)) %>%
+  dplyr::select(-tf_condition) %>%
+  spread(key = "condition", value = "rel_sum_sq") %>%
+  filter(feature != "total")
+
+ggplot(exp_variance_heatmap2,
+       aes(x = HepG2_DMSO, y = K562_DMSO)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  xlab("feature importance HepG2") +
+  ylab("feature importance K562") +
+  facet_wrap(~feature)
+
+ggplot(exp_variance_heatmap2,
+       aes(x = mES_2i_LIF, y = K562_DMSO)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  xlab("feature importance mES") +
+  ylab("feature importance K562")
+
+
+exp_variance_heatmap <- exp_variance_heatmap %>%
+  filter(str_detect(condition, "mES")) %>%
+  group_by(tf) %>%
+  top_n(1, total) %>%
+  ungroup()
+
+conditions <- exp_variance_heatmap %>%
+  distinct(tf, condition) %>%
+  column_to_rownames("tf")
+
+condition_colors <- list(condition = c("mES_N2B27" = "black",
+                      "mES_LIF_CH" = "grey10",
+                      "mES_LIF_PD" = "grey30",
+                      "mES_2i" = "grey50",
+                      "mES_2i_LIF" = "grey70",
+                      "mES_HQ" = "grey90",
+                      "K562_DMSO" = "#e76f51",
+                      "HepG2_CDCA" = "#9AC1AE",
+                      "HepG2_DMSO" = "#f2cc8f"))
+
+pheatmap(exp_variance_heatmap %>%
+                  column_to_rownames("tf") %>%
+                  dplyr::select(-condition, -tf_condition, -total) %>%
+                  t(),
+         cellwidth = 8,
+         cellheight = 8,
+         border_color = F,
+         color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100),
+         angle_col = 90,
+         annotation_col = conditions,
+         annotation_colors = condition_colors)
+
+# Plot weights in a heatmap
+weight_heatmap <- weight %>%
+  distinct(tf_condition, weight, features) %>%
+  mutate(total = ave(weight, tf_condition, FUN = function(x) sum(x, na.rm = T))) %>%
+  filter(!feature %in% c("hBGm", "10bp", "10bps", "1")) %>%
+  spread(features, weight) %>%
+  #filter(total >= 60) %>%
+  mutate(tf = gsub("(^.*)_.*_.*", "\\1", tf_condition)) %>%
+  mutate(tf = gsub("(^.*)_.*", "\\1", tf)) %>%
+  mutate(condition = gsub("^.*_(.*)+", "\\1", tf_condition))
+
+weight_heatmap[is.na(weight_heatmap)] <- 0
+
+for (i in unique(weight_heatmap$condition)) {
+  p <- pheatmap(weight_heatmap %>%
+                  filter(condition == i) %>%
+                  column_to_rownames("tf") %>%
+                  dplyr::select(-condition, -tf_condition, -total) %>%
+                  t(),
+         cellwidth = 8,
+         cellheight = 8,
+         border_color = F,
+         color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100),
+         angle_col = 90,
+         main = i)
+  print(p)
+}
+
+
+weight_heatmap2 <- weight %>%
+  filter(tf_condition %in% weight_heatmap$tf_condition) %>%
+  filter(pval < 0.05) %>%
+  dplyr::select(-pval) %>%
+  mutate(tf = gsub("(^.*)_.*_.*", "\\1", tf_condition)) %>%
+  mutate(tf = gsub("(^.*)_.*", "\\1", tf)) %>%
+  mutate(condition = gsub("^.*_(.*)+", "\\1", tf_condition)) %>%
+  dplyr::select(-tf_condition) %>%
+  spread(key = "condition", value = "weight")
+
+ggplot(weight_heatmap2,
+       aes(x = HepG2_DMSO, y = K562_DMSO)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  xlab("feature importance HepG2") +
+  ylab("feature importance K562") +
+  facet_wrap(~features)
+
+for (i in unique(weight_heatmap2$features)) {
+  pc_data <- weight_heatmap2 %>% filter(features == i) %>% dplyr::select(-features) %>% replace(is.na(.), 0)
+  pca_res <- prcomp(pc_data %>% column_to_rownames('tf'), scale. = TRUE)
+  p <- ggbiplot(pca_res, ellipse = T) + ggtitle(i)
+  print(p)
+}
+
+
+
+weight_heatmap <- weight_heatmap %>%
+  group_by(tf) %>%
+  top_n(1, total) %>%
+  ungroup()
+
+conditions <- weight_heatmap %>%
+  distinct(tf, condition) %>%
+  column_to_rownames("tf")
+
+condition_colors <- list(condition = c("mES_N2B27" = "black",
+                      "mES_LIF_CH" = "grey10",
+                      "mES_LIF_PD" = "grey30",
+                      "mES_2i" = "grey50",
+                      "mES_2i_LIF" = "grey70",
+                      "mES_HQ" = "grey90",
+                      "K562_DMSO" = "#e76f51",
+                      "HepG2_CDCA" = "#9AC1AE",
+                      "HepG2_DMSO" = "#f2cc8f"))
+
+pheatmap(weight_heatmap %>%
+                  column_to_rownames("tf") %>%
+                  dplyr::select(-condition, -tf_condition, -total) %>%
+                  t(),
+         cellwidth = 8,
+         cellheight = 8,
+         border_color = F,
+         #color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100),
+         angle_col = 90,
+         annotation_col = conditions,
+         annotation_colors = condition_colors)
+
+
+
+
+```
+
+
+---
 
 
 <!-- ## Native enhancer sequences + NPCs -->
