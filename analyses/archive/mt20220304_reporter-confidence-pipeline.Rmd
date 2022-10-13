@@ -1,0 +1,545 @@
+---
+title: "TF activity computation & feature analysis - TF reporter library 90 TFs - combined"
+author: 
+  - name: "Max Trauernicht"
+    email: "m.trauernicht@nki.nl"
+    affiliation: "Netherlands Cancer Institute - van Steensel lab"
+date: '`r format(Sys.time(), "%d/%m/%Y")`'
+output: 
+  html_document:
+    theme: united
+    highlight: pygments
+    fig_caption: yes
+    code_folding: hide
+    df_print: kable
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: false
+---
+
+---
+
+### Aim
+In more than 100 samples, 35,500 reporters for 86 TFs were transfected into various cells (mainly mES, K562 & HepG2), and stimulated with various compounds. To be more precise, the data consists of two different libraries, library 1, which is more focused on mES biology, and library 2, which is more focused on classical signaling pathways. All the barcode counts from the 7 different sequencing runs are combined in this analysis. In a previous script (mt20211021_barcode_preprocessing... .Rmd), sanity checks were be carried out to filter out samples with bad quality, and barcode counts were be normalized to compute reporter activitites. In this script, I want to assign confidence levels to individual reporters to identify which reporters can be used for follow-up studies. 
+
+
+### Description of input data
+- library = with which library was this sample transfected (1, 2, or 1+2)
+- nchar = barcode length (12 for library 1, 13 for library 2)
+- commercial_reporter = positive control reporter sequence from commercial source
+- neg_ctrls = reporter with mutated TF binding sites?
+- hPGK = positive control, chunk from hPGK promoter (only in lib 1)
+- native_enhancer = genomic mES enhancer sequence chunks from Miguels libraries (only lib 1)
+- activity = rpm + pseudocount cDNA / rpm + pseudocount pDNA
+- mean_activity_sample = mean of activity per unique reporter per sample (individually per replicate)
+- reporter_activity = mean activity per unique reporter per condition (mean of replicates)
+- minP_activity = activity relative to mean of minimal promoter only reporters of that sample
+- mean_activity_sample_minP = mean of minP_activity per unique reporter 
+- reporter_activity_minP = mean of mean_activity_sample_minP per condition
+- nfya_activity = activity relative to mean of nfya reporters (constitutive positive control) of that sample
+- mean_activity_sample_nfya = mean of nfya_activity per unique reporter 
+- reporter_activity_nfya = mean of mean_activity_sample_nfya per condition
+- mean_activity_sample_neg = mean_activity_sample relative to its paired negative control (identical reporter with mutated binding sites)
+- reporter_activity_neg = mean of mean_activity_sample_neg per condition
+- pval_minP = p-value of t-test comparing activity distributions of individual reporters with the distribution of minimal promoter only reporters within the same condition
+- pval_neg = p-value of t-test comparing activity distributions of individual reporters with the distribution of the activities of its paired negative controls within the same condition
+
+
+### Main tested conditions:
+- mESC: 2i+LIF
+- mESC: 2i-LIF (STAT3 inactivation)
+- mESC: LIF+PD (TCF inactivation)
+- mESC: LIF+CH (MEK activation)
+- mESC: N2B27 (neural differentiation medium)
+- mESC: HQ (NRF activation)
+- NPC
+- HepG2
+- HepG2 + bile acids (NR activation)
+- K562
+
+*Data from TFs in library 1 in HepG2 cells was ignored for a large part of the analysis for now because the computed TF activities did not make sense, I will look into what happened there further*
+
+---
+
+## Setup {.tabset}
+
+<!-- little HTML script to do indentation of the table of contents -->
+<script>
+    $(document).ready(function() {
+      $items = $('div#TOC li');
+      $items.each(function(idx) {
+        num_ul = $(this).parentsUntil('#TOC').length;
+        $(this).css({'text-indent': num_ul * 10, 'padding-left': 0});
+      });
+
+    });
+</script>
+
+```{css, echo = FALSE}
+div.sourceCode {
+  overflow-x: hidden;
+}
+```
+
+### Libraries 
+
+```{r setup, out.width= "80%", fig.align= "center", warning = FALSE, message= FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+StartTime <-Sys.time()
+
+# 8-digit Date tag:
+Date <- substr(gsub("-","",Sys.time()),1,8) 
+# libraries:
+library(RColorBrewer)
+library(ggplot2)
+library(dplyr)
+library(maditr)
+library(tibble)
+library(pheatmap)
+library(ggpubr)
+library(ggbeeswarm)
+library(ggforce)
+library(viridis)
+library(plyr)
+library(cowplot)
+library(gridExtra)
+library(pROC)
+library(tidyr)
+library(stringr)
+library(randomForest)
+library(readr)
+```
+
+### Functions
+
+```{r out.width= "80%", fig.align= "center"}
+### Custom functions
+SetFileName <- function(filename, initials) {
+  # Set filename with extension and initials to make filename with date integrated.
+  filename <- substitute(filename)
+  initials <- substitute(initials)
+  filename <- paste0(initials, Date, filename)
+  filename
+}
+
+# Extract p-value from linear model
+lmp <- function (modelobject) {
+    if (class(modelobject) != "lm") stop("Not an object of class 'lm' ")
+    f <- summary(modelobject)$fstatistic
+    p <- pf(f[1],f[2],f[3],lower.tail=F)
+    attributes(p) <- NULL
+    return(p)
+}
+
+
+# Set custom ggplot2 theme and custom colors
+theme_classic_lines <- function() {
+  theme_pubr(border = F, legend = "top") +
+            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.25),
+                  strip.background = element_rect(fill = "#ced4da")
+            )
+}
+
+theme_classic_lines_45 <- function() {
+  theme_pubr(border = T, legend = "top", x.text.angle = 45) +
+            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.25),
+                  strip.background = element_rect(fill = "#ced4da")
+            )
+}
+
+theme_classic_lines_90 <- function() {
+  theme_pubr(border = T, legend = "top", x.text.angle = 90) +
+            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.25),
+                  strip.background = element_rect(fill = "#ced4da")
+            )
+}
+
+theme_set(theme_classic_lines())
+
+colors_diverse <- c("#264653", "#9AC1AE", "#5D987B", "#f2cc8f", "#e76f51")
+
+ggplot_custom <- function(...) ggplot2::ggplot(...) + 
+  scale_color_manual(values = colors_diverse) + 
+  scale_fill_manual(values = colors_diverse)
+```
+
+### Loading data
+
+```{r out.width= "80%", fig.align= "center"}
+# Import processed bc counts from the preprocessing step
+cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6578_gen2_stimulation-2/results/mt20211118_reporter_activity_filt_combined.csv", header = T) %>%
+  dplyr::select(-tf_activity, -reporter_id2, 'pval_minP' = pval, -pval_adj, -mutated_activity)
+
+# Filter TP53 from library 1+2 K562 data (we previously determined that we should filter these data)
+cDNA_df2 <- cDNA_df %>%
+  filter(library == "1+2" & condition == "K562_DMSO" & tf == "TP53")
+cDNA_df <- anti_join(cDNA_df, cDNA_df2, by = c("reporter_id", "sample_id"))
+```
+
+# Assigning confidence levels
+
+## Confidence level 1A - linear model
+Aim: Predict reporter activities by reporter design using linear models.
+I will fit linear models for each TF in each tested condition. Then I will validate these models by checking the p-value and R-squared distribution of 'active' TFs (one reporter at least 5-fold enriched over negative control) vs 'inactive' TFs and randomized data.
+```{r warning = F}
+# Step 1A: Fit a linear model for each TF per condition and keep those that have a significant fit
+cDNA_df_level1_lm <- cDNA_df %>%
+  filter(condition %in% c("HepG2_CDCA", "HepG2_DMSO", "K562_DMSO", "mES_2i_LIF", "mES_2i", "mES_HQ", "mES_LIF_CH", "mES_LIF_PD", "mES_N2B27")) %>%
+  filter(hPGK == "No", commercial_reporter == "No", native_enhancer == "No", neg_ctrls == "No") %>%
+  filter(!is.na(reporter_activity_neg)) %>%
+  mutate(pval_neg_adj = p.adjust(pval_neg, method = "fdr")) %>%
+  mutate(active = ifelse(abs(log2(reporter_activity_neg)) >= log2(5) & pval_neg_adj < 0.05, "Yes", "No")) %>%
+  mutate(tf_condition = paste(tf, condition, sep = "_")) %>%
+  distinct(reporter_activity_neg, tf, condition, tf_condition, reporter_id, promoter, spacing, distance, background, active) %>%
+  mutate(reporter_activity_neg_random = ave(reporter_activity_neg, tf_condition, FUN = function(x) sample(x)))
+
+## Fit linear model with design features for actual data
+cDNA_df_level1_lm$row <- rownames(cDNA_df_level1_lm)
+
+lm_list <- list()
+for (i in unique(cDNA_df_level1_lm$tf_condition)) {
+  lm_list[[i]] <- lm(log2(reporter_activity_neg) ~ 
+                       promoter + 
+                       spacing + 
+                       distance + 
+                       background,
+                cDNA_df_level1_lm[cDNA_df_level1_lm$tf_condition == i,])
+}
+
+lm_pval_df <- data.frame("tf_condition" = names(lm_list))
+
+for (i in unique(lm_pval_df$tf_condition)) {
+  lm_pval_df$pval[lm_pval_df$tf_condition == i] <- lmp(lm_list[[i]])
+  lm_pval_df$r2_adj[lm_pval_df$tf_condition == i] <- summary(lm_list[[i]])$adj.r.squared
+  lm_pval_df$rmse[lm_pval_df$tf_condition == i] <- sqrt(mean(lm_list[[i]]$residuals^2))
+}
+
+### As a check-up: proof that TFs that have reporters with high activity have a better linear model fit (because from low-activity TFs you would expect variability due to noise, and we want to make sure that the model is not fitting noise)
+passed_tf_conditions <- cDNA_df_level1_lm %>%
+  filter(active == "Yes") %>%
+  distinct(tf_condition, active)
+
+lm_pval_df <- merge(lm_pval_df, passed_tf_conditions, all = T)
+
+lm_pval_df$active[is.na(lm_pval_df$active)] <- "No"
+
+lm_pval_df$pval_adj <- p.adjust(lm_pval_df$pval, method = "fdr")
+
+## Fit linear model with design features for randomly sampled data
+lm_list_random <- list()
+for (i in unique(cDNA_df_level1_lm$tf_condition)) {
+  lm_list_random[[i]] <- lm(log2(reporter_activity_neg_random) ~ 
+                       promoter + 
+                       spacing + 
+                       distance + 
+                       background,
+                cDNA_df_level1_lm[cDNA_df_level1_lm$tf_condition == i,])
+}
+
+lm_pval_df_random <- data.frame("tf_condition" = names(lm_list_random))
+
+for (i in unique(lm_pval_df_random$tf_condition)) {
+  lm_pval_df_random$pval[lm_pval_df_random$tf_condition == i] <- lmp(lm_list_random[[i]])
+  lm_pval_df_random$r2_adj[lm_pval_df_random$tf_condition == i] <- summary(lm_list_random[[i]])$adj.r.squared
+  lm_pval_df_random$rmse[lm_pval_df_random$tf_condition == i] <- sqrt(mean(lm_list_random[[i]]$residuals^2))
+}
+
+### As a check-up: proof that TFs that have reporters with high activity have a better linear model fit (because from low-activity TFs you would expect variability due to noise, and we want to make sure that the model is not fitting noise)
+lm_pval_df_random <- merge(lm_pval_df_random, passed_tf_conditions) %>%
+  mutate(active = "random")
+
+lm_pval_df_random$pval_adj <- p.adjust(lm_pval_df_random$pval, method = "fdr")
+
+lm_pval_df <- rbind(lm_pval_df, lm_pval_df_random)
+
+## Sanity checks linear model
+ggplot(lm_pval_df,
+              aes(x = pval, color = active)) +
+  geom_density(data = lm_pval_df %>% filter(active == "random"), color = colors_diverse[1], size = 1) +
+  geom_density(data = lm_pval_df %>% filter(active == "No"), color = colors_diverse[2], size = 1) +
+  geom_density(data = lm_pval_df %>% filter(active == "Yes"), color = colors_diverse[3], size = 1) +
+  theme_pubr()
+
+ggplot(mapping = aes(x = r2_adj)) +
+  geom_density(data = lm_pval_df %>% filter(active == "random"), color = colors_diverse[1], size = 1) +
+  geom_density(data = lm_pval_df %>% filter(active == "No"), color = colors_diverse[2], size = 1) +
+  geom_density(data = lm_pval_df %>% filter(active == "Yes"), color = colors_diverse[3], size = 1) +
+  theme_pubr()
+
+ggplot_custom(lm_pval_df %>%
+                mutate(pval = as.numeric(pval)) %>%
+                mutate(sign = ifelse(pval < 0.05, "Yes", "No")),
+              aes(x = active, fill = sign)) +
+  geom_bar(stat = "count") +
+  ylab("Number of linear models")
+```
+
+Conclusion: The majority of linear models has a significant fit if at least one reporter is >5-fold enriched over its negative control. That means that these linear models work really well in predicting reporter activity. If no reporter is >5-fold activated the performance of the model drops, which is expected because we want to avoid fitting noise. Randomized data can be fitted significantly in ~5% of the cases, which is expected by random chance.
+
+---
+
+## Confidence level 1A - linear model
+Aim: Many linear models produce good fits, however, within these linear models we might not be able to predict all reporter activities equally well. Some individual reporters might be far away from the fitted regression. To exclude individual reporters from which we cannot predict its activity, we will look at the RMSE of individual linear models and exclude individual reporters that deviate >2xRMSEs. 
+```{r warning = F}
+# Step 1B: Use the RMSE to keep only reporters that can be predicted well by the linear model
+rmse_df <- lm_pval_df %>%
+  filter(active != "random") %>%
+  distinct(tf_condition, rmse)
+cDNA_df_level1_lm_rmse <- merge(cDNA_df_level1_lm, rmse_df, all = T) %>%
+  mutate(upper_rmse = log2(reporter_activity_neg) + 2*(rmse)) %>%
+  mutate(lower_rmse = log2(reporter_activity_neg) - 2*(rmse)) 
+
+predicted_values <- data.frame()
+for (i in unique(cDNA_df_level1_lm$tf_condition)) {
+  predicted <- data.frame("predicted_activity" = lm_list[[i]]$fitted.values) %>% 
+    rownames_to_column("row") %>%
+    mutate(tf_condition == i)
+  predicted_values <- rbind.fill(predicted_values, predicted)
+}
+
+cDNA_df_level1_lm_rmse <- merge(cDNA_df_level1_lm_rmse, predicted_values) %>%
+  mutate(lm_outlier = ifelse(predicted_activity > upper_rmse | predicted_activity < lower_rmse, "Yes", "No"))
+
+
+ggplot_custom(cDNA_df_level1_lm_rmse %>%
+                filter(tf_condition == "STAT3_mES_2i_LIF"),
+              aes(x = log2(reporter_activity_neg), y = predicted_activity, color = lm_outlier)) +
+  annotate("rect",xmin=-Inf,xmax=log2(5),ymin=-Inf,ymax=Inf, alpha=0.05, fill="black") +
+  geom_abline() +
+  geom_abline(intercept = 2*cDNA_df_level1_lm_rmse$rmse[cDNA_df_level1_lm_rmse$tf_condition == "STAT3_mES_2i_LIF"], lty = "twodash", color = colors_diverse[2]) +
+  geom_abline(intercept = -2*cDNA_df_level1_lm_rmse$rmse[cDNA_df_level1_lm_rmse$tf_condition == "STAT3_mES_2i_LIF"], lty = "twodash", color = colors_diverse[2]) +
+  geom_vline(xintercept = log2(5), lty = "dashed") +
+  geom_point() +
+  theme_pubr()
+
+ggplot_custom(cDNA_df_level1_lm_rmse %>%
+                filter(tf_condition == "EGR1_mES_LIF_CH"),
+              aes(x = log2(reporter_activity_neg), y = predicted_activity, color = lm_outlier)) +
+  annotate("rect",xmin=-Inf,xmax=log2(5),ymin=-Inf,ymax=Inf, alpha=0.05, fill="black") +
+  geom_abline() +
+  #geom_abline(intercept = 2*cDNA_df_level1_lm_rmse$rmse[cDNA_df_level1_lm_rmse$tf_condition == "EGR1_mES_LIF_CH"], lty = "twodash", color = colors_diverse[2]) +
+  #geom_abline(intercept = -2*cDNA_df_level1_lm_rmse$rmse[cDNA_df_level1_lm_rmse$tf_condition == "EGR1_mES_LIF_CH"], lty = "twodash", color = colors_diverse[2]) +
+  geom_vline(xintercept = log2(5), lty = "dashed") +
+  geom_point() +
+  theme_pubr()
+
+ggplot_custom(cDNA_df_level1_lm_rmse %>%
+                filter(tf == "STAT3"),
+              aes(x = log2(reporter_activity_neg), y = predicted_activity, color = lm_outlier)) +
+  annotate("rect",xmin=-Inf,xmax=log2(5),ymin=-Inf,ymax=Inf, alpha=0.05, fill="black") +
+  geom_abline() +
+  geom_vline(xintercept = log2(5), lty = "dashed") +
+  #geom_abline(intercept = cDNA_df_level1_lm_rmse$rmse[cDNA_df_level1_lm_rmse$tf == "STAT3"]) +
+  geom_point() +
+  facet_wrap(~tf_condition, scales = "free")+
+  theme_pubr()
+
+
+for (i in unique(cDNA_df_level1_lm_rmse$condition)) {
+  p <- ggplot_custom(cDNA_df_level1_lm_rmse %>%
+                filter(condition == i),
+              aes(x = log2(reporter_activity_neg), y = predicted_activity, color = lm_outlier)) +
+  annotate("rect",xmin=-Inf,xmax=log2(5),ymin=-Inf,ymax=Inf, alpha=0.05, fill="black") +
+  geom_abline() +
+  #geom_abline(intercept = 2*cDNA_df_level1_lm_rmse$rmse[cDNA_df_level1_lm_rmse$condition ==  i], lty = "twodash", color = colors_diverse[2]) +
+  #geom_abline(intercept = -2*cDNA_df_level1_lm_rmse$rmse[cDNA_df_level1_lm_rmse$condition == i], lty = "twodash", color = colors_diverse[2]) +
+  geom_vline(xintercept = log2(5), lty = "dashed") +
+  geom_point() +
+  theme_pubr() +
+    ggtitle(i) +
+    facet_wrap(~tf)
+  
+  print(p)
+}
+```
+
+Conclusion: With the RMSE method we can easily filter out individual reporters that don't match the regression. Visualizing the linear model by plotting the predicted activity against the actual activity is a good way of inspecting the quality of the individual models. For many TFs the fits look good, however there are some cases (like EGR1) where the variance in reporter activities cannot be predicted by the model. 
+
+---
+
+## Confidence level 1B:
+Aim: We now only kept reporters from which we can predict its activity. The next step is now to remove all reporters that have a low enrichment over its negative control (less than 5-fold). We can then plot how many reporters are kept per TF in each filtering step.
+```{r warning = F, message = F}
+## Do the actual filtering
+lm_pval_df_sign <- lm_pval_df %>%
+  filter(pval_adj < 0.05)
+
+cDNA_df_level1_lm_rmse_filt <- cDNA_df_level1_lm_rmse %>%
+  filter(tf_condition %in% lm_pval_df_sign$tf_condition)
+
+
+cDNA_df_level1_lm_rmse_filt <- cDNA_df_level1_lm_rmse_filt %>%
+  filter(lm_outlier == "No")
+## So, what we do is filter for significant linear models, and then remove the reporters from the significant linear models that are > 2xRMSE from the fit (= reporters from which we cannot predict the activity well, this cutoff is quite relaxed of course and could be strengthened to e.g. 1xRMSE)
+
+
+
+# Step 1C: Is the reporter 5-fold enriched over its mutated control?
+cDNA_df_level1_enriched <- cDNA_df_level1_lm_rmse_filt %>%
+  filter(active == "Yes")
+
+
+
+# Plot how many reporters are passing each filtering step
+## Count reporters at start
+tf_reporter_counts <- cDNA_df %>%
+  filter(condition %in% c("HepG2_CDCA", "HepG2_DMSO", "K562_DMSO", "mES_2i_LIF", "mES_2i", "mES_HQ", "mES_LIF_CH", "mES_LIF_PD", "mES_N2B27")) %>%
+  filter(hPGK == "No", commercial_reporter == "No", native_enhancer == "No", neg_ctrls == "No") %>%
+  filter(!is.na(reporter_activity_neg)) %>%
+  distinct(tf, condition, reporter_id) %>%
+  mutate(tf_condition = paste(tf, condition, sep = "_")) %>%
+  mutate(level1_A = as.numeric(ave(tf_condition, tf_condition, FUN = function(x) length(x)))) %>%
+  distinct(tf_condition, level1_A, tf, condition)
+
+# ## Count reporters with good linear model
+# tf_reporter_counts <- cDNA_df_level1_lm %>%
+#   distinct(tf, condition, reporter_id, tf_condition) %>%
+#   mutate(level1_lm_count = as.numeric(ave(tf_condition, tf_condition, FUN = function(x) length(x)))) %>%
+#   distinct(tf_condition, level1_lm_count, tf, condition) %>%
+#   right_join(tf_reporter_counts) %>%
+#   replace(is.na(.), 0)
+
+## Count reporters that fit linear model
+tf_reporter_counts <- cDNA_df_level1_lm_rmse_filt %>%
+  distinct(tf, condition, reporter_id, tf_condition) %>%
+  mutate(level1_B = as.numeric(ave(tf_condition, tf_condition, FUN = function(x) length(x)))) %>%
+  distinct(tf_condition, level1_B, tf, condition) %>%
+  right_join(tf_reporter_counts) %>%
+  replace(is.na(.), 0)
+
+## Count reporters with significant enrichment
+tf_reporter_counts <- cDNA_df_level1_enriched %>%
+  distinct(tf, condition, reporter_id, tf_condition) %>%
+  mutate(level1_C = as.numeric(ave(tf_condition, tf_condition, FUN = function(x) length(x)))) %>%
+  distinct(tf_condition, level1_C, tf, condition) %>%
+  right_join(tf_reporter_counts) %>%
+  replace(is.na(.), 0)
+
+## Take only the maximum counts per condition 
+tf_reporter_counts <- tf_reporter_counts %>%
+  distinct(tf, level1_A, level1_B, level1_C) %>%
+  group_by(tf) %>% 
+  slice(which.max(level1_C)) %>%
+  ungroup()
+
+pheatmap(tf_reporter_counts %>%
+           column_to_rownames("tf") %>%
+           mutate(level1_B = level1_B / level1_A) %>%
+           mutate(level1_C = level1_C / level1_A) %>%
+           mutate(level1_A = level1_A / level1_A) %>% 
+           t(),
+         border_color = NA,
+         color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100),
+         cellwidth = 8,
+         cellheight = 8, 
+         cluster_rows = F,
+         cluster_cols = T)
+
+tf_reporter_counts_long <- tf_reporter_counts %>%
+  mutate(level1_B = level1_B / level1_A) %>%
+  mutate(level1_C = level1_C / level1_A) %>%
+  mutate(level1_A = level1_A / level1_A) %>% 
+  #filter(level1_B > 0) %>%
+  pivot_longer(contains("level"), values_to = "reporter_counts", names_to = "confidence_level")
+
+ggplot_custom(tf_reporter_counts_long,
+              aes(x = confidence_level, y = reporter_counts, group = 1)) +
+    geom_point() +
+    geom_line() +
+    facet_wrap(~tf) +
+    theme_pubr(border = T, x.text.angle = 90) 
+  
+tf_reporter_counts_long2 <- tf_reporter_counts_long %>%
+  mutate(reporter_counts = as.character(reporter_counts)) %>%
+  mutate(rel_count = as.numeric(ave(tf, confidence_level, reporter_counts, FUN = function(x) length(x)))) %>%
+  mutate(reporter_counts = as.numeric(reporter_counts))
+
+rel_counts <- tf_reporter_counts_long2 %>%
+  distinct(tf, confidence_level, rel_count) %>%
+  filter(confidence_level != "level1_A") %>%
+  setnames("rel_count", "rel_count2")
+
+rel_counts$confidence_level[rel_counts$confidence_level == "level1_B"] <- "level1_A"
+rel_counts$confidence_level[rel_counts$confidence_level == "level1_C"] <- "level1_B"
+
+tf_reporter_counts_long2 <- merge(tf_reporter_counts_long2, rel_counts, all = T)
+
+
+ggplot_custom(tf_reporter_counts_long2,
+              aes(x = confidence_level, y = reporter_counts, group = tf)) +
+    geom_point(aes(size = rel_count)) +
+    geom_line(aes(alpha = rel_count2)) +
+    theme_pubr() 
+
+ggplot_custom(tf_reporter_counts_long2 %>%
+                filter(confidence_level == "level1_C") %>%
+                distinct(tf, confidence_level, reporter_counts) %>%
+                mutate(level1_pass = ifelse(reporter_counts > 0, ifelse(reporter_counts > 0.5, ">50% passed reporters", "<50% passed reporters"), "all removed")) %>%
+                mutate(tf_count = as.numeric(ave(level1_pass, level1_pass, FUN = function(x) length(x)))) %>%
+                distinct(level1_pass, tf_count),
+              aes(x = level1_pass, y = tf_count)) +
+  geom_bar(stat = "identity")
+```
+
+Conclusion: For 43 TFs we keep at least one reporter in confidence level 1. For 20 TFs we even keep >50% of the reporters. 20 TFs are removed because the linear models do not predict activity and from the 63 TFs from which we can build good models another 20 TFs are removed due to low activity. 
+
+---
+
+## Confidence level 2A - direct stimulation
+Aim: We want to show that reporters are directly responding to upstream signaling pathway stimulations. For some TFs, we added specific compounds to stimulate pathways, are all reporters for those TFs responding?
+```{r warning = F}
+tf_stimulations <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/tf_stimulation_overview.csv") %>%
+  filter(tf %in% cDNA_df_level1_enriched$tf) %>%
+  filter(!is.na(stimulated_condition)) %>%
+  mutate(tf_condition = paste(tf, stimulated_condition, sep = "_")) %>%
+  distinct(tf, tf_condition) %>%
+  mutate(stimulation = "stimulated")
+
+tf_stimulations2 <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/tf_stimulation_overview.csv") %>%
+  filter(tf %in% cDNA_df_level1_enriched$tf) %>%
+  filter(!is.na(stimulated_condition)) %>%
+  mutate(tf_condition = paste(tf, control_condition, sep = "_")) %>%
+  distinct(tf, tf_condition) %>%
+  mutate(stimulation = "unstimulated")
+
+tf_stimulations <- rbind(tf_stimulations, tf_stimulations2)
+
+cDNA_df_level2 <- merge(cDNA_df_level1_lm, tf_stimulations) %>%
+  distinct(tf, reporter_id, stimulation, reporter_activity_neg) %>%
+  spread(key = "stimulation", value = "reporter_activity_neg") %>%
+  mutate(fc = log2(stimulated / unstimulated))
+
+ggplot_custom(cDNA_df_level2,
+              aes(x = tf, y = fc)) +
+  annotate("rect",xmin=-Inf,xmax=Inf,ymin=-Inf,ymax=log2(5), alpha=0.05, fill="black") +
+  geom_hline(lty = "twodash", yintercept = log2(5)) +
+  geom_quasirandom() +
+  ylab("stimulated / unstimulated (log2)") +
+  theme_pubr(x.text.angle = 45)
+```
+## Confidence level 2B - Correlation
+
+Aim: We cannot directly stimulate all TFs - therefore we want to indirectly approximate TF activities and correlate those with my reporter activities. So, we regard the inferred TF activities as 'true' and then compute for each TF the correlations of each reporter with the inferred TF activities across conditions. Reporters that have a significant correlation will be kept. 
+We can take different approaches to infer TF activities. Those are our options:
+  1) TF expression from RNA-seq
+  2) TF target accessibility from ATAC-seq (diffTF)
+  3) TF regulon expression using VIPER
+  4) cistrome expression (Aerts lab)
+  5) Other MPRA-based TF activities (Ernst et al, Meijsing et al)
+```{r warning = F}
+
+```
+
+
+
+
+
+# Session Info
+```{r}
+paste("Run time: ",format(Sys.time()-StartTime))
+getwd()
+date()
+sessionInfo()
+```
+
