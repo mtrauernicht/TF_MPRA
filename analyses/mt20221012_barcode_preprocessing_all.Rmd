@@ -241,6 +241,9 @@ bc_df$starcode_counts[is.na(bc_df$starcode_counts)] <- 0
 bc_df_remove <- bc_df %>%
   filter(nchar == 13 & bc_df$library == "1")
 bc_df <- anti_join(bc_df, bc_df_remove)
+bc_df_remove <- bc_df %>%
+  filter(nchar == 12 & bc_df$library == "2")
+bc_df <- anti_join(bc_df, bc_df_remove)
 
 # Compute reads per million to estimate the relative counts in the respective sample
 bc_df <- bc_df %>%
