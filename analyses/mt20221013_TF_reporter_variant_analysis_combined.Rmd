@@ -175,7 +175,7 @@ ggplot_custom <- function(...) ggplot2::ggplot(...) +
 
 ```{r out.width= "80%", fig.align= "center"}
 # Import processed bc counts from the preprocessing step
-cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7027_KD_mES/results/mt20230202_reporter_activity_filt_combined.csv", header = T) %>%
+cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7027_KD_mES/results/mt20230227_reporter_activity_filt_combined.csv", header = T) %>%
   dplyr::select(-tf_activity, -reporter_id2, -mutated_activity, -nfya_activity, -pDNA, -starcode_counts, -nchar, -transfection, -rpm, -reporter_rpm,
                 -barcode_number, -barcode, -activity, -minP_activity, -mean_activity_sample, -mean_activity_sample_neg, -mean_activity_sample_minP, -mean_activity_sample_nfya,
                 -sample_id, -sample, -replicate)  %>%
@@ -424,8 +424,14 @@ cDNA_df3 <- merge(cDNA_df2, tf_rna, all = T) %>%
 
 ## Compute spearman correlations for each individual reporter of reporter activity vs. TPM counts across the nine cell types
 for (i in unique(cDNA_df3$reporter_id)) {
+  if (nrow(cDNA_df3[cDNA_df3$reporter_id == i,]) > 2) {
   cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- -log10(cor.test(cDNA_df3$reporter_activity_neg[cDNA_df3$reporter_id == i], cDNA_df3$TPM[cDNA_df3$reporter_id == i], method = "pearson", exact = F)$p.value)
   cDNA_df3$cor[cDNA_df3$reporter_id == i] <- cor(cDNA_df3$reporter_activity_neg[cDNA_df3$reporter_id == i], cDNA_df3$TPM[cDNA_df3$reporter_id == i], method = "pearson")
+  }
+  else {
+    cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- 1
+    cDNA_df3$cor[cDNA_df3$reporter_id == i] <- 0
+  }
 }
 
 ## I am only interested in positive correlations, so set all negative correlations to zero
@@ -598,8 +604,14 @@ cDNA_df3 <- merge(cDNA_df2, viper_res_filt, all = T) %>%
 
 ## Compute correlations for each individual reporter of reporter activity vs. TPM counts across the nine cell types
 for (i in unique(cDNA_df3$reporter_id)) {
-  cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- -log10(cor.test(cDNA_df3$reporter_activity_neg[cDNA_df3$reporter_id == i], cDNA_df3$viper_score[cDNA_df3$reporter_id == i], method = "pearson", exact = F)$p.value)
-  cDNA_df3$cor[cDNA_df3$reporter_id == i] <- cor(cDNA_df3$reporter_activity_neg[cDNA_df3$reporter_id == i], cDNA_df3$viper_score[cDNA_df3$reporter_id == i], method = "pearson")
+    if (nrow(cDNA_df3[cDNA_df3$reporter_id == i,]) > 2) {
+      cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- -log10(cor.test(cDNA_df3$reporter_activity_neg[cDNA_df3$reporter_id == i], cDNA_df3$viper_score[cDNA_df3$reporter_id == i], method = "pearson", exact = F)$p.value)
+      cDNA_df3$cor[cDNA_df3$reporter_id == i] <- cor(cDNA_df3$reporter_activity_neg[cDNA_df3$reporter_id == i], cDNA_df3$viper_score[cDNA_df3$reporter_id == i], method = "pearson")
+    }
+  else {
+    cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- 1
+    cDNA_df3$cor[cDNA_df3$reporter_id == i] <- 0
+  }
 }
 
 ## I am only interested in positive correlations, so set all negative correlations to zero
@@ -689,12 +701,10 @@ cDNA_df3 <- cDNA_df2 %>%
 stimulations <- data.frame(condition = c("HepG2_CDCA", "HepG2_Rif", "HepG2_T09", "HepG2_Wy", "mES_2i", "mES_BX", "mES_HQ", "mES_IWP2", "mES_LIF_CH", "mES_LIF_PD", "mES_LIF_PD",
                                           "mES_vitC", "A549_Dex_100", "A549_Nutlin", "mES_Bmp4", "mES_Dex", "mES_FK", "mES_LPS", "mES_N2B27_Bmp4", "mES_N2B27_RA", "mES_N2B27_Shh", 
                                          "mES_Nutlin", "mES_RA", "mES_Shh", "mES_vitA", "U2OS_FK", "U2OS_LPS",
-                                         "NPC_5aDHT", "mES_Aldosterone", "HCT116_cDIM12", "U2OS_Calcitriol", "NPC_TCPOBOP", "mES_Progesterone", "NPC_ITE", "U2OS_PMA",
-                                         "HCT116_GSK4112", "MCF7_Hexestrol", "MCF7_DIMc", "mES_SRI011381", "mES_GSK4716"),
+                                         "HCT116_cDIM12", "U2OS_Calcitriol", "U2OS_PMA", "HCT116_GSK4112", "MCF7_Hexestrol", "MCF7_DIMc"),
                            tf = c("NR1H4::RXRA", "NR1I2", "NR1H2", "PPARA::RXRA", "STAT3", "IRF3", "NFE2L2", "OTX1", "EGR1", "TCF7", "TCF7L2", "NFE2L2", "NR3C1", "TP53", "SMAD4", "NR3C1", 
-                                  "CREB1", "IRF3", "SMAD4","RARA", "GLI1", "TP53", "RARA", "GLI1", "RARA", "CREB1", "IRF3",
-                                  "AR", "NR3C2", "NR4A2::RXRA", "VDR::RXRA", "NR1I3", "PGR", "AHR::ARNT", "NFKB1", "NR1D1", "ESR1", "NR4A1", "SMAD2::SMAD3::SMAD4", "ESRRB"),
-                           effect_size = c(1,1,1,1,0,0,1,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1))
+                                  "CREB1", "IRF3", "SMAD4","RARA", "GLI1", "TP53", "RARA", "GLI1", "RARA", "CREB1", "IRF3", "NR4A2::RXRA", "VDR::RXRA", "NFKB1", "NR1D1", "ESR1", "NR4A1"),
+                           effect_size = c(1,1,1,1,0,0,1,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,0,1,1))
 
 cDNA_df4 <- cDNA_df2 %>%
   left_join(reference_condition) %>%
@@ -799,24 +809,40 @@ off_target_activities <- cDNA_df2 %>%
   na.omit() %>%
   filter(condition == related_tf) %>%
   mutate(reporter_dif = ave(reporter_dif, reporter_id, FUN = mean)) %>% ## Some TFs have multiple related TFs for which I have KD data: I will compute the mean over the related TFs per reporter
-  dplyr::select(reporter_id, tf, commercial_reporter, "off_target_dif" = reporter_dif) %>%
-  distinct()
+  dplyr::select(reporter_id, tf, commercial_reporter, "off_target_dif" = reporter_dif, "off_target" = related_tf) %>%
+  distinct() %>%
+  group_by(reporter_id) %>%
+  top_n(1) %>%
+  ungroup() 
 
 ## Also: punish reporters that are active in cells where the TF is not expressed
 off_target_activities2 <- cDNA_df2 %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
   left_join(tf_rna) %>%
   filter(TPM == 0, stimulation == "no") %>%
   mutate(off_target_activity = ave(reporter_activity_neg, reporter_id, FUN = mean)) %>%
   distinct(reporter_id, off_target_activity, tf, commercial_reporter) %>%
-  mutate(off_target_activity = ifelse(off_target_activity < 0, 0, off_target_activity))
+  mutate(off_target_activity = ifelse(off_target_activity < 0, 0, off_target_activity)) %>%
+  mutate(off_target = "Expression_0TPM")
 
 off_target_activities <- merge(off_target_activities, off_target_activities2, all = T)
 off_target_activities$off_target_dif[is.na(off_target_activities$off_target_dif)] <- 0
 off_target_activities$off_target_activity[is.na(off_target_activities$off_target_activity)] <- 0
 
 off_target_activities <- off_target_activities %>%
-  mutate(off_target_dif = off_target_dif + off_target_activity) %>%
-  dplyr::select(-off_target_activity)
+  pivot_longer(cols = c(off_target_dif, off_target_activity), names_to = "off_target_act") %>%
+  dplyr::select(-off_target_act) %>%
+  #mutate(off_target_dif = ave(value, reporter_id, FUN = function(x) sum(x))) %>%
+  dplyr::select(reporter_id, "off_target_dif" = value, tf, off_target) %>%
+  mutate(mean_off_target_dif = ave(off_target_dif, tf, off_target, FUN = mean)) %>%
+  group_by(tf) %>%
+  arrange(desc(mean_off_target_dif)) %>% 
+  top_n(1, wt = mean_off_target_dif) %>% ## Some TFs have multiple perturbations: for those I only keep the strongest off-target effect (on average across all reporters)
+  ungroup() %>%
+  group_by(reporter_id) %>%
+  arrange(desc(off_target_dif)) %>% 
+  top_n(1, wt = off_target_dif) %>%
+  distinct(reporter_id, off_target_dif, off_target)
 
 
 cDNA_df6 <- reference_activities %>%
@@ -1368,9 +1394,13 @@ cDNA_df6 <- cDNA_df6 %>%
 # ## Correct confidence score by linear model pvalue
 # chosen_models2 <- chosen_models %>% 
 #   mutate(tf_condition = paste(tf, condition, sep = "_"))
-
+chosen_conditions <- cDNA_df6 %>%
+  mutate(tf_condition = paste(cDNA_df6$tf, cDNA_df6$cell, sep = "_")) %>%
+  mutate(tf_condition = gsub("mES$", "mES_2i_LIF", tf_condition)) %>%
+  distinct(tf_condition)
+  
 pval_prediction <- prediction %>%
-  #filter(tf_condition %in% chosen_models2$tf_condition) %>%
+  filter(tf_condition %in% chosen_conditions$tf_condition) %>%
   distinct(tf, pval) %>%
   mutate(pval = -log10(pval)) %>%
   mutate(pval = ifelse(pval > 2, 2, pval)) %>%
@@ -1384,7 +1414,8 @@ cDNA_df6 <- cDNA_df6 %>%
   mutate(confidence = ifelse(response_score > quantile(response_score, .9, na.rm = T), "very high", confidence)) 
 
 predicted_activities <- prediction %>%
-  distinct(reporter_id, activity_predicted)
+  filter(tf_condition %in% chosen_conditions) %>%
+  distinct(reporter_id, activity_predicted) 
 
 cDNA_df6 <- cDNA_df6 %>%
   left_join(predicted_activities)
@@ -1767,14 +1798,13 @@ cDNA_df2 <- cDNA_df %>%
                 hPGK == "No", 
                 str_detect(tf, "RANDOM", negate = T), 
                 native_enhancer == "No") %>%
-  distinct(tf, condition, reporter_activity_neg, pval_neg) %>%
+  distinct(tf, condition, reporter_activity_neg) %>%
   mutate(reporter_activity_neg = log2(ave(reporter_activity_neg, tf, condition, FUN = mean))) %>%
-  mutate(pval_neg = -log10(ave(pval_neg, tf, condition, FUN = mean))) %>%
+  #mutate(pval_neg = -log10(ave(pval_neg, tf, condition, FUN = mean))) %>%
   distinct()
 
 # Compare similar samples
 cDNA_df4 <- cDNA_df2 %>%
-  dplyr::select(-pval_neg) %>%
   spread(condition, reporter_activity_neg)
 
 ggplot(cDNA_df4,
@@ -1790,12 +1820,19 @@ ggplot(cDNA_df4,
 
 cDNA_df2$reporter_activity_neg[cDNA_df2$pval_neg < -log10(0.35) | cDNA_df2$reporter_activity_neg < 1.25 & cDNA_df2$reporter_activity_neg > -0.15] <- 0 # Select only reporters that are significantly active
 
+activity_norm <- cDNA_df2 %>%
+  filter(condition %in% c("A549", "HCT116", "HEK293", "HepG2", "K562", "MCF7", "mES_2i_LIF", "NPC", "U2OS"), tf == "GBX2") %>%
+  dplyr::select("activity_scale" = reporter_activity_neg, condition)
+  
+
 cDNA_df3 <- cDNA_df2 %>%
   filter(condition %in% c("A549", "HCT116", "HEK293", "HepG2", "K562", "MCF7", "mES_2i_LIF", "NPC", "U2OS")) %>%
-  dplyr::select(-pval_neg) %>%
+  left_join(activity_norm) %>%
   mutate(sum = ave(reporter_activity_neg, tf, FUN = function(x) sum(x, na.rm = T))) %>%
   dplyr::filter(sum != 0) %>% # Remove TFs for which no reporter has significant activity
   dplyr::select(-sum) %>%
+  mutate(reporter_activity_neg = reporter_activity_neg / activity_scale) %>%
+    dplyr::select(-activity_scale) %>%
   spread(tf, reporter_activity_neg) %>%
   column_to_rownames('condition') 
 
@@ -1895,13 +1932,15 @@ reference_condition <- cDNA_df2 %>%
   #filter(abs(reference_activity) > 1)
 
 cDNA_df3 <- cDNA_df2 %>%
-  filter(stimulation == "pathway") %>%
+  filter(stimulation == "pathway", condition != "HepG2_T09") %>%
   left_join(reference_condition) %>%
   mutate(reporter_FC = reporter_activity_minP - reference_activity) %>%
   mutate(TF_dif = ave(reporter_FC, tf, condition, FUN = mean)) %>%
   mutate(TF_dif = ifelse(abs(TF_dif) > 0.5, TF_dif, 0)) %>%
-  mutate(mean_activity = ave(reporter_activity_minP, tf, condition, FUN = mean)) #%>%
-  #filter(mean_activity > 0.5)
+  mutate(mean_activity = ave(reporter_activity_minP, tf, condition, FUN = mean)) %>%
+  mutate(mean_TF_dif = ave(TF_dif, condition, FUN = mean)) %>%
+  mutate(mean_TF_dif2 = ave(TF_dif, tf, FUN = mean)) %>%
+  filter(mean_TF_dif != 0, mean_TF_dif2 != 0)
 
 cDNA_df3[is.na(cDNA_df3)] <- 0
 

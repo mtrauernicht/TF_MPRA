@@ -245,6 +245,9 @@ bc_df_remove <- bc_df %>%
   filter(nchar == 12 & bc_df$library == "2")
 bc_df <- anti_join(bc_df, bc_df_remove)
 
+# Remove 0 count data (as they potentially introduce noise - we cannot discriminate low expression from too shallowly sequenced barcodes)
+bc_df <- bc_df[bc_df$starcode_counts > 0,]
+
 # Compute reads per million to estimate the relative counts in the respective sample
 bc_df <- bc_df %>%
   mutate(rpm = ave(starcode_counts, sample_id, FUN = function(x) (x+1) / sum(x) *1e6 ))
@@ -478,7 +481,13 @@ bc_df_filt2 <- bc_df_filt2 %>%
 
 # Remove samples with low quality manually
 bc_df_filt2 <- bc_df_filt2 %>%
-  filter(!sample_id %in% c("NPC_r2_gcf6881", "mES_r1_gcf7124"))
+  filter(!sample_id %in% c("mES_r1_gcf7124", "K562_r1_gcf7124", "mES_Aldosterone_r4_gcf7124", "mES_GSK4716_r2_gcf7124",
+                           "mES_GSK4716_r4_gcf7124", "mES_Progesterone_r2_gcf7124", "mES_Progesterone_r3_gcf7124", "mES_Progesterone_r4_gcf7124", "mES_r3_gcf7124", 
+                           "mES_r4_gcf7124", "mES_r5_gcf7124", "mES_r6_gcf7124", "mES_SRI011381_r2_gcf7124", "mES_SRI011381_r4_gcf7124", "NPC_5aDHT_r1_gcf7124", 
+                           "NPC_5aDHT_r3_gcf7124", "NPC_ITE_r1_gcf7124", "NPC_ITE_r2_gcf7124", "NPC_ITE_r3_gcf7124", "NPC_SR1078_r1_gcf7124", "NPC_SR1078_r2_gcf7124", 
+                           "NPC_SR1078_r3_gcf7124", "NPC_TCPOBOP_r1_gcf7124", "NPC_TCPOBOP_r2_gcf7124", "NPC_TCPOBOP_r3_gcf7124", "mES_SRI011381_r3_gcf7124"))
+
+## NPC should be done again and the data from gcf6881/7124 should be removed
 
 # Which samples were removed in these steps?
 paste("the following samples were removed due to low quality:", setdiff(unique(bc_df_filt$sample_id), unique(bc_df_filt2$sample_id)))
@@ -939,12 +948,17 @@ bc_df_cDNA_filt$reporter_rpm <- ave(bc_df_cDNA_filt$rpm, bc_df_cDNA_filt$reporte
 #bc_df_cDNA_filt$pval_adj_minP <- adj_pvalues(ihw(pval ~ reporter_rpm,  data = bc_df_cDNA_filt, alpha = 0.1))
 #bc_df_cDNA_filt$pval_adj_neg <- adj_pvalues(ihw(pval_neg ~ reporter_rpm,  data = bc_df_cDNA_filt, alpha = 0.1))
 
+## Export condensed version of the data frame
+bc_df_cDNA_filt_short <- bc_df_cDNA_filt %>%
+  dplyr::select(-tf_activity, -reporter_id2, -mutated_activity, -nfya_activity, -pDNA, -starcode_counts, -nchar, -transfection, -rpm, -reporter_rpm,
+                -barcode_number, -barcode, -activity, -minP_activity, -mean_activity_sample, -mean_activity_sample_neg, -mean_activity_sample_minP, -mean_activity_sample_nfya,
+                -sample_id, -sample, -replicate)  %>%
+  distinct()
+
 # Export bc_df for cDNA analysis
 filename <- SetFileName("_reporter_activity_filt_combined", "mt")
-setwd("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7027_KD_mES/results/")
-write.csv(bc_df_cDNA_filt, file = paste(filename,".csv", sep = ""), row.names = F)
-
-## Export condensed version of the data frame
+setwd("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7124_stimulations/results/")
+write.csv(bc_df_cDNA_filt_short, file = paste(filename,".csv", sep = ""), row.names = F)
 ```
 
 # Session Info
