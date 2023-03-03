@@ -687,8 +687,12 @@ reference_activities <- cDNA_df4 %>%
 reference_activities2 <- merge(cDNA_df2 %>% filter(stimulation == "no") %>% mutate(tf = gsub("_.*", "", tf)), tf_rna, by = c("cell", "tf")) %>%
   mutate(mean_reporter_activity_neg = ave(reporter_activity_neg, tf, condition, FUN = mean)) %>%
   group_by(tf) %>%
-  dplyr::arrange(desc(TPM), desc(mean_reporter_activity_neg)) %>%
-  top_n(1, TPM) %>%
+  dplyr::arrange(desc(TPM)) %>%
+  top_n(1, wt = TPM) %>%
+  ungroup() %>%
+  group_by(reporter_id) %>%
+  dplyr::arrange(desc(mean_reporter_activity_neg)) %>%
+  top_n(1, wt = mean_reporter_activity_neg) %>%
   ungroup() %>%
   mutate(reporter_activity_neg = ave(reporter_activity_neg, reporter_id, cell)) %>%
   distinct(tf, cell, reporter_id, commercial_reporter, reporter_activity_neg) %>%
