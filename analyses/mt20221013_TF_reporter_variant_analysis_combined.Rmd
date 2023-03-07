@@ -770,7 +770,7 @@ cDNA_df6 <- reference_activities %>%
   mutate(off_target_dif = ifelse(is.na(off_target_dif), 0, off_target_dif)) %>%
   mutate(off_target_dif = -off_target_dif) %>%
   mutate(Sensitivity = reporter_dif + reporter_activity_neg) %>%
-  mutate(Specificity = reporter_activity_neg + reporter_dif + off_target_dif + cor_pval) %>%
+  mutate(Specificity = reporter_dif + off_target_dif + cor_pval) %>%
   pivot_longer(cols = c("Sensitivity", "Specificity"), names_to = "quality", values_to = "quality_score") %>%
   mutate(quality_score = ifelse(quality_score < 0, 0, quality_score))
 ```
@@ -798,6 +798,7 @@ cDNA_df_TF <- cDNA_df %>%
   left_join(reference_condition %>% dplyr::select(-tf), by = c("reporter_id", "reference_condition")) %>%
   mutate(reporter_dif =  reference_activity - reporter_activity_neg) %>%
   mutate(background = as.character(background)) %>%
+  mutate(promoter = as.factor(promoter)) %>%
   #mutate(reporter_activity_neg = ifelse(stimulation != "no", reporter_dif, reporter_activity_neg)) %>%
   distinct(reporter_activity_neg, promoter, spacing, distance, background, condition, tf, tf_condition, reporter_id)
 
@@ -954,9 +955,9 @@ predicted_activities <- prediction %>%
 cDNA_df6 <- cDNA_df6 %>%
   left_join(predicted_activities)
 
-#write_tsv(cDNA_df6, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20230302_reporter_scores.tsv")
-#write_tsv(cDNA_df_TF3, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20230302_predicted_activities.tsv")
-#write_tsv(weight, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20230302_lm_weights.tsv")
+write_tsv(cDNA_df6, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20230302_reporter_scores.tsv")
+write_tsv(cDNA_df_TF3, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20230302_predicted_activities.tsv")
+write_tsv(weight, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20230302_lm_weights.tsv")
 ```
 
 
@@ -1151,12 +1152,9 @@ write_tsv(weight, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20230302_lm_w
 
 
 
-```{r, fig.width=9, fig.height=9}
 
 
-# Export data frames for shiny web app
 
-```
 
 
 
