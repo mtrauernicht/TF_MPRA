@@ -360,6 +360,112 @@ names(seq_logos) <- tfs_selected_filt$TF
 ggseqlogo(seq_logos, ncol = 8, scales = "free") + theme_bw()+ theme(strip.background =element_rect(fill="#E6A08A"))
 ```
 
+## Motif similarity clusters
+```{r}
+## Import chosen motifs
+motifs_selected <- tfs_selected_filt %>%
+  mutate(motif_id = gsub(".txt", "", motif_id))
+
+## Plot 1: Show from which clusters I selected the motifs
+tf_clusters <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/lambert_tf_clusters.csv", header = T)
+tf_clusters$year <- gsub(".*([0-9]{4})", "\\1", tf_clusters$Motif.Source)
+tf_clusters$TF <- gsub("(.*?)_.*", "\\1", tf_clusters$Motif.ID)
+tf_clusters$TF <- gsub("V\\$","", tf_clusters$TF)
+tf_clusters <- unique(setDT(tf_clusters)[order(TF, -year)], by = "TF")
+tf_clusters$count <- as.numeric(ave(tf_clusters$Cluster.., tf_clusters$Cluster.., FUN = function(x) length(x)))
+tf_clusters$TF[tf_clusters$TF == "04-Oct"] <- "POU5F1"
+tf_clusters$TF[tf_clusters$TF == "TCF4"] <- "TCF7L2"
+tf_clusters$TF[tf_clusters$TF == "NR1H4"] <- "NR1H4::RXRA"
+tf_clusters$TF[tf_clusters$TF == "NR4A2"] <- "NR4A2::RXRA"
+tf_clusters$TF[tf_clusters$TF == "PPARG"] <- "PPARG::RXRA"
+tf_clusters$TF[tf_clusters$TF == "PPARA"] <- "PPARA::RXRA"
+tf_clusters$TF[tf_clusters$TF == "PPARA"] <- "PPARA::RXRA"
+tf_clusters$TF[tf_clusters$TF == "VDR"] <- "VDR::RXRA"
+
+tf_clusters_mat <- tf_clusters %>%
+  dplyr::select(TF) %>%
+  distinct()
+
+tf_clusters_mat2 <- tf_clusters_mat %>%
+  dplyr::select("TF2" = TF)
+
+tf_clusters_mat <- expand_grid(tf_clusters_mat, tf_clusters_mat2)
+
+clusters <- tf_clusters %>%
+  dplyr::select("cluster" = `Cluster..`, TF)
+
+clusters2 <- tf_clusters %>%
+  dplyr::select("cluster2" = `Cluster..`, "TF2" = TF)
+
+tfs_chosen <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6578_gen2_stimulation-2/mt20211021_bc_annotation_combined.csv") %>%
+  distinct(tf) %>%
+  filter(str_detect(tf, "neg|minP|hBGm|mCMV|andom|promega|TF-seq|romanov|hPGK|RANDOM", neg = T))
+
+tf_clusters_mat <- tf_clusters_mat %>%
+  left_join(clusters) %>%
+  left_join(clusters2) %>%
+  mutate(same_cluster = ifelse(cluster == cluster2, 1, 0)) %>%
+  distinct(TF, TF2, same_cluster) 
+
+tf_clusters_mat2 <- tf_clusters_mat %>%
+  spread(key = "TF2", value = "same_cluster") %>%
+  column_to_rownames("TF") %>%
+  as.matrix()
+
+ord <- hclust( dist(tf_clusters_mat2, method = "manhattan"), method = "ward.D" )$order
+
+tf_clusters_mat <- tf_clusters_mat %>%
+  mutate(TF = factor(TF, levels = rownames(tf_clusters_mat2)[ord]),
+         TF2 = factor(TF2, levels = rownames(tf_clusters_mat2)[ord])) %>%
+  mutate(same_cluster = ifelse(same_cluster == 1, "Yes", "No")) %>%
+  mutate(same_cluster = ifelse(TF == TF2 & TF %in% tfs_chosen$tf, "Chosen", same_cluster))
+
+ggplot(tf_clusters_mat,
+       aes(x = TF, y = TF2, fill = same_cluster)) +
+  geom_tile_rast() +
+  scale_fill_manual(values = c("Yes" = "grey90", "No" = "white", "Chosen" = "red")) +
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        legend.position = "none")
+
+## Plot 2: Show the similarity between the chosen TFBSs
+motif_similarity <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/MotifSimMatrix_Lambert_2018.csv")
+
+motif_similarity <- motif_similarity[,-1404] 
+
+motif_similarity_df <- motif_similarity %>%
+  pivot_longer(cols = - '...1', names_to = "motif2", values_to = "similarity") %>%
+  dplyr::select("motif1" = `...1`, motif2, similarity) %>%
+  mutate(similarity = as.numeric(similarity)) 
+
+motif_similarity_df_selected <- motif_similarity_df %>%
+  filter(motif1 %in% motifs_selected$motif_id & motif2 %in% motifs_selected$motif_id) %>%
+  replace(is.na(.), 0)
+
+motif_similarity_mat <- motif_similarity_df_selected %>%
+  spread(key = "motif2", value = "similarity") %>%
+  column_to_rownames("motif1")
+
+ord <- hclust( dist(motif_similarity_mat, method = "manhattan"), method = "ward.D" )$order
+
+motif_similarity_df_selected <- motif_similarity_df_selected %>%
+  mutate(motif1 = factor(motif1, levels = rownames(motif_similarity_mat)[ord]),
+         motif2 = factor(motif2, levels = rownames(motif_similarity_mat)[ord]))
+
+ggplot(motif_similarity_df_selected,
+       aes(x = motif1, y = motif2, fill = similarity)) +
+  geom_tile_rast() +
+  scale_fill_gradient(low = "white", high = "black") +
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        legend.position = "none")
+
+```
+
 
 ### Create DNA barcodes
 This code was used to create unique 13-bp barcodes that do not overlap previously chosen (pMT02) barcodes.
