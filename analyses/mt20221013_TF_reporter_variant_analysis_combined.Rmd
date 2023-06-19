@@ -23,7 +23,7 @@ output:
 ---
 
 ### Aim
-35,500 reporters for 86 TFs were transfected into 9 different cell types + treated with ~90 different siRNAs or various signaling molecules. In this script I will analyze TF reporter activities in detail and review how individual reporters respond to TF concentration variations.
+~36,000 reporters for 86 TFs were transfected into 9 different cell types + treated with ~90 different siRNAs or various signaling molecules. In this script I will analyze TF reporter activities in detail and review how individual reporters respond to TF concentration variations.
 
 
 ### Description of input data
@@ -46,10 +46,6 @@ output:
 - reporter_activity_neg = mean of mean_activity_sample_neg per condition
 - pval_minP = p-value of t-test comparing activity distributions of individual reporters with the distribution of minimal promoter only reporters within the same condition
 - pval_neg = p-value of t-test comparing activity distributions of individual reporters with the distribution of the activities of its paired negative controls within the same condition
-
-
-### Main tested conditions:
-- HepG2 + TF-KD / NT
 
 ---
 
@@ -666,6 +662,194 @@ ggplot(cDNA_df3 %>%
 #   theme_classic_lines_90()
 ```
 
+---
+
+## Add proteomics data
+```{r}
+## Import proteomics data from depmap
+proteomics_df <- read_csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/Proteomics_subsetted_NAsdropped.csv") %>%
+  dplyr::select(-depmap_id, -lineage_1, -lineage_2, -lineage_3, -lineage_4, -lineage_5, -lineage_6) %>%
+  pivot_longer(cols = -cell_line_display_name, names_to = "gene", values_to = "protein_abundance")
+
+proteomics_df_long <- proteomics_df %>%
+  mutate(gene = gsub(" (.*)", "", gene)) %>%
+  filter(gene %in% tfs$tf) %>%
+  mutate(min_abundance = min(protein_abundance, na.rm = T))
+
+proteomics_df_long$cell_line_display_name[proteomics_df_long$cell_line_display_name == "HEPG2"] <- "HepG2"
+
+proteomics_df_long$protein_abundance[is.na(proteomics_df_long$protein_abundance)] <- unique(proteomics_df_long$min_abundance)
+  
+proteomics_df_long <- proteomics_df_long %>%
+  mutate(protein_abundance = ave(protein_abundance, gene, cell_line_display_name, FUN = function(x) mean(x, na.rm = T))) %>%
+  dplyr::select(protein_abundance, "tf" = gene, "cell" = cell_line_display_name) %>%
+  distinct() 
+
+## Combine TF reporter data with RNA-seq data
+cDNA_df3 <- merge(cDNA_df2, proteomics_df_long, all = T) %>%
+  na.omit()
+
+## Compute spearman correlations for each individual reporter of reporter activity vs. TPM counts across the nine cell types
+for (i in unique(cDNA_df3$reporter_id)) {
+  if (nrow(cDNA_df3[cDNA_df3$reporter_id == i,]) > 2) {
+  cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- -log10(cor.test(cDNA_df3$reporter_activity_neg[cDNA_df3$reporter_id == i], cDNA_df3$protein_abundance[cDNA_df3$reporter_id == i], method = "pearson", exact = F)$p.value)
+  cDNA_df3$cor[cDNA_df3$reporter_id == i] <- cor(cDNA_df3$reporter_activity_neg[cDNA_df3$reporter_id == i], cDNA_df3$protein_abundance[cDNA_df3$reporter_id == i], method = "pearson")
+  }
+  else {
+    cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- 1
+    cDNA_df3$cor[cDNA_df3$reporter_id == i] <- 0
+  }
+}
+
+## I am only interested in positive correlations, so set all negative correlations to zero
+cDNA_df3 <- cDNA_df3 %>%
+  mutate(cor_pval = ifelse(cor < 0, 0, cor_pval))
+
+## Set Inf values to max per TF
+cDNA_df3 <- cDNA_df3 %>%
+  group_by(tf) %>%
+  mutate(cor_pval = ifelse(is.finite(cor_pval), cor_pval, max(cor_pval[is.finite(cor_pval)]))) %>%
+  ungroup()
+
+## Export correlations
+protein_correlations <- cDNA_df3 %>%
+  distinct(reporter_id, cor_pval, cor)
+
+## Correlate RNA and protein correlations
+rna_protein_cor <- merge(protein_correlations %>% dplyr::select(reporter_id, "prot_cor" = cor_pval), rna_correlations %>% dplyr::select(reporter_id, "rna_cor" = cor_pval), all = T) %>%
+  replace(is.na(.), 0)
+
+ggplot(rna_protein_cor %>%
+         mutate(tf = gsub("(.*)_.*_.*_.*_.*", "\\1", reporter_id)) %>%
+         mutate(source = gsub(".*_(.*)", "\\1", tf)) %>%
+         mutate(source = ifelse(source == "TF-romanov", "romanov", source)) %>%
+         mutate(source = ifelse(!source %in% c("romanov", "TF-seq", "promega"), "designed", source)) %>%
+         mutate(tf = gsub("_.*", "", tf)),
+       aes(x = prot_cor, y = rna_cor)) +
+  geom_point(aes(color = source)) +
+  geom_smooth(method = "lm") +
+  theme_pubr() +
+  facet_wrap(~tf)
+  
+
+ggplot_custom(cDNA_df3 %>%
+                filter(commercial_reporter == "No") %>%
+                distinct(reporter_id, cor_pval, tf, commercial_reporter) %>%
+                mutate(mean_cor_pval = ave(cor_pval, tf, FUN = mean)) %>%
+                mutate(sign = ifelse(cor_pval < 1.30103, "No", "Yes")) %>%
+                filter(tf %in% c("HNF4A", "GATA4", "ESR1", "THRB", "GATA1")),
+       aes(x = reorder(tf, -mean_cor_pval), y = cor_pval, color = sign)) +
+  geom_quasirandom() +
+  geom_hline(yintercept = 1.30103, lty = 2) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+           filter(reporter_id %in% c("GATA1_5bp_10bp_minP_3", "GATA1_10bp_10bp_minP_3")) %>%
+           distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+    geom_abline(lty = 2) +
+    geom_smooth(method = "lm", color = "black") +
+    geom_point(size = 2) +
+    facet_wrap(~reporter_id, ncol = 1) +
+    theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+           filter(reporter_id %in% c("HOMEZ_10bp_10bp_minP_1", "HOMEZ_5bp_10bp_minP_1")) %>%
+           distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+    geom_abline(lty = 2) +
+    geom_smooth(method = "lm", color = "black") +
+    geom_point(size = 2) +
+    facet_wrap(~reporter_id, ncol = 1) +
+    theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("NR3C1_10bp_21bp_hBGm_3", "NR3C1_10bp_10bp_minP_2")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point() +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("STAT3_10bp_10bp_minP_3", "STAT3_10bp_10bp_minP_1")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point(size = 2) +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("WT1_10bp_21bp_mCMV_1", "WT1_5bp_21bp_mCMV_1")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point() +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("SMAD4_10bp_21bp_minP_2", "SMAD4_5bp_21bp_minP_2")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point(size = 2) +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("SRF_10bp_21bp_mCMV_3", "SRF_5bp_21bp_mCMV_3")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point(size = 2) +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("SOX2_5bp_10bp_minP_2", "SOX2_10bp_10bp_minP_2")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point(size = 2) +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("RXRA_10bp_21bp_mCMV_3", "RXRA_5bp_21bp_mCMV_3")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point(size = 2) +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("OTX1_5bp_10bp_minP_2", "OTX1_10bp_10bp_minP_2")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point(size = 2) +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+
+```
+Some reporter activities correlate surprisingly well with protein abundance.
+
+
+
+---
 
 ## Include infered activity from regulon expression
 ```{r}
@@ -1038,10 +1222,11 @@ off_target_activities <- off_target_activities %>%
 
 cDNA_df6 <- reference_activities %>%
   left_join(perturbation_df) %>%
-  left_join(rna_correlations) %>%
+  left_join(rna_protein_cor) %>%
   #left_join(viper_correlations) %>%
   left_join(off_target_activities) %>%
   mutate(reporter_dif = ifelse(is.na(reporter_dif), 0, reporter_dif)) %>%
+  mutate(cor_pval = base::pmax(rna_cor, prot_cor)) %>%
   #mutate(viper_cor_pval = ifelse(is.na(viper_cor_pval), 0, viper_cor_pval)) %>%
   mutate(off_target_dif = ifelse(is.na(off_target_dif), 0, off_target_dif)) %>%
   mutate(off_target_dif = -off_target_dif) %>%
@@ -1059,7 +1244,7 @@ ggplot(cDNA_df %>%
            y = log2(U2OS_Calcitriol), 
            shape = commercial_reporter, 
            color = promoter)) +
-  geom_hline(yintercept = 0, lty = 2) +
+  geom_hline(yintercept = 0, lty = 2) + 
   geom_vline(xintercept = 0, lty = 2) +
   geom_abline(lty = "twodash") +
   geom_point(size = 2.5) +
