@@ -1,0 +1,2 @@
+run	basename	celltype	treatment	replicate	read1	read2
+GSE169929	SRR14103347	MCF7	DMSO	R1	/DATA/usr/m.trauernicht/data/ATAC/GSE169929_SRR14103347_1.fastq	/DATA/usr/m.trauernicht/data/ATAC/GSE169929_SRR14103347_2.fastq
