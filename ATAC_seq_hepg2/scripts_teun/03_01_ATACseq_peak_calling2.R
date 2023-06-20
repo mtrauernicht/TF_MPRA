@@ -9,7 +9,7 @@ path_bgzip <- "/DATA/usr/t.filipovska/software/Miniconda3/pkgs/tabix-0.2.6-ha92a
 
 files_df <- readRDS("/DATA/usr/t.filipovska/projects/ATAC-seq_TF-footprinting/analysis/rds/bamfile_atacseq_metadata2.rds")
 macs2 <- "/DATA/usr/t.filipovska/software/Miniconda3/envs/tf_activity/bin/macs2"
-peak_dir <- "/DATA/usr/t.filipovska/projects/ATAC-seq_TF-footprinting/analysis/bed_peaks/20210610"
+peak_dir <- "/DATA/usr/m.trauernicht/projects/SuRE-TF/ATAC_seq_hepg2/bed_peaks"
 
 exps <- split(files_df$tabix_file, files_df$run)
 #exps[names(exps) != "technical"]
@@ -27,7 +27,7 @@ merge_tabixes <- function(files, out_file = tempfile(fileext = ".bed.gz")) {
 
 call_macs2 <- function(file, name) {
   cmd <- glue(
-    "{macs2} callpeak -t {file} -f BEDPE -g hs -n {name}", # change mm to hg for human
+    "{macs2} callpeak -t {file} -f BEDPE -g hs -n {name}", # change mm to hs for human
     " --nomodel --outdir {peak_dir} --keep-dup all"
   )
   system(cmd)
