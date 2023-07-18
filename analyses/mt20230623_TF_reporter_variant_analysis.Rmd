@@ -1,0 +1,2727 @@
+---
+title: "Multiplexed identification of TF-specific reporters"
+author: 
+  - name: "Max Trauernicht"
+    email: "m.trauernicht@nki.nl"
+    affiliation: "Netherlands Cancer Institute - van Steensel lab"
+
+date: '`r format(Sys.time(), "%d/%m/%Y")`'
+output:
+  html_document:
+    theme: united
+    highlight: pygments
+    fig_caption: yes
+    code_folding: hide
+    df_print: kable
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: false
+---
+
+---
+
+### Aim
+~36,000 reporters for 86 TFs were transfected into 9 different cell types + treated with ~90 different siRNAs or various signaling molecules. In this script I will analyze TF reporter activities in detail and review how individual reporters respond to TF concentration variations.
+
+
+### Description of input data
+- library = with which library was this sample transfected (1, 2, or 1+2)
+- nchar = barcode length (12 for library 1, 13 for library 2)
+- commercial_reporter = positive control reporter sequence from commercial source
+- neg_ctrls = reporter with mutated TF binding sites?
+- hPGK = positive control, chunk from hPGK promoter (only in lib 1)
+- native_enhancer = genomic mES enhancer sequence chunks from Miguels libraries (only lib 1)
+- activity = rpm + pseudocount cDNA / rpm + pseudocount pDNA
+- mean_activity_sample = mean of activity per unique reporter per sample (individually per replicate)
+- reporter_activity = mean activity per unique reporter per condition (mean of replicates)
+- minP_activity = activity relative to mean of minimal promoter only reporters of that sample
+- mean_activity_sample_minP = mean of minP_activity per unique reporter 
+- reporter_activity_minP = mean of mean_activity_sample_minP per condition
+- nfya_activity = activity relative to mean of nfya reporters (constitutive positive control) of that sample
+- mean_activity_sample_nfya = mean of nfya_activity per unique reporter 
+- reporter_activity_nfya = mean of mean_activity_sample_nfya per condition
+- mean_activity_sample_neg = mean_activity_sample relative to its paired negative control (identical reporter with mutated binding sites)
+- reporter_activity_neg = mean of mean_activity_sample_neg per condition
+- pval_minP = p-value of t-test comparing activity distributions of individual reporters with the distribution of minimal promoter only reporters within the same condition
+- pval_neg = p-value of t-test comparing activity distributions of individual reporters with the distribution of the activities of its paired negative controls within the same condition
+
+---
+
+## Setup {.tabset}
+
+<!-- little HTML script to do indentation of the table of contents -->
+<script>
+    $(document).ready(function() {
+      $items = $('div#TOC li');
+      $items.each(function(idx) {
+        num_ul = $(this).parentsUntil('#TOC').length;
+        $(this).css({'text-indent': num_ul * 10, 'padding-left': 0});
+      });
+
+    });
+</script>
+
+```{css, echo = FALSE}
+div.sourceCode {
+  overflow-x: hidden;
+}
+```
+
+### Libraries 
+
+```{r setup, out.width= "80%", fig.align= "center", warning = FALSE, message= FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+StartTime <-Sys.time()
+
+# 8-digit Date tag:
+Date <- substr(gsub("-","",Sys.time()),1,8) 
+# libraries:
+library(RColorBrewer)
+library(ggplot2)
+library(dplyr)
+library(maditr)
+library(tibble)
+library(pheatmap)
+library(ggpubr)
+library(visNetwork)
+library(ggbeeswarm)
+library(ggforce)
+library(viridis)
+library(plyr)
+library(igraph)
+library(ggraph)
+library(cowplot)
+library(gridExtra)
+library(pROC)
+library(tidyr)
+library(stringr)
+library(randomForest)
+library(ggrastr)
+library(readr)
+library(ggbiplot)
+library(IHW)
+library(biomaRt)
+library(ggh4x)
+library(ggiraph)
+library(plotly)
+library(AMR)
+```
+
+### Functions
+
+```{r out.width= "80%", fig.align= "center"}
+### Custom functions
+SetFileName <- function(filename, initials) {
+  # Set filename with extension and initials to make filename with date integrated.
+  filename <- substitute(filename)
+  initials <- substitute(initials)
+  filename <- paste0(initials, Date, filename)
+  filename
+}
+
+
+# Extract p-value from linear model
+lmp <- function (modelobject) {
+    if (class(modelobject) != "lm") stop("Not an object of class 'lm' ")
+    f <- summary(modelobject)$fstatistic
+    p <- pf(f[1],f[2],f[3],lower.tail=F)
+    attributes(p) <- NULL
+    return(p)
+}
+
+# Set custom ggplot2 theme and custom colors
+theme_classic_lines <- function() {
+  theme_pubr(border = F, legend = "top") +
+            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.25),
+                  strip.background = element_rect(fill = "#ced4da")
+            )
+}
+
+theme_classic_lines_45 <- function() {
+  theme_pubr(border = T, legend = "top", x.text.angle = 45) +
+            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.25),
+                  strip.background = element_rect(fill = "#ced4da")
+            )
+}
+
+theme_classic_lines_90 <- function() {
+  theme_pubr(border = T, legend = "top", x.text.angle = 90) +
+            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.25),
+                  strip.background = element_rect(fill = "#ced4da")
+            )
+}
+
+theme_barplot <- function() {
+  theme_pubr(border = T, legend = "none") +
+            theme(panel.grid.major.x = element_line(colour = "black", size = 0.25),
+                  strip.background = element_blank(),
+                  strip.text = element_text(face="bold", hjust=0)
+            )
+}
+
+theme_set(theme_classic_lines())
+
+colors_diverse <- c("#264653", "#9AC1AE", "#5D987B", "#f2cc8f", "#e76f51")
+
+ggplot_custom <- function(...) ggplot2::ggplot(...) + 
+  scale_color_manual(values = colors_diverse) + 
+  scale_fill_manual(values = colors_diverse)
+```
+
+### Loading data
+
+```{r out.width= "80%", fig.align= "center"}
+# Import processed bc counts from the preprocessing step
+cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7124_stimulations/results/mt20230511_reporter_activity_filt_combined.csv", header = T)
+
+cDNA_df$stimulation[is.na(cDNA_df$stimulation)] <- "no"
+
+# final measure of reporter activity: combination of reporter_activity_minP and reporter_activity_neg
+## for most reporters I will take reporter_activity_neg, however, this cannot be done for commercial controls for example
+cDNA_df <- cDNA_df %>%
+  mutate(reporter_activity_neg = ifelse(tf %in% c("POU5F1::SOX2", "NR1H4::RXRA", "CEBPB", "STAT1::STAT2", "THRA") | commercial_reporter == "Yes" | is.na(reporter_activity_neg), reporter_activity_minP, reporter_activity_neg)) %>%
+  mutate(tf = gsub("^SOX9", "SOXE", tf)) %>%
+  mutate(reporter_id = gsub("^SOX9(.*)", "SOXE\\1", reporter_id)) %>%
+  mutate(tf = gsub("^SOX2", "SOX9", tf)) %>%
+  mutate(reporter_id = gsub("^SOX2(.*)", "SOX9\\1", reporter_id)) %>%
+  mutate(tf = gsub("^SOXE", "SOX2", tf)) %>%
+  mutate(reporter_id = gsub("^SOXE(.*)", "SOX2\\1", reporter_id))
+
+# Load RNA-seq data
+tf_rna <- read_tsv("/DATA/usr/m.trauernicht/data/RNA_seq/rna_tpm_all_tfs.tsv")
+
+## Compute fold-changes upon perturbation
+## Prepare data frame
+cDNA_df2 <- cDNA_df %>%
+  #filter(tf != "RFX1") %>%
+  dplyr::filter(neg_ctrls == "No", 
+                #commercial_reporter == "No", 
+                hPGK == "No", 
+                str_detect(tf, "RANDOM", negate = T), 
+                native_enhancer == "No") %>%
+  distinct(tf, condition, reporter_activity_neg, stimulation, reference_condition, cell, reporter_activity_neg, reporter_id, commercial_reporter) %>%
+  mutate(reporter_activity_neg = log2(reporter_activity_neg)) %>%
+  distinct()
+
+# Export for shiny app
+#write_tsv(cDNA_df2, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20230302_all_activities.tsv")
+
+## Make separate data frame for reference conditions - this will be used for normalizing the other conditions
+reference_condition <- cDNA_df2 %>%
+  filter(condition %in% reference_condition) %>%
+  dplyr::select(-reference_condition, "reference_condition" = condition, -stimulation, "reference_activity" = reporter_activity_neg, reporter_id) %>%
+  mutate(reference_activity = ave(reference_activity, reporter_id, reference_condition, FUN = mean)) %>%
+  distinct()
+
+## Normalize KD conditions
+cDNA_df3 <- cDNA_df2 %>% 
+  left_join(reference_condition) %>%
+  filter(stimulation == "KD") %>%
+  mutate(condition = gsub("HepG2_|mES_", "", condition)) %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  filter(tf == condition) %>%
+  mutate(reporter_dif =  reference_activity - reporter_activity_neg)
+
+## Normalize pathway stimulations
+stimulations <- data.frame(condition = c("HepG2_CDCA", "HepG2_Rif", "HepG2_T09", "HepG2_Wy", "mES_2i", "mES_BX", "mES_HQ", "mES_IWP2", "mES_LIF_CH", "mES_LIF_PD", "mES_LIF_PD",
+                                          "mES_vitC", "A549_Dex_100", "A549_Nutlin", "mES_Bmp4", "mES_Dex", "mES_FK", "mES_LPS", "mES_N2B27_Bmp4", "mES_N2B27_RA", "mES_N2B27_Shh", 
+                                         "mES_Nutlin", "mES_RA", "mES_Shh", "mES_vitA", "U2OS_FK", "U2OS_LPS",
+                                         "HCT116_cDIM12", "U2OS_Calcitriol", "U2OS_PMA", "HCT116_GSK4112", "MCF7_Hexestrol", "MCF7_DIMc", 
+                                         "HCT116_Calcimycin", "HCT116_Calcimycin", "HCT116_SR8278", "HCT116_SRI011381", "HCT116_ITE", "U2OS_Aldosterone", "U2OS_SRI1078", "U2OS_Cytosporone",
+                                         "U2OS_AICAR", "U2OS_Wortmannin", "U2OS_Heat", "A549_5aDHT", "A549_TCPOBOP", "K562_T3", "K562_T3", "mES_Progesterone", "mES_GSK4716"),
+                           tf = c("NR1H4::RXRA", "NR1I2", "NR1H2", "PPARA::RXRA", "STAT3", "IRF3", "NFE2L2", "OTX1", "EGR1", "TCF7", "TCF7L2", "NFE2L2", "NR3C1", "TP53", "SMAD4", "NR3C1", 
+                                  "CREB1", "IRF3", "SMAD4","RARA", "GLI1", "TP53", "RARA", "GLI1", "RARA", "CREB1", "IRF3", "NR4A2::RXRA", "VDR::RXRA", "NFKB1", "NR1D1", "ESR1", "NR4A1",
+                                  "NFAT5", "NFATc1", "NR1D1", "SMAD2::SMAD3::SMAD4", "AHR::ARNT", "NR3C2", "RORA", "NR4A1", "TEAD1", "FOXO1", "HSF1", "AR", "NR1I3", "THRA", "THRB", "PGR", "ESRRB"),
+                           effect_size = c(1,1,1,1,0,0,1,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1))
+
+stimulations_effective <- data.frame(condition = c("HepG2_CDCA", "HepG2_Rif", "mES_2i", "mES_BX", "mES_HQ", "mES_IWP2", "mES_LIF_CH", "mES_LIF_PD", "mES_LIF_PD",
+                                          "mES_vitC", "A549_Nutlin", 
+                                        "mES_vitA",
+                                         "U2OS_Calcitriol", "U2OS_PMA", "MCF7_Hexestrol", 
+                                         "HCT116_Calcimycin", "HCT116_Calcimycin", "HCT116_ITE",
+                                         "U2OS_AICAR", "U2OS_Heat", "K562_T3", "K562_T3", "U2OS_FK"),
+                           tf = c("NR1H4::RXRA", "NR1I2", "STAT3", "IRF3", "NFE2L2", "OTX1", "EGR1", "TCF7", "TCF7L2", "NFE2L2", "TP53", 
+                                  "RARA", "VDR::RXRA", "NFKB1", "ESR1",
+                                  "NFAT5", "NFATc1", "AHR::ARNT", "TEAD1", "HSF1", "THRA", "THRB", "IRF3"),
+                           effect_size = c(1,1,0,0,1,1,1,0,0,0,1,0,1,1,1,1,1,1,0,1,1,1,1))
+
+cDNA_df4 <- cDNA_df2 %>%
+  left_join(reference_condition) %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  filter(stimulation == "pathway") %>%
+  mutate(reporter_dif =  reference_activity - reporter_activity_neg)
+
+cDNA_df4 <- merge(cDNA_df4, stimulations_effective) ## Only keep relevant TF reporters
+
+cDNA_df4 <- cDNA_df4 %>%
+  mutate(reporter_dif = ifelse(effect_size == 1, -reporter_dif, reporter_dif)) %>% ## Change sign of difference, based on whether the stimulation should cause an increase or decrease (effect_size)
+  dplyr::select(-effect_size)
+
+## Normalize degron conditions
+cDNA_df_degron <- cDNA_df2 %>% 
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  left_join(reference_condition) %>%
+  filter(stimulation == "degron") %>%
+  filter(condition != "mES_Nanog_AID") %>% ## Doesn't have a direct target (I don't have Nanog reporters)
+  mutate(target_tf = toupper(gsub("mES_(.*)_AID", "\\1", condition)))
+
+cDNA_df_degron2 <- cDNA_df_degron
+cDNA_df_degron2$target_tf[cDNA_df_degron2$condition == "mES_Sox2_AID"] <- "SOX2"
+cDNA_df_degron3 <- cDNA_df_degron
+cDNA_df_degron3$target_tf[cDNA_df_degron3$condition == "mES_Pou5f1_AID"] <- "POU5F1::SOX2"
+cDNA_df_degron4 <- cDNA_df_degron
+cDNA_df_degron4$target_tf[cDNA_df_degron4$condition == "mES_Pou5f1_AID"] <- "POU5F1"
+cDNA_df_degron5 <- cDNA_df_degron
+cDNA_df_degron5$target_tf[cDNA_df_degron5$condition == "mES_Sox2_AID"] <- "POU5F1::SOX2"
+cDNA_df_degron <- rbind(cDNA_df_degron, cDNA_df_degron2, cDNA_df_degron3, cDNA_df_degron4, cDNA_df_degron5)
+cDNA_df_degron <- cDNA_df_degron %>% 
+  filter(tf == target_tf) %>%
+  mutate(reporter_dif =  reference_activity - reporter_activity_neg) %>%
+  dplyr::select(-target_tf)
+
+## Combine stimulations and KDs 
+perturbation_df <- rbind(cDNA_df3, cDNA_df4, cDNA_df_degron) %>% ## Combine all perturbation data
+  mutate(condition_2 = paste(condition, reference_condition)) %>%
+  mutate(mean_reporter_dif = ave(reporter_dif, condition_2, tf, FUN = function(x) mean(x, na.rm = T))) %>%
+  group_by(tf) %>%
+  arrange(desc(mean_reporter_dif)) %>% 
+  top_n(1, wt = mean_reporter_dif) %>% ## Some TFs have multiple perturbations: for those I only keep the strongest perturbations (on average across all reporters)
+  ungroup() %>%
+  mutate(reporter_dif = ifelse(tf == "CEBPB", -reporter_dif, reporter_dif)) %>%
+  dplyr::select(reporter_id, tf, commercial_reporter, "perturbation_condition" = condition, reporter_dif) %>%
+  distinct()
+
+## Define optimal candidate conditions for each TF: either the highest expressing cell line, or the stimulated condition
+### All stimulation conditions
+ref_conditions1 <- cDNA_df4 %>%
+  right_join(stimulations_effective) %>%
+  filter(effect_size == 1) %>%
+  distinct(tf, condition, cell, reporter_id, commercial_reporter, reporter_activity_neg) %>%
+  group_by(tf, condition) %>%
+  dplyr::arrange(desc(reporter_activity_neg)) %>%
+  top_n(10) %>%
+  ungroup() %>%
+  mutate(median_reporter_activity_neg = ave(reporter_activity_neg, tf, condition, FUN = median)) %>%
+  group_by(tf) %>%
+  arrange(desc(median_reporter_activity_neg)) %>%
+  top_n(1) %>%
+  ungroup() %>%
+  distinct(tf, condition)
+
+### Top 2 conditions per TF based on highest TPM and highest median reporter activity
+cDNA_df2 <- cDNA_df %>%
+  #filter(tf != "RFX1") %>%
+  dplyr::filter(neg_ctrls == "No", 
+                #commercial_reporter == "No", 
+                hPGK == "No", 
+                str_detect(tf, "RANDOM", negate = T), 
+                native_enhancer == "No") %>%
+  distinct(tf, condition, reporter_activity_neg, stimulation, reference_condition, cell, reporter_activity_neg, reporter_id, commercial_reporter) %>%
+  mutate(reporter_activity_neg = log2(reporter_activity_neg)) %>%
+  distinct()
+
+ref_conditions2 <- merge(cDNA_df2 %>% filter(stimulation == "no") %>% mutate(tf = gsub("_.*", "", tf)), tf_rna, by = c("cell", "tf")) %>%
+  mutate(mean_reporter_activity_neg = ave(reporter_activity_neg, tf, condition, FUN = median)) %>%
+  distinct(mean_reporter_activity_neg, tf, condition, TPM) %>%
+  filter(!condition %in% c("mES_Nanog_ctrl", "mES_Pou5f1_ctrl", "mES_Sox2_AID_UMI", "mES_Sox2_ctrl", "mES_NT", "HepG2_NT")) %>%
+  group_by(tf) %>%
+  dplyr::arrange(desc(TPM)) %>%
+  top_n(n = 3, wt = TPM) %>%
+  ungroup() %>%
+  group_by(tf) %>%
+  dplyr::arrange(desc(mean_reporter_activity_neg)) %>%
+  top_n(n = 2, wt = mean_reporter_activity_neg) %>%
+  ungroup() %>%
+  distinct(tf, condition)
+
+## Now I combine both to have 2-3 top conditions per TF
+ref_conditions <- rbind(ref_conditions1, ref_conditions2)
+
+## Include reporter specificities based on KD of related TFs: I want to punish reporters that reduce activity upon KD of related TFs
+related_tfs <- data.frame(tf = c("CREB1", "FOS::JUN", "CEBPB", "XBP1", "CEBPB", "FOS::JUN", "CREB1", "ELK1", "ETS2", "ELK1", "ETS2", "ELK1", "FOXA1", "FOXA1", "GATA1", "GATA4", "GATA1", "HNF4A", "IRF3", "TP53", "IRX3",
+                                 "KLF4", "SP1", "MAF::NFE2", "NFE2L2", "NFKB1", "NFYA", "NR1H2", "PPARA::RXRA", "NFKB1", "REL", "IRF3", "STAT3", "TCF7", "TCF7L2", "TFCP2L1", "TFCP2L1", "GRHL1", "THRB", "THRA", "TP53", "TFCP2L1",
+                                 "E2F1", "E2F1", "SP1", "EGR1", "EGR1", "KLF4", "KLF4", "SP1", "SP1", "NFIA", "HSF1", "KLF4", "MEF2A", "PPARG::RXRA", "ESRRB", "POU2F1", "POU5F1", "POU5F1::SOX2", "PPARG::RXRA",
+                                 "PPARA::RXRA", "NR1H2", "NR1H2", "SOX2", "SOX9", "SOX2", "SOX9", "TCF7", "TCF7L2", "TEAD1", "STAT1::STAT2"),
+                          related_tf = c("ATF2", "ATF2", "ATF4", "ATF6", "CEBPG", "CREB1", "FOS::JUN", "ETS1", "ELK1", "ETS2", "ETS1", "ETV4", "FOXA2", "FOXP1", "GATA2", "GATA2", "GATA4", "HNF4G", "IRF2", "IRX3", "TP53",
+                                         "SP1", "KLF4", "NFE2L2", "MAF::NFE2", "NFKB2", "NFYB", "PPARA", "NR1H2", "REL", "NFKB1", "STAT1::STAT2", "STAT1::STAT2", "TCF7L2", "TCF7", "TFCP2", "GRHL1", "TFCP2L1", "THRA", "THRB", 
+                                         "TP73", "UBP1", "E2F2", "E2F3", "EGR1", "SP1", "KLF4", "SP1", "EGR1", "KLF4", "EGR1", "HIC2", "HSF2", "KLF9", "MEF2B", "NR1H2", "NR5A2", "POU5F1", "POU2F1", "POU2F1", "PPARA::RXRA",
+                                         "PPARG::RXRA", "PPARA::RXRA", "PPARG::RXRA", "SOX13", "SOX13", "SOX9", "SOX2", "TCF7L1", "TCF7L1", "TEAD2", "STAT3"))
+
+## Off-targets based on KD of related TFs
+off_target_activities <- cDNA_df2 %>% 
+  left_join(reference_condition) %>%
+  filter(stimulation == "KD") %>%
+  mutate(condition = gsub("HepG2_|mES_", "", condition)) %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  mutate(reporter_dif =  reference_activity - reporter_activity_neg) %>%
+  left_join(related_tfs) %>%
+  na.omit() %>%
+  filter(condition == related_tf) %>%
+  mutate(reporter_dif = ave(reporter_dif, reporter_id, FUN = mean)) %>% ## Some TFs have multiple related TFs for which I have KD data: I will compute the mean over the related TFs per reporter
+  dplyr::select(reporter_id, tf, commercial_reporter, "off_target_activity" = reporter_dif, "off_target" = related_tf) %>%
+  distinct() %>%
+  group_by(reporter_id) %>%
+  top_n(1) %>%
+  ungroup() %>%
+  mutate(off_target = gsub("(.*)", "\\1_KD", off_target))
+
+## Also: punish reporters that are active in cells where the TF is not expressed
+off_target_activities2 <- cDNA_df2 %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  left_join(tf_rna) %>%
+  filter(TPM == 0, stimulation == "no") %>%
+  mutate(off_target_activity = ave(reporter_activity_neg, reporter_id, FUN = mean)) %>%
+  distinct(reporter_id, off_target_activity, tf, commercial_reporter) %>%
+  mutate(off_target = "Expression_0TPM")
+
+## Off-targets based on degrons
+related_tfs2 <- data.frame(condition = c("mES_Sox2_AID", "mES_Pou5f1_AID"),
+                          related_tf = c("SOX9", "POU2F1"))
+
+off_target_activities3 <- cDNA_df2 %>% 
+  left_join(reference_condition) %>%
+  filter(stimulation == "degron") %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  mutate(reporter_dif =  reference_activity - reporter_activity_neg) %>%
+  left_join(related_tfs2) %>%
+  na.omit() %>%
+  filter(tf == related_tf) %>%
+  dplyr::select(reporter_id, tf, commercial_reporter, "off_target_activity" = reporter_dif, "off_target" = related_tf) %>%
+  mutate(off_target = ifelse(off_target == "SOX9", "SOX2_AID", "POU5F1_AID")) %>%
+  distinct()
+
+off_target_activities <- rbind(off_target_activities,off_target_activities2,off_target_activities3)
+
+off_target_activities <- off_target_activities %>%
+  dplyr::select(reporter_id, off_target_activity, tf, off_target) %>%
+  mutate(mean_off_target_activity = ave(off_target_activity, tf, off_target, FUN = mean)) %>%
+  group_by(tf) %>%
+  arrange(desc(mean_off_target_activity)) %>% 
+  top_n(1, wt = mean_off_target_activity) %>% ## Some TFs have multiple perturbations: for those I only keep the strongest off-target effect (on average across all reporters)
+  ungroup() %>%
+  group_by(reporter_id) %>%
+  arrange(desc(off_target_activity)) %>% 
+  top_n(1, wt = off_target_activity) %>%
+  distinct(reporter_id, off_target_activity, off_target) %>%
+  mutate(off_target_activity = ifelse(off_target_activity < 0, 0, off_target_activity))
+```
+
+---
+
+## Investigate individual reporter activities - 1
+
+Aim: Show that there are differences in activities between reporter variants
+
+```{r}
+## Figure 1E: Activities per cell type - density
+cDNA_df2 <- cDNA_df %>%
+  filter(stimulation == "no",
+         commercial_reporter == "No", 
+         hPGK == "No", 
+         str_detect(tf, "RANDOM", negate = T), 
+         native_enhancer == "No") %>%
+  distinct(tf, reporter_activity_minP, cell, reporter_id, neg_ctrls) %>%
+  mutate(reporter_activity_minP = ave(reporter_activity_minP, cell, reporter_id, FUN = mean)) %>%
+  mutate(reporter_activity_minP = log2(reporter_activity_minP)) %>%
+  distinct() 
+
+ggplot(cDNA_df2 %>%
+         mutate(cell = factor(cell, levels = c("A549", "K562", "HCT116", "MCF7", "HepG2", 
+                                               "U2OS", "HEK293", "mES", "NPC"))),
+       aes(x = reporter_activity_minP, fill = neg_ctrls)) +
+  geom_density(alpha = .4) +
+  facet_wrap(~cell, ncol = 2) +
+  scale_fill_manual(values = c("Yes" = "grey70", "No" = "#DD6B48")) +
+  theme_pubr(border = T)
+
+## Explore PCA
+reporter_mat <- cDNA_df %>%
+  filter(stimulation == "no",
+         neg_ctrls == "No",
+         commercial_reporter == "No", 
+         hPGK == "No", 
+         str_detect(tf, "RANDOM", negate = T), 
+         native_enhancer == "No") %>%
+  distinct(tf, reporter_activity_neg, cell, neg_ctrls) %>%
+  mutate(reporter_activity_neg = ave(reporter_activity_neg, cell, tf, FUN = mean)) %>%
+  mutate(reporter_activity_neg = log2(reporter_activity_neg)) %>%
+  distinct(reporter_activity_neg, tf, cell) %>%
+  spread(key = "cell", value = "reporter_activity_neg") %>%
+  column_to_rownames("tf") %>%
+  replace(is.na(.), 0) %>%
+  as.matrix()
+
+meta_pca <- data.frame(row.names = c("A549", "HCT116", "HEK293", "HepG2", "K562", "MCF7", "mES", "NPC", "U2OS"),
+                       cell = c("A549", "HCT116", "HEK293", "HepG2", "K562", "MCF7", "mES", "NPC", "U2OS"),
+                       organism = c("human", "human", "human", "human", "human", "human", "mouse", "mouse", "human"))
+
+reporter_pca2 <- prcomp(t(reporter_mat))
+
+ggplot_pca(reporter_pca2, arrows = F, groups = meta_pca$cell) +
+  theme_pubr(border = T)
+```
+
+
+---
+
+
+## Correlate with RNA-seq data
+
+Aim: Does the reporter activity correlate with transcript abundance across conditions?
+```{r}
+## Prepare tf reporter data frame
+cDNA_df2 <- cDNA_df %>%
+  #filter(tf != "RFX1") %>%
+  dplyr::filter(neg_ctrls == "No",
+                #commercial_reporter == "No",
+                stimulation == "no",
+                hPGK == "No",
+                str_detect(tf, "RANDOM", negate = T),
+                native_enhancer == "No") %>%
+  distinct(tf, reporter_activity_neg, cell, reporter_id, commercial_reporter) %>%
+  mutate(reporter_activity_neg = ave(reporter_activity_neg, cell, reporter_id, FUN = mean)) %>%
+  mutate(reporter_activity_neg = log2(reporter_activity_neg)) %>%
+  distinct() %>%
+  mutate(tf = gsub("_.*", "", tf))
+
+## Combine TF reporter data with RNA-seq data
+cDNA_df3 <- merge(cDNA_df2, tf_rna, all = T) %>%
+  na.omit() %>%
+  mutate(log_TPM_norm = log2(TPM_norm + 0.01)) %>%
+  mutate(range_TPM = quantile(log_TPM_norm, probs = 0.95) - quantile(log_TPM_norm, probs = 0.05)) %>%
+  mutate(range_activity = quantile(reporter_activity_neg, probs = 0.95) - quantile(reporter_activity_neg, probs = 0.05)) %>%
+  mutate(dif_range = range_TPM / range_activity) %>%
+  mutate(log_TPM_norm = log_TPM_norm / dif_range) %>%
+  dplyr::select(-range_TPM, -range_activity, -dif_range)
+
+## Compute spearman correlations for each individual reporter of reporter activity vs. TPM_norm counts across the nine cell types
+for (i in unique(cDNA_df3$reporter_id)) {
+  if (nrow(cDNA_df3[cDNA_df3$reporter_id == i,]) > 2) {
+  cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- -log10(cor.test(cDNA_df3$reporter_activity_neg[cDNA_df3$reporter_id == i], cDNA_df3$log_TPM_norm[cDNA_df3$reporter_id == i], method = "pearson", exact = F)$p.value)
+  cDNA_df3$cor[cDNA_df3$reporter_id == i] <- cor(cDNA_df3$reporter_activity_neg[cDNA_df3$reporter_id == i], cDNA_df3$log_TPM_norm[cDNA_df3$reporter_id == i], method = "pearson")
+  }
+  else {
+    cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- 1
+    cDNA_df3$cor[cDNA_df3$reporter_id == i] <- 0
+  }
+}
+
+## I am only interested in positive correlations, so set all negative correlations to zero
+cDNA_df3 <- cDNA_df3 %>%
+  mutate(cor_pval = ifelse(cor < 0, 0, cor_pval))
+#
+# ## Plot the correlations including the p-values
+# for (i in unique(cDNA_df3$tf)) {
+#
+#   x <- cDNA_df3 %>%filter(tf == i)
+#
+#   label <- data.frame(reporter_id = x$reporter_id, label = round(x$cor_pval, 2))
+#
+#   p <- ggplot(x,
+#               aes(x = TPM, y = reporter_activity_neg)) +
+#     geom_point() +
+#     geom_abline(lty = 2) +
+#     geom_smooth(method = "lm", se = F) +
+#     facet_wrap(~reporter_id) +
+#     ggtitle(i) +
+#     ylab("Reporter Activity") +
+#     xlab("TPM") +
+#     geom_label(data = label, aes(label = label, color = ifelse(label > 1, "red", "black")),
+#                x = Inf, y = -Inf, hjust=1, vjust=0,
+#                inherit.aes = FALSE) +
+#     scale_color_manual(values = c("black", "red"))
+#
+#   print(p)
+# }
+
+## Set Inf values to max per TF
+cDNA_df3 <- cDNA_df3 %>%
+  group_by(tf) %>%
+  mutate(cor_pval = ifelse(is.finite(cor_pval), cor_pval, max(cor_pval[is.finite(cor_pval)]))) %>%
+  ungroup()
+
+## Export correlations
+rna_correlations <- cDNA_df3 %>%
+  distinct(reporter_id, cor_pval, cor)
+
+## Filter for TFs where correlations actually make sense -> minimum TPM > 0.5, maximum TPM < 0.5, dif_TPM > 5
+rna_correlations_df <- cDNA_df3 %>%
+  mutate(min_TPM = ave(TPM, tf, FUN = min),
+         max_TPM = ave(TPM, tf, FUN = max)) %>%
+  mutate(dif_TPM = max_TPM - min_TPM) %>%
+  mutate(mean_tf_activity = ave(reporter_activity_neg, tf, cell, FUN = mean)) %>%
+  mutate(max_mean_tf_activity = ave(mean_tf_activity, tf, FUN = max)) %>%
+  filter(max_TPM > .5 & dif_TPM > 5 & min_TPM < .5 & max_mean_tf_activity > 0.9 | tf %in% c("PGR", "GATA1", "NR1I2", "NR4A1", "NFATc1",
+                                                                                            "TEAD1"))
+
+
+## Plot correlation p-values per TF
+ggplot_custom(rna_correlations_df %>%
+                filter(commercial_reporter == "No") %>%
+                distinct(reporter_id, cor_pval, tf) %>%
+           mutate(sign = ifelse(cor_pval < 1, "No", "Yes")) %>%
+             mutate(mean_cor_pval = ave(cor_pval, tf, FUN = mean)),
+       aes(x = reorder(tf, -mean_cor_pval), y = cor_pval, color = sign)) +
+  geom_quasirandom() +
+  geom_hline(yintercept = 1, lty = 2) +
+  theme_pubr(border = T, x.text.angle = 90)
+
+## Examplify for a couple of TFs
+ggplot_custom(cDNA_df3 %>%
+                filter(commercial_reporter == "No") %>%
+                distinct(reporter_id, cor_pval, tf, commercial_reporter) %>%
+                mutate(mean_cor_pval = ave(cor_pval, tf, FUN = mean)) %>%
+                mutate(sign = ifelse(cor_pval < 1.30103, "No", "Yes")) %>%
+                filter(tf %in% c("HNF4A", "GATA4", "ESR1", "THRB", "GATA1")),
+       aes(x = reorder(tf, -mean_cor_pval), y = cor_pval, color = sign)) +
+  geom_quasirandom() +
+  geom_hline(yintercept = 1.30103, lty = 2) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+           filter(reporter_id %in% c("HNF1A_10bp_10bp_minP_1", "HNF1A_5bp_21bp_mCMV_2")) %>%
+           distinct(cell, reporter_id, reporter_activity_neg, TPM),
+       aes(x = TPM, y = reporter_activity_neg)) +
+    geom_abline(lty = 2) +
+    geom_smooth(method = "lm", color = "black") +
+    geom_point(size = 2) +
+    facet_wrap(~reporter_id, ncol = 1) +
+    theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+           filter(reporter_id %in% c("POU5F1::SOX2_10bp_21bp_minP_1", "POU5F1::SOX2_5bp_10bp_mCMV_1")) %>%
+           distinct(cell, reporter_id, reporter_activity_neg, TPM),
+       aes(x = TPM, y = reporter_activity_neg)) +
+    geom_abline(lty = 2) +
+    geom_smooth(method = "lm", color = "black") +
+    geom_point(size = 2) +
+    facet_wrap(~reporter_id, ncol = 1) +
+    theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("HNF4A_10bp_10bp_mCMV_2", "HNF4A_5bp_10bp_minP_1")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, TPM),
+       aes(x = TPM, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point() +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("GATA4_10bp_10bp_minP_3", "GATA4_5bp_10bp_minP_2")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, TPM),
+       aes(x = TPM, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point(size = 2) +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("ESR1_5bp_10bp_mCMV_1", "ESR1_10bp_10bp_minP_3")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, TPM),
+       aes(x = TPM, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point() +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("THRB_5bp_10bp_mCMV_3", "THRB_10bp_10bp_mCMV_3")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, TPM),
+       aes(x = TPM, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point(size = 2) +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("FOXO1_10bp_21bp_minP_2", "FOXO1_5bp_21bp_minP_2")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, TPM),
+       aes(x = TPM, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point(size = 2) +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("TFCP2L1_5bp_10bp_mCMV_1", "TFCP2L1_5bp_10bp_minP_2")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, TPM),
+       aes(x = TPM, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point(size = 2) +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("GATA1_5bp_10bp_mCMV_2", "GATA1_5bp_21bp_minP_1")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, TPM),
+       aes(x = TPM, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point(size = 2) +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+
+
+
+# ## Tissue specificity of top TFs
+# chosen_tfs <- cDNA_df6 %>%
+#   distinct(tf, quality_score) %>%
+#   mutate(quality_score = ave(quality_score, tf, FUN = mean)) %>%
+#   distinct() %>%
+#   arrange(desc(quality_score)) %>%
+#   top_n(n = 50)
+# 
+# tf_expression_pattern <- read_csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/Fig4A.csv") %>%
+#   pivot_longer(cols = -Sample, names_to = "tf", values_to = "expression") %>%
+#   filter(tf %in% chosen_tfs$tf)
+# 
+# 
+# ggplot(tf_expression_pattern %>%
+#          mutate(expression_mean = ave(expression, Sample, FUN = mean)),
+#        aes(x = reorder(Sample, -expression_mean),  y = expression)) +
+#   geom_quasirandom() +
+#   theme_classic_lines_90()
+# 
+# 
+# cancer_models <- read_csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/CRISPRGeneEffect.csv") %>%
+#   pivot_longer(cols = -`...1`, names_to = "tf", values_to = "expression") %>%
+#   mutate(tf = gsub(" (.*)", "", tf)) %>%
+#   filter(tf %in% chosen_tfs$tf)
+# 
+# 
+# cancer_models <- cancer_models %>%
+#   mutate(mean_effect = ave(expression, `...1`, FUN = mean))
+# 
+# 
+# ggplot(cancer_models,
+#        aes(x = reorder(`...1`, -mean_effect),  y = expression)) +
+#   geom_quasirandom() +
+#   theme_classic_lines_90()
+```
+
+---
+
+## Add proteomics data
+
+Aim: Similar to before: does reporter activity correlate with protein abundance across cell types?
+```{r}
+proteomics_df_long <- read_tsv("/DATA/usr/m.trauernicht/data/RNA_seq/protein_abundance_all_tfs.tsv")
+
+## Combine TF reporter data with RNA-seq data
+cDNA_df3 <- merge(cDNA_df2, proteomics_df_long, all = T) %>%
+  na.omit()
+
+## Compute spearman correlations for each individual reporter of reporter activity vs. TPM counts across the nine cell types
+for (i in unique(cDNA_df3$reporter_id)) {
+  if (nrow(cDNA_df3[cDNA_df3$reporter_id == i,]) > 2) {
+  cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- -log10(cor.test(cDNA_df3$reporter_activity_neg[cDNA_df3$reporter_id == i], cDNA_df3$protein_abundance[cDNA_df3$reporter_id == i], method = "pearson", exact = F)$p.value)
+  cDNA_df3$cor[cDNA_df3$reporter_id == i] <- cor(cDNA_df3$reporter_activity_neg[cDNA_df3$reporter_id == i], cDNA_df3$protein_abundance[cDNA_df3$reporter_id == i], method = "pearson")
+  }
+  else {
+    cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- 1
+    cDNA_df3$cor[cDNA_df3$reporter_id == i] <- 0
+  }
+}
+
+## I am only interested in positive correlations, so set all negative correlations to zero
+cDNA_df3 <- cDNA_df3 %>%
+  mutate(cor_pval = ifelse(cor < 0, 0, cor_pval))
+
+## Set Inf values to max per TF
+cDNA_df3 <- cDNA_df3 %>%
+  group_by(tf) %>%
+  mutate(cor_pval = ifelse(is.finite(cor_pval), cor_pval, max(cor_pval[is.finite(cor_pval)]))) %>%
+  ungroup()
+
+## Export correlations
+protein_correlations <- cDNA_df3 %>%
+  distinct(reporter_id, cor_pval, cor)
+
+## Correlate RNA and protein correlations
+rna_protein_cor <- merge(protein_correlations %>% dplyr::select(reporter_id, "prot_cor" = cor_pval), rna_correlations %>% dplyr::select(reporter_id, "rna_cor" = cor_pval), all = T) %>%
+  replace(is.na(.), 0)
+
+ggplot(rna_protein_cor %>%
+         mutate(tf = gsub("(.*)_.*_.*_.*_.*", "\\1", reporter_id)) %>%
+         mutate(source = gsub(".*_(.*)", "\\1", tf)) %>%
+         mutate(source = ifelse(source == "TF-romanov", "romanov", source)) %>%
+         mutate(source = ifelse(!source %in% c("romanov", "TF-seq", "promega"), "designed", source)) %>%
+         mutate(tf = gsub("_.*", "", tf)),
+       aes(x = prot_cor, y = rna_cor)) +
+  geom_point(aes(color = source)) +
+  geom_smooth(method = "lm") +
+  theme_pubr() +
+  facet_wrap(~tf)
+
+protein_correlations2 <- protein_correlations %>%
+  dplyr::select(reporter_id, "protein_cor" = cor)
+
+ggplot(rna_correlations_df %>%
+         left_join(protein_correlations2) %>%
+         filter(commercial_reporter == "No") %>%
+         distinct(reporter_id, cor_pval, tf, protein_cor) %>%
+         mutate(sign_rna = ifelse(cor_pval < 1, "No", "Yes")) %>%
+         mutate(sign_protein = ifelse(protein_cor < 1, "No", "Yes")) %>%
+         mutate(mean_cor_pval = ave(cor_pval, tf, FUN = mean)),
+       aes(x = reorder(tf, -mean_cor_pval), y = cor_pval)) +
+  geom_quasirandom(aes(color = protein_cor)) +
+  geom_hline(yintercept = 1, lty = 2) +
+  scale_color_gradient2(low = "#264653", mid = "white", high = "#e76f51") +
+  theme_pubr(border = T, x.text.angle = 90)
+
+ggplot(rna_correlations_df %>%
+         left_join(protein_correlations2) %>%
+         filter(commercial_reporter == "No") %>%
+         distinct(reporter_id, cor, tf, protein_cor) %>%
+         mutate(sign_rna = ifelse(cor < 1, "No", "Yes")) %>%
+         mutate(sign_protein = ifelse(protein_cor < 1, "No", "Yes")) %>%
+         mutate(mean_cor_pval = ave(cor, tf, FUN = mean)),
+       aes(x = reorder(tf, -mean_cor_pval), y = cor)) +
+  geom_quasirandom(aes(color = protein_cor)) +
+  geom_hline(yintercept = 1, lty = 2) +
+  scale_color_gradient2(low = "#264653", mid = "white", high = "#e76f51") +
+  theme_pubr(border = T, x.text.angle = 90)
+  
+
+ggplot_custom(cDNA_df3 %>%
+                filter(commercial_reporter == "No") %>%
+                distinct(reporter_id, cor_pval, tf, commercial_reporter) %>%
+                mutate(mean_cor_pval = ave(cor_pval, tf, FUN = mean)) %>%
+                mutate(sign = ifelse(cor_pval < 1.30103, "No", "Yes")) %>%
+                filter(tf %in% c("HNF4A", "GATA4", "ESR1", "THRB", "GATA1")),
+       aes(x = reorder(tf, -mean_cor_pval), y = cor_pval, color = sign)) +
+  geom_quasirandom() +
+  geom_hline(yintercept = 1.30103, lty = 2) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+           filter(reporter_id %in% c("GATA1_5bp_10bp_minP_3", "GATA1_10bp_10bp_minP_3")) %>%
+           distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+    geom_abline(lty = 2) +
+    geom_smooth(method = "lm", color = "black") +
+    geom_point(size = 2) +
+    facet_wrap(~reporter_id, ncol = 1) +
+    theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+           filter(reporter_id %in% c("HOMEZ_10bp_10bp_minP_1", "HOMEZ_5bp_10bp_minP_1")) %>%
+           distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+    geom_abline(lty = 2) +
+    geom_smooth(method = "lm", color = "black") +
+    geom_point(size = 2) +
+    facet_wrap(~reporter_id, ncol = 1) +
+    theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("NR3C1_10bp_21bp_hBGm_3", "NR3C1_10bp_10bp_minP_2")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point() +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("STAT3_10bp_10bp_minP_3", "STAT3_10bp_10bp_minP_1")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point(size = 2) +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("WT1_10bp_21bp_mCMV_1", "WT1_5bp_21bp_mCMV_1")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point() +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("SMAD4_10bp_21bp_minP_2", "SMAD4_5bp_21bp_minP_2")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point(size = 2) +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("SRF_10bp_21bp_mCMV_3", "SRF_5bp_21bp_mCMV_3")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point(size = 2) +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("SOX2_5bp_10bp_minP_2", "SOX2_10bp_10bp_minP_2")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point(size = 2) +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("RXRA_10bp_21bp_mCMV_3", "RXRA_5bp_21bp_mCMV_3")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point(size = 2) +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(reporter_id %in% c("OTX1_5bp_10bp_minP_2", "OTX1_10bp_10bp_minP_2")) %>%
+         distinct(cell, reporter_id, reporter_activity_neg, protein_abundance),
+       aes(x = protein_abundance, y = reporter_activity_neg)) +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point(size = 2) +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+
+```
+Some reporter activities correlate surprisingly well with protein abundance.
+
+---
+
+
+## Linear model - TF reporter grammar
+
+Aim: If the measured activities can be fitted by a linear model, it is likely that the activity is true. If not, we might be looking at noise instead.
+
+```{r log-linear-model-5, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
+## Only include 2-3 most interesting conditions per TF (as determined before)
+ref_conditions_sel <- ref_conditions %>%
+  mutate(tf_condition = paste(tf, condition, sep = "_"))
+
+cDNA_df_TF <- cDNA_df %>%
+  filter(neg_ctrls == "No", commercial_reporter == "No", hPGK == "No", native_enhancer == "No", stimulation %in% c("no", "pathway"), promoter != "Random") %>%
+  distinct(reporter_activity_neg, promoter, spacing, distance, background, tf, condition, reporter_id, stimulation, reference_condition) %>%
+  mutate(tf_condition = paste(tf, condition, sep = "_")) %>%
+  filter(tf_condition %in% ref_conditions_sel$tf_condition) %>%
+  # mutate(max_activity = ave(reporter_activity_neg, tf_condition, FUN = max)) %>%
+  # mutate(min_activity = ave(reporter_activity_neg, tf_condition, FUN = min)) %>%
+  # mutate(dif = max_activity - min_activity) %>%
+  # filter(dif > 2.5) %>%
+  mutate(reporter_activity_neg = log2(reporter_activity_neg)) %>%
+  left_join(reference_condition %>% dplyr::select(-tf), by = c("reporter_id", "reference_condition")) %>%
+  mutate(reporter_dif =  reference_activity - reporter_activity_neg) %>%
+  mutate(background = as.character(background)) %>%
+  mutate(promoter = as.factor(promoter)) %>%
+  mutate(spacing = ifelse(spacing == "10bp", "10bps", "5bp")) %>%
+  mutate(spacing = as.factor(spacing)) %>%
+  #mutate(reporter_activity_neg = ifelse(stimulation != "no", reporter_dif, reporter_activity_neg)) %>%
+  distinct(reporter_activity_neg, promoter, spacing, distance, background, condition, tf, tf_condition, reporter_id)
+
+
+## Fit linear model with design features for actual data
+exp_variance <- data.frame("feature" = c("promoter", "spacing", "distance", "background", "Residuals"))
+weight <- data.frame("feature" = c("(Intercept)", "promoterminP", "promoterhBGm", "promotermCMV",
+                  "spacing10bps","spacing5bp", "distance10bp","distance21bp", "background1","background2", "background3"))
+
+cDNA_df_TF$promoter <- relevel(cDNA_df_TF$promoter, ref = "minP")
+cDNA_df_TF$spacing <- relevel(cDNA_df_TF$spacing, ref = "5bp")
+cDNA_df_TF$row <- rownames(cDNA_df_TF)
+cDNA_df_TF3 <- data.frame()
+
+lm_list <- list()
+for (i in unique(cDNA_df_TF$tf_condition)) {
+  if (nrow(cDNA_df_TF[cDNA_df_TF$tf_condition == i,]) > 9) {
+  print(i)
+  lm_list[[i]] <- lm(reporter_activity_neg ~
+                       distance + promoter + spacing + background,
+                cDNA_df_TF[cDNA_df_TF$tf_condition == i,])
+  }
+}
+
+f <- lapply(names(lm_list), function(x) summary(lm_list[[x]])$fstatistic)
+names(f) <- names(lm_list)
+p <- lapply(names(f), function(x) pf(f[[x]][1],f[[x]][2],f[[x]][3],lower.tail=F))
+p <- data.frame(bind_rows(p)) %>% setnames("value", "pval")
+p$tf_condition <- names(lm_list)
+
+y <- lapply(names(lm_list), function(x) data.frame("activity_predicted" = lm_list[[x]]$fitted.values) %>% rownames_to_column("row") %>% mutate(tf_condition = x))
+y <- data.frame(bind_rows(y)) %>% left_join(p, by = "tf_condition")
+
+cDNA_df_TF2 <- y %>%
+  left_join(cDNA_df_TF)
+
+cDNA_df_TF3 <- rbind(cDNA_df_TF3, cDNA_df_TF2)
+
+mean(cDNA_df_TF3$pval)
+
+w <- lapply(names(lm_list), function(x) 
+  if (length(lm_list[[x]]$coefficients) == length(summary(lm_list[[x]])$coefficients[,4])) {
+  data.frame('weight' = lm_list[[x]]$coefficients, 'pval' = summary(lm_list[[x]])$coefficients[,4]) %>% mutate(tf = x) %>% rownames_to_column('feature')
+  }
+)
+
+w <- data.frame(bind_rows(w))
+weight <- weight %>%
+  left_join(w)
+
+x <- lapply(names(lm_list), function(x) anova(lm_list[[x]]) %>% rownames_to_column("feature") %>% mutate(tf = x))
+x <- data.frame(bind_rows(x)) %>% 
+  setnames(c("Sum.Sq", "Pr..F."), c("sum_sq", "pval")) %>%
+  distinct(feature, sum_sq, pval, tf) %>%
+  mutate(sum = ave(sum_sq, tf, FUN = sum)) %>%
+  mutate(rel_sum_sq = (sum_sq/sum)*100) %>%
+  distinct(tf, rel_sum_sq, pval, feature)
+
+exp_variance <- exp_variance %>%
+  left_join(x)
+
+## Fine-tune dfs
+exp_variance$group <- "no residual"
+exp_variance$group[grep("Residual", exp_variance$feature)] <- "residual"
+exp_variance$rel_sum_sq[exp_variance$feature == "Residuals"] <- 100 - exp_variance$rel_sum_sq[exp_variance$feature == "Residuals"]
+exp_variance$feature <- revalue(exp_variance$feature, c("Residuals"="total"))
+prediction <- cDNA_df_TF3 %>%
+  dplyr::select(-row) %>%
+  na.omit()
+weight <- weight %>%
+  filter(feature != "(Intercept)")
+categorie <- c("promoter", "spacing", "distance", "background")
+weight$features <- gsub(paste(categorie, collapse="|"), "",weight$feature)
+ml <- length(unique(weight$features))
+feature <- unique(weight$features)
+weight$condition <- gsub(paste(feature, collapse = "|"), "", weight$feature)
+weight <- weight %>% dplyr::select(-feature)
+
+
+cDNA_df_TF3 <- cDNA_df_TF3 %>%
+  mutate(pval_adj = p.adjust(pval, method = "fdr"))
+```
+
+
+## Identify best condition per TF based on linear models and other data
+
+```{r log-linear-model-5, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
+## Then integrate the linear models to select the least noisy of the top 2-3 conditions per TF
+cDNA_df_TF4 <- cDNA_df_TF3 %>%
+  distinct(tf, condition, pval_adj)
+
+chosen_conditions <- ref_conditions %>%
+  left_join(cDNA_df_TF4) %>%
+  replace(is.na(.), 1) %>%
+  group_by(tf) %>%
+  slice_min(n = 1, order_by = pval_adj, with_ties = T) %>%
+  ungroup() %>%
+  mutate(cell = gsub("_.*", "", condition)) %>%
+  left_join(tf_rna) %>%
+  group_by(tf) %>%
+  slice_max(n = 1, order_by = TPM, with_ties = F) %>%
+  ungroup() %>%
+  distinct(tf, condition) %>%
+  mutate(tf_condition = paste(tf, condition, sep = "_"))
+```
+
+
+## RNA correlation analysis
+```{r}
+## Repeat RNA correlation plot - highlight predicted activities
+cDNA_df_TF5 <- cDNA_df_TF3 %>%
+  distinct(tf, condition, reporter_id, activity_predicted) %>%
+  mutate(tf_condition = paste(tf, condition, sep = "_")) %>%
+  filter(tf_condition %in% chosen_conditions$tf_condition) %>%
+  mutate(activity_predicted = 2^activity_predicted) %>%
+  mutate(activity_predicted_rel = ave(-activity_predicted, tf, FUN = function(x) rank(x)))
+
+ggplot(rna_correlations_df %>%
+         left_join(cDNA_df_TF5) %>%
+         filter(commercial_reporter == "No", str_detect(reporter_id, "andom", negate = T)) %>%
+         distinct(reporter_id, cor_pval, tf, activity_predicted_rel) %>%
+         mutate(sign_rna = ifelse(cor_pval < 1, "No", "Yes")) %>%
+         mutate(mean_cor_pval = ave(cor_pval, tf, FUN = mean)),
+       aes(x = reorder(tf, -mean_cor_pval), y = cor_pval)) +
+  geom_quasirandom(aes(color = activity_predicted_rel)) +
+  geom_hline(yintercept = 1, lty = 2) +
+  scale_color_gradient(low = "#B2182B", high = "#FDEDEF", na.value = "grey70", limits = c(1,24), oob = squish) +
+  theme_pubr(border = T, x.text.angle = 90)
+
+protein_correlations3 <- cDNA_df3 %>%
+  distinct(reporter_id, cor_pval, cor, commercial_reporter)
+
+ggplot(protein_correlations3 %>%
+         left_join(cDNA_df_TF5) %>%
+         filter(commercial_reporter == "No", str_detect(reporter_id, "andom", negate = T)) %>%
+         distinct(reporter_id, cor_pval, tf, activity_predicted_rel) %>%
+         mutate(sign_rna = ifelse(cor_pval < 1, "No", "Yes")) %>%
+         mutate(mean_cor_pval = ave(cor_pval, tf, FUN = mean)),
+       aes(x = reorder(tf, -mean_cor_pval), y = cor_pval)) +
+  geom_quasirandom(aes(color = activity_predicted_rel)) +
+  geom_hline(yintercept = 1, lty = 2) +
+  scale_color_gradient(low = "#FDEDEF", high = "#B2182B", na.value = "grey70") +
+  theme_pubr(border = T, x.text.angle = 90)
+```
+
+
+## Explore linear models for all TFs in the chosen conditions
+
+```{r log-linear-model-5, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
+## Example: Predicted vs. measured for one TF
+ggplot(cDNA_df_TF3 %>%
+         filter(tf == "STAT3", condition == "mES_2i_LIF"),
+       aes(x = activity_predicted, y = reporter_activity_neg, color = background)) +
+  geom_abline(lty = 2) +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("black", "grey50", "grey80")) +
+  facet_wrap(~spacing) +
+  scale_x_continuous(breaks = c(0,2,4))+
+  scale_y_continuous(breaks = c(0,2,4))
+
+weight_ex <- weight %>%
+  filter(tf == "STAT3_mES_2i_LIF")
+
+zero_weights <- weight %>%
+  filter(is.na(tf)) %>%
+  mutate(weight = 0, pval = 1) %>%
+  mutate(tf = "STAT3_mES_2i_LIF")
+                   
+weight_ex <- rbind(weight_ex, zero_weights)
+                   
+feature_names <- data.frame("features" = c("minP", "mCMV", "hBGm", "1", "2", "3", "5bp", "10bps", "10bp", "21bp"),
+                            "feature_names" = c("minP", "minCMV", "minHBG", "Spacer 1", "Spacer 2", "Spacer 3", "5bp Spacer", 
+                                                "10bp Spacer", "10bp Distance", "21bp Distance"))
+                     
+weight_ex <- weight_ex %>%
+  left_join(feature_names)
+                   
+
+ggplot(weight_ex %>% 
+         mutate(sign = ifelse(pval < 0.05, "Yes", "No")) %>%
+         mutate(feature_names = factor(feature_names, levels = c("minP", "minCMV", "minHBG", "Spacer 1", "Spacer 2", "Spacer 3", "5bp Spacer", 
+                                                                                                        "10bp Spacer", "10bp Distance", "21bp Distance"))),
+       aes(x = feature_names, y = weight, alpha = sign)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_bar_interactive(stat = "identity", color = "black") +
+  ylab("Weight") + 
+  xlab("Reporter design feature") +
+  theme_classic_lines_45() +
+  scale_alpha_discrete(range = c(0.3,1))
+
+## Explore weights for all TFs
+cDNA_df_TF5 <- cDNA_df_TF4 %>%
+  mutate(tf = paste(tf, condition, sep = "_")) %>%
+  distinct(tf, pval_adj)
+
+### Add total variances as bar plot
+exp_variance2 <- exp_variance %>%
+  filter(tf %in% chosen_conditions$tf_condition) %>%
+  filter(feature == "total") %>%
+  dplyr::select(tf, "total_variance" = rel_sum_sq)
+
+weight2 <- weight %>%
+  filter(tf %in% chosen_conditions$tf_condition) %>%
+  left_join(cDNA_df_TF5) %>%
+  #filter(pval_adj < .005) %>%
+  left_join(exp_variance2) %>%
+  filter(total_variance > 50 & pval_adj < 0.05) %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  mutate(weight = ifelse(pval > 0.1, 0, weight)) %>%
+  distinct(tf, features, weight) %>%
+  spread(key = "features", value = "weight") %>%
+  column_to_rownames("tf") %>%
+  filter(rowSums(., na.rm = T) != 0)
+
+myBreaks <- c(seq(-2, 0, length.out=50+1), 
+              seq(0.000001, 2, length.out=50))
+
+pheatmap(weight2 %>%
+                  t(),
+         clustering_method = "complete",
+         cellwidth = 10,
+         cellheight = 10,
+         border_color = F,
+         color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdBu")))(100),
+         angle_col = 90,
+         cluster_cols = T,
+         cutree_rows = 4,
+         breaks = myBreaks)
+
+hc <- hclust(dist(weight2), method = "complete")
+order_dendogram <- data.frame("order" = 1:nrow(weight2),
+                              "tf" = "")
+
+for(i in unique(order_dendogram$order)) {
+  order_dendogram$tf[order_dendogram$order == i] <- rownames(weight2[hc$order[i],])
+}
+
+exp_variance_2 <- exp_variance %>%
+  filter(tf %in% chosen_conditions$tf_condition) %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  filter(tf %in% rownames(weight2)) %>%
+  filter(feature == "total") %>%
+  dplyr::select(tf, "total_variance" = rel_sum_sq) %>%
+  left_join(order_dendogram)
+
+ggplot(exp_variance_2,
+       aes(x = reorder(tf, order), y = "total_variance", fill = total_variance)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "black", limits = c(33, 100)) +
+  theme_pubr(border = T, x.text.angle = 90)
+
+weight3 <- weight2 %>%
+  rownames_to_column("tf") %>%
+  pivot_longer(cols = -tf, names_to = "features", values_to = "weight") %>%
+  distinct(tf, features, weight) %>%
+  left_join(feature_names) %>%
+  left_join(exp_variance_2) %>%
+  left_join(order_dendogram)
+
+ggplot(weight3 %>%
+         mutate(feature_names = factor(feature_names, levels = rev(c("minP", "minCMV", "minHBG", "Spacer 1", "Spacer 2", "Spacer 3", "5bp Spacer", 
+                                                                 "10bp Spacer", "10bp Distance", "21bp Distance")))),
+       aes(x = reorder(tf, order), y = feature_names, fill = weight)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "#2166AC", mid = "white", high = "#B2182B", na.value = "grey80", limits = c(-2, 2), oob = squish) +
+  theme_pubr(border = T, x.text.angle = 90)
+  
+
+
+## Investigate hits with strong impact on spacer length
+weight4 <- weight %>%
+  filter(tf %in% chosen_conditions$tf_condition) %>%
+  left_join(cDNA_df_TF5) %>%
+  #filter(pval_adj < .001) %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  filter(tf %in% rownames(weight2)) %>%
+  filter(condition == "spacing", pval < 0.05, abs(weight) >= 0.2)
+
+actual_spacer_lengths <- data.frame(tf = c("CEBPB", "CREB1", "ETS2", "FOS::JUN", "GRHL1", "HNF1A", "HNF4A", "KLF4", "MAF::NFE2", "MTF1", "NFE2L2", 
+                                            "NFKB1", "NR1H4::RXRA", "NR1I2", "REL", "SRF", "STAT3", "TCF7L2", "TFCP2L1"),
+                                    center_center_dist = c(10, 8, 20, 10, 10, 15, 16, 8, 15, 17, 10, 11, 15, 17, 10, 12, 9, 10, 14),
+                                    monomer_center_dist = c(5, 4, 8, 6, 5, 8, 9, 8, 10, 17, 5, 6, 8, 8, 5, 6, 4, 10, 6),
+                                    mode = c("homodimer", "homodimer", "homodimer", "heterodimer", "homodimer", "homodimer", "homodimer", "monomer", "heterodimer", 
+                                             "monomer", "heterodimer", "homodimer", "heterodimer", "heterodimer", 
+                                             "homodimer", "homodimer", "homodimer", "monomer", "tetramer"))
+
+binding_modes <- data.frame(tf = c("CEBPB", "CREB1", "E2F1", "ESR1", "ETS2", "FOS::JUN", "GRHL1", "HNF1A", "HNF4A", "IRF3", "KLF4", "MAF::NFE2", "MTF1",
+                                                            "NFAT5", "NFE2L2", "NFIA",
+                                            "NFKB1", "NFYA", "NR1H4::RXRA", "NR1I2",  "POU2F1", "POU5F1::SOX2", "RARA", "RBPJ", "REL", "RXRA", 
+                                             "SOX2", "SP1", "SRF", "STAT1::STAT2", "STAT3", "TCF7L2", "TFCP2L1", "TP53", "VDR::RXRA"),
+                                    mode = c("homodimer", "homodimer", "homodimer", "heterodimer", "homodimer", "heterodimer", "homodimer", "homodimer", "homodimer", "homodimer", 
+                                             "monomer", "heterodimer", 
+                                             "monomer", "homodimer", "heterodimer", "homodimer", "homodimer", "heterodimer", "heterodimer", "heterodimer", "homodimer", "heterodimer", 
+                                             "heterodimer", "monomer", 
+                                             "homodimer", "homodimer", "monomer", "monomer", "homodimer", "heterodimer", "homodimer", "monomer", "tetramer", "tetramer", "heterodimer"))
+
+tf_properties <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/garcia_tf-properties.csv") %>%
+  dplyr::select("tf" = TF, DNA_binding_mode, chromatin_regulation_mode, TF_superclass, TF_class)
+
+weight_spacer <- weight4 %>%
+  left_join(actual_spacer_lengths) %>%
+  mutate(center_center_dist = center_center_dist + 5, monomer_center_dist = monomer_center_dist + 5)
+
+ggplot(weight_spacer,
+       aes(x = monomer_center_dist, y = weight)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_smooth(method = "lm", se = F) +
+  geom_point(size = 2) +
+  theme_pubr(border = T)
+
+ggplot(weight_spacer,
+       aes(x = center_center_dist, y = weight)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_smooth(method = "lm", se = F, color = "#E07A5F") +
+  geom_point(size = 2, aes(shape = mode)) +
+  theme_pubr(border = T)
+
+## Additional plot: center-center dist of all TFs vs. only spacer length-dependent TFs
+lib1_BSs <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/parameter_files/TF_motifs.csv", header = T) %>%
+  dplyr::select("tf" = TF, "seq" = Motif) %>%
+  filter(str_detect(tf, "neg", negate = T), str_detect(tf, "andom", negate = T)) %>%
+  mutate(tf = toupper(tf))
+
+lib1_BSs$tf[lib1_BSs$tf == "TCFCP2L1"] <- "TFCP2L1"
+lib1_BSs$tf[lib1_BSs$tf == "NR3C1(GR)"] <- "NR3C1"
+lib1_BSs$tf[lib1_BSs$tf == "TRP53"] <- "TP53"
+
+lib2_BSs <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/output/gen2_motifs.csv")  %>%
+  dplyr::select("tf" = TF, "seq" = motif) 
+
+BSs_all <- rbind(lib1_BSs, lib2_BSs) %>%
+  mutate(BS_length = nchar(seq))
+
+weight_spacing_length <- weight %>%
+  filter(tf %in% chosen_conditions$tf_condition) %>%
+  left_join(cDNA_df_TF5) %>%
+  #filter(pval_adj < .001) %>%
+  filter(features == "10bps") %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  filter(tf %in% rownames(weight2)) %>%
+  mutate(spacer_sign = ifelse(tf %in% weight4$tf, "Yes", "No")) %>%
+  distinct(tf, spacer_sign, weight, pval_adj, pval) %>%
+  left_join(BSs_all)
+
+ggplot() +
+    geom_density(data = weight_spacing_length,
+       mapping = aes(x = BS_length, fill = spacer_sign),
+       alpha = .4) +
+    geom_density(data = BSs_all,
+       mapping = aes(x = BS_length),
+       lty = 4) +
+  scale_x_continuous(limits = c(5, 20))
+
+ggplot(weight_spacing_length,
+       aes(x = BS_length, y = weight, color = spacer_sign)) +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("Yes" = "#7c9eb2", "No" = "grey80"))
+
+ggplot(weight_spacing_length,
+       aes(x = BS_length, y = -log10(pval))) +
+  geom_smooth(method = "loess") +
+  geom_point(aes(color = spacer_sign)) +
+  scale_color_manual(values = c("Yes" = "#7c9eb2", "No" = "grey80"))
+
+## Transform to helical turns
+weight_spacing_length2 <- weight_spacing_length %>%
+  mutate(BS_spacer1 = BS_length + 5) %>%
+  mutate(BS_spacer2 = BS_length + 10) %>%
+  mutate(spacing_rotation1 = (BS_spacer1) / 10.5) %>%
+  mutate(spacing_rotation2 = (BS_spacer2) / 10.5) %>%
+  mutate(spacing_degree1 = 2*pi * spacing_rotation1) %>%
+  mutate(spacing_degree2 = 2*pi * spacing_rotation2) %>%
+  #mutate(spacing_degree = ifelse(is.infinite(spacing_degree), 0, spacing_degree)) %>%
+  mutate(spacing_degree_transf1 = cos(spacing_degree1)) %>%
+  mutate(spacing_degree_transf2 = cos(spacing_degree2)) %>%
+  mutate(dif_spacing = -spacing_degree_transf1 + spacing_degree_transf2) %>%
+  left_join(binding_modes)
+
+ggplot(weight_spacing_length2,
+       aes(x = dif_spacing, y = weight)) +
+  geom_point(aes(color = spacer_sign, shape = mode), size = 2) +
+  geom_smooth(method = "lm", se = F) 
+
+
+ggplot(weight_spacing_length2,
+       aes(x = abs(dif_spacing), y = abs(weight))) +
+  geom_point(aes(color = spacer_sign, shape = mode), size = 2) +
+  geom_smooth(method = "lm", se = F) 
+
+
+## Overview figures: which features matter how much and for which TF?
+exp_variance_plot <- exp_variance %>%
+  filter(tf %in% chosen_conditions$tf_condition) %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  mutate(text = paste("TF =", tf)) %>%
+  filter(tf %in% unique(weight3$tf))
+
+total_variance <- exp_variance_plot %>%
+  filter(feature == "total") %>%
+  dplyr::select(tf, "total_variance" = rel_sum_sq)
+
+exp_variance_plot <- exp_variance_plot %>%
+  filter(feature != "total") %>%
+  left_join(total_variance) %>%
+  #filter(total_variance > 50) %>%
+  mutate(mean_rel_sum_sq = ave(rel_sum_sq, feature, FUN = mean))
+
+ggplot(exp_variance_plot,
+         aes(x = reorder(feature, -mean_rel_sum_sq), y = rel_sum_sq, fill = total_variance)) +
+  geom_quasirandom(shape = 21) +
+  stat_summary(fun = median, fun.min = median, fun.max = median, geom = "crossbar", color = "red", width = 0.25, lwd = 0.4) +
+  ylab("Variance explained (%)") + xlab("") +
+  #labs(title = "Linear variance modelling",
+       #subtitle = "Expression variance predicted by features") +
+  theme(text = element_text(size = 12)) +
+  scale_fill_gradient(low = "grey90", high = "grey10") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0, size = 12),
+        axis.text.y = element_text(size = 10))
+
+exp_variance2 <- exp_variance %>%
+  filter(tf %in% chosen_conditions$tf_condition) %>%
+  distinct(tf, feature, rel_sum_sq) %>%
+  spread(key = "feature", value = "rel_sum_sq") %>%
+  column_to_rownames("tf")
+
+pheatmap(exp_variance2 %>%
+                  t(),
+         cellwidth = 10,
+         cellheight = 10,
+         border_color = F,
+         color = colorRampPalette(brewer.pal(n = 7, name = "Greys"))(100),
+         angle_col = 90,
+         cluster_cols = T,
+         cutree_rows = 2)
+
+# write_tsv(cDNA_df_TF3, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20230302_predicted_activities.tsv")
+# write_tsv(weight, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20230302_lm_weights.tsv")
+```
+
+
+## Reporter quality score computation
+
+Aim: We want to find for each TF the optimal reporters. Here I combine all data to compute reporter quality scores to find the best reporters for each TF.
+```{r}
+reference_activities <- cDNA_df %>%
+  filter(neg_ctrls == "No", 
+         hPGK == "No", 
+         str_detect(tf, "RANDOM", negate = T), 
+         native_enhancer == "No") %>%
+  distinct(tf, condition, reporter_id, commercial_reporter, reporter_activity_neg) %>%
+  mutate(reporter_activity_neg = log2(reporter_activity_neg)) %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  mutate(tf_condition = paste(tf, condition, sep = "_")) %>%
+  filter(tf_condition %in% chosen_conditions$tf_condition) %>%
+  dplyr::select(-tf_condition)
+
+
+cDNA_df6 <- reference_activities %>%
+  left_join(perturbation_df) %>%
+  left_join(rna_protein_cor) %>%
+  #left_join(viper_correlations) %>%
+  left_join(off_target_activities) %>%
+  mutate(reporter_dif = ifelse(is.na(reporter_dif), 0, reporter_dif)) %>%
+  mutate(cor_pval = base::pmax(rna_cor, prot_cor)) %>%
+  #mutate(viper_cor_pval = ifelse(is.na(viper_cor_pval), 0, viper_cor_pval)) %>%
+  mutate(off_target_activity = ifelse(is.na(off_target_activity), 0, off_target_activity)) %>%
+  mutate(off_target_activity = -off_target_activity) %>%
+  mutate(Sensitivity = reporter_dif + reporter_activity_neg + cor_pval + off_target_activity) %>%
+  mutate(Specificity = reporter_dif + off_target_activity + cor_pval) %>%
+  pivot_longer(cols = c("Sensitivity", "Specificity"), names_to = "quality", values_to = "quality_score") %>%
+  mutate(quality_score = ifelse(quality_score < 0, 0, quality_score))
+
+# write_tsv(cDNA_df6, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20230302_reporter_scores.tsv")
+
+cDNA_df7 <- cDNA_df6 %>%
+  distinct() %>%
+  mutate(length_tf = as.numeric(ave(tf, tf, FUN = length))) %>%
+  #filter(length_tf > 15) %>%
+  mutate(mean_quality_score = ave(quality_score, tf, FUN = mean)) %>%
+  arrange(desc(mean_quality_score)) %>%
+  mutate(quality_score2 = -quality_score) %>%
+  mutate(score_rank = as.numeric(ave(quality_score2, quality, tf, FUN = rank))) %>%
+  mutate(top_3 = ifelse(score_rank <= 3, "Yes", "No")) %>%
+  mutate(top_3 = ifelse(quality_score < 2, "No", top_3))
+
+ggplot(cDNA_df7 %>%
+         filter(quality == "Sensitivity"),
+       aes(y = quality_score, x = reorder(tf, -mean_quality_score))) +
+  geom_hline(yintercept = 2, color = "red") +
+  geom_quasirandom_rast(aes(shape = commercial_reporter, color = top_3), raster.dpi = 600, width = 0.25) +
+  stat_summary(fun = mean, fun.min = mean, fun.max = mean, geom = "crossbar", color = "black", width = 0.25, lwd = 0.4) +
+  theme_pubr(border = T, x.text.angle = 90) +
+  scale_color_manual(values = c("Yes" = "#9AC1AE", "No" = "#264653", "Insignificant" = "grey"))
+
+ggplot(cDNA_df7 %>%
+         filter(quality == "Specificity"),
+       aes(y = quality_score, x = reorder(tf, -mean_quality_score))) +
+  geom_hline(yintercept = 2, color = "red") +
+  geom_quasirandom_rast(aes(shape = commercial_reporter, color = commercial_reporter), raster.dpi = 600, width = 0.25) +
+  stat_summary(fun = mean, fun.min = mean, fun.max = mean, geom = "crossbar", color = "black", width = 0.25, lwd = 0.4) +
+  theme_pubr(border = T, x.text.angle = 90) +
+  scale_color_manual(values = c("Yes" = "#A5A58D", "No" = "black"))
+```
+
+
+## Figure 2: Plot activities in chosen conditions
+
+Aim: Get a good overview of reporter activities
+```{r}
+## Quasirandom plots of reporter activities -- combined plot with best cell line per TF
+cDNA_df_plot <- cDNA_df6 %>%
+  distinct(tf, reporter_id, reporter_activity_neg, condition) %>%
+  mutate(cell = gsub("_.*", "", condition)) %>%
+  mutate(mean_tf_activity = ave(reporter_activity_neg, tf, FUN = mean)) %>%
+  mutate(cell = factor(cell, levels = c("A549", "HCT116", "HEK293", "HepG2", "K562",
+                                        "MCF7", "U2OS", "mES", "NPC"))) %>%
+  mutate(n_tf = as.numeric(ave(tf, tf, FUN = length))) %>%
+  filter(n_tf > 10)
+
+cell_colors <- c("A549" = "#f2cc8f", "HCT116" = "#babf95", "HEK293" = "#f4f1de", 
+                               "HepG2" = "#5f797b", "K562" = "#8f5d5d", "MCF7" = "#81b29a", 
+                               "U2OS" = "#3d405b", "mES" = "#eab69f", "NPC" = "#e07a5f") %>%
+  as.data.frame() %>%
+  rownames_to_column("cell")
+
+tfs_colors <- cDNA_df_plot %>%
+  distinct(tf, cell, mean_tf_activity) %>%
+  arrange(desc(mean_tf_activity)) %>%
+  left_join(cell_colors)
+  
+  
+tfs_colors_vec <- tfs_colors %>%
+  column_to_rownames("tf") %>%
+  dplyr::select(-cell, -mean_tf_activity) %>%
+  t() %>%
+  base::as.vector()
+
+names(tfs_colors_vec) <- tfs_colors$tf
+
+
+ggplot(cDNA_df_plot,
+       aes(x = reorder(tf, -mean_tf_activity), y = reporter_activity_neg)) +
+  geom_hline(yintercept = 1, lty = 3) + 
+  geom_hline(yintercept = -1, lty = 3) + 
+  geom_quasirandom(width = .2, aes(color = ifelse(abs(reporter_activity_neg) > 1, "black", "grey70")),
+                   alpha = .6) +
+  stat_summary(fun = median, fun.min = median, fun.max = median, geom = "crossbar", color = "red", width = 0.5, lwd = 0.4) +
+  theme_pubr(x.text.angle = 90) +
+  scale_color_manual(values = c("black", "grey70")) +
+  theme(axis.text.x = element_text(colour=tfs_colors_vec))
+
+## Same but just show two cell lines
+cDNA_df_plot <- cDNA_df %>%  
+  filter(neg_ctrls == "No", 
+         hPGK == "No", 
+         str_detect(tf, "RANDOM", negate = T), 
+         native_enhancer == "No") %>%
+  distinct(tf, reporter_id, reporter_activity_neg, condition) %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  mutate(cell = gsub("_.*", "", condition)) %>%
+  mutate(reporter_activity_neg = log2(ave(reporter_activity_neg, reporter_id, cell, FUN = mean))) %>%
+  distinct(tf, reporter_id, reporter_activity_neg, cell) %>%
+  mutate(n_tf = as.numeric(ave(tf, tf, cell, FUN = length))) %>%
+  filter(n_tf >= 20) %>%
+  filter(cell %in% c("NPC", "mES"))
+
+cDNA_df_plot2 <- cDNA_df_plot %>%
+  filter(cell == "NPC") %>%
+  mutate(mean_tf_activity = ave(reporter_activity_neg, tf, cell, FUN = mean)) %>%
+  distinct(tf, mean_tf_activity)
+
+cDNA_df_plot <- cDNA_df_plot %>%
+  left_join(cDNA_df_plot2)
+
+ggplot(cDNA_df_plot,
+       aes(x = reorder(tf, -mean_tf_activity), y = reporter_activity_neg)) +
+  geom_hline(yintercept = 1, lty = 3) + 
+  geom_hline(yintercept = -1, lty = 3) + 
+  geom_quasirandom_rast(width = .2, aes(color = ifelse(abs(reporter_activity_neg) > 1, "black", "grey70")),
+                   alpha = .6) +
+  stat_summary(fun = median, fun.min = median, fun.max = median, geom = "crossbar", color = "red", width = 0.5, lwd = 0.4) +
+  theme_classic_lines_90() +
+  scale_color_manual(values = c("black", "grey70")) +
+  facet_wrap(~cell, nrow = 2)
+
+## Investigate neg ctrls better
+cDNA_df_ctrl <- cDNA_df %>%  
+  filter(hPGK == "No", 
+         str_detect(tf, "RANDOM", negate = T), 
+         native_enhancer == "No") %>%
+  distinct(tf, reporter_id, reporter_activity_minP, condition, neg_ctrls) %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  mutate(cell = gsub("_.*", "", condition)) %>%
+  mutate(reporter_activity_minP = log2(ave(reporter_activity_minP, reporter_id, cell, FUN = mean))) %>%
+  distinct(tf, reporter_id, reporter_activity_minP, cell, neg_ctrls) %>%
+  mutate(n_tf = as.numeric(ave(tf, tf, cell, FUN = length))) %>%
+  filter(n_tf >= 20) %>%
+  filter(cell %in% c("mES")) %>%
+  mutate(reporter_id = gsub("_neg", "", reporter_id)) %>%
+  pivot_wider(names_from = neg_ctrls, values_from = reporter_activity_minP)
+
+ggplot(cDNA_df_ctrl,
+       aes(x = Yes, y = No)) +
+  geom_abline() +
+  geom_point(aes(color = ifelse(Yes > 2 | (Yes - No) > 1, "Yes", "No"))) +
+  scale_color_manual(values = c("Yes"= "red", "No" = "black")) +
+  facet_wrap(~tf)
+
+cDNA_df_ctrl2 <- cDNA_df %>%  
+  filter(condition %in% c("HepG2_CEBPB", "HepG2_NT"),
+         hPGK == "No", 
+         str_detect(tf, "RANDOM", negate = T), 
+         native_enhancer == "No") %>%
+  distinct(tf, reporter_id, reporter_activity_minP, condition, neg_ctrls) %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  filter(tf == "CEBPB") %>%
+  mutate(reporter_activity_minP = log2(ave(reporter_activity_minP, reporter_id, condition, FUN = mean))) %>%
+  distinct(tf, reporter_id, reporter_activity_minP, condition, neg_ctrls) %>%
+  mutate(n_tf = as.numeric(ave(tf, tf, condition, FUN = length))) %>%
+  filter(n_tf >= 20) %>%
+  mutate(reporter_id = gsub("_neg", "", reporter_id)) %>%
+  pivot_wider(names_from = neg_ctrls, values_from = reporter_activity_minP) %>%
+  mutate(dif = No - Yes) %>%
+  dplyr::select(-Yes, -No) %>%
+  distinct() %>%
+  pivot_wider(names_from = condition, values_from = dif)
+
+ggplot(cDNA_df_ctrl2,
+       aes(x = Yes, y = No)) +
+  geom_abline() +
+  geom_point(aes(color = ifelse(Yes > 2 | (Yes - No) > 1, "Yes", "No"))) +
+  scale_color_manual(values = c("Yes"= "red", "No" = "black")) +
+  facet_wrap(~condition)
+```
+
+## Figure 4: Showcase how reporter activities change in different conditions
+```{r}
+## Showcase example
+ggplot(cDNA_df %>% 
+         filter(str_detect(tf, "VDR"), condition %in% c("U2OS", "U2OS_Calcitriol"), neg_ctrls == "No", promoter != "Random") %>%
+         distinct(reporter_id, commercial_reporter, condition, reporter_activity_neg, promoter) %>%
+         spread(key = "condition", value = "reporter_activity_neg"),
+       aes(x = log2(U2OS),
+           y = log2(U2OS_Calcitriol), 
+           shape = commercial_reporter, 
+           color = promoter)) +
+  geom_hline(yintercept = 0, lty = 2) + 
+  geom_vline(xintercept = 0, lty = 2) +
+  geom_abline(lty = "twodash") +
+  geom_point(size = 2.5) +
+  xlim(-0.5, 8) +
+  ylim(-0.5, 8) +
+  xlab("Activity (log2)") +
+  ylab(paste("Perturbation effect (log2)")) +
+  theme_pubr(border = T) +
+  scale_color_manual(values = c("mCMV" = "black", "hBGm" = "grey50", "minP" = "grey80"))
+
+ggplot(cDNA_df %>% 
+         filter(str_detect(tf, "NFE2L2"), condition %in% c("HepG2", "HepG2_NFE2L2"), neg_ctrls == "No") %>%
+         distinct(reporter_id, commercial_reporter, spacing, condition, reporter_activity_neg) %>%
+         spread(key = "condition", value = "reporter_activity_neg"),
+       aes(x = log2(HepG2),
+           y = log2(HepG2_NFE2L2), 
+           shape = commercial_reporter,
+           color = spacing)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_vline(xintercept = 0, lty = 2) +
+  geom_abline(lty = "twodash") +
+  geom_point(size = 2.5) +
+  #xlim(-0.5, 3.5) +
+  #ylim(-0.5, 3.5) +
+  xlab("Activity (log2)") +
+  ylab(paste("Perturbation effect (log2)")) +
+  theme_pubr(border = T) +
+  scale_color_manual(values = c("#7C9EB2", "#BFD0D9"))
+
+ggplot(cDNA_df %>% 
+         filter(str_detect(tf, "TP53"), condition %in% c("HepG2", "HepG2_TP73"), neg_ctrls == "No", promoter != "Random") %>%
+         distinct(reporter_id, commercial_reporter, spacing, condition, promoter, reporter_activity_neg) %>%
+         spread(key = "condition", value = "reporter_activity_neg"),
+       aes(x = log2(HepG2),
+           y = log2(HepG2_TP73), 
+           shape = commercial_reporter)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_vline(xintercept = 0, lty = 2) +
+  geom_abline(lty = "twodash") +
+  geom_point(size = 2.5, aes(color = promoter)) +
+  xlab("Activity (log2)") +
+  ylab(paste("Off-target effect (log2)")) +
+  theme_pubr(border = T) +
+  scale_color_manual(values = c("mCMV" = "black", "hBGm" = "grey50", "minP" = "grey80"))
+
+ggplot(cDNA_df %>% 
+         filter(str_detect(tf, "STAT3"), condition %in% c("mES_2i_LIF", "mES_2i"), neg_ctrls == "No") %>%
+         distinct(reporter_id, commercial_reporter, spacing, condition, background, reporter_activity_neg) %>%
+         spread(key = "condition", value = "reporter_activity_neg"),
+       aes(x = log2(mES_2i),
+           y = log2(mES_2i_LIF), 
+           shape = commercial_reporter,
+           color = as.factor(spacing))) +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_vline(xintercept = 0, lty = 2) +
+  geom_abline(lty = "twodash") +
+  geom_point(size = 2.5) +
+  xlab("Activity (log2)") +
+  ylab(paste("Perturbation effect (log2)")) +
+  theme_pubr(border = T) +
+  scale_color_manual(values = c("#7C9EB2", "#BFD0D9")) +
+  facet_wrap(~background)
+```
+
+
+---
+
+
+
+
+## Explore activities using set of top reporters
+```{r, fig.width=9, fig.height=9}
+## Set of best reporters
+optimal_reporters <- cDNA_df7 %>%
+  filter(top_3 == "Yes")
+
+
+### Activity across the 9 cell types
+heatmap_cell_activities <- cDNA_df %>%
+  filter(reporter_id %in% optimal_reporters$reporter_id) %>%
+  dplyr::filter(neg_ctrls == "No", 
+                stimulation == "no",
+                hPGK == "No", 
+                str_detect(tf, "RANDOM", negate = T), 
+                native_enhancer == "No") %>%
+  distinct(tf, reporter_activity_neg, cell) %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  mutate(reporter_activity_neg = log2(ave(reporter_activity_neg, tf, cell, FUN = mean))) %>%
+  distinct() %>%
+  spread(key = "tf", value = "reporter_activity_neg") %>% 
+  replace(is.na(.), 0) %>%
+  column_to_rownames("cell")
+
+myBreaks <- c(seq(-1, 0, length.out=50+1), 
+              seq(0.000001, 5, length.out=50))
+
+pheatmap(heatmap_cell_activities %>% 
+           as.matrix(),
+         color = colorRampPalette(c("#F2CC8F", "white", "#3D405B"))(100),
+         clustering_method = "ward.D2",
+         border_color = F, 
+         cellwidth = 8, 
+         cellheight = 8,
+         angle_col = 90,
+         cutree_cols = 6,
+         #cutree_rows = 3,
+         breaks = myBreaks)
+
+
+### Activities upon KD
+cDNA_df2 <- cDNA_df %>%
+  filter(reporter_id %in% optimal_reporters$reporter_id) %>%
+  dplyr::filter(neg_ctrls == "No", 
+                #commercial_reporter == "No", 
+                hPGK == "No", 
+                str_detect(tf, "RANDOM", negate = T), 
+                native_enhancer == "No") %>%
+  distinct(tf, condition, reporter_activity_neg, stimulation, reference_condition, cell) %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  mutate(reporter_activity_neg = log2(ave(reporter_activity_neg, tf, condition, FUN = mean))) %>%
+  distinct()
+
+reference_condition <- cDNA_df2 %>%
+  filter(condition %in% reference_condition) %>%
+  dplyr::select(-reference_condition, "reference_condition" = condition, -stimulation, "reference_activity" = reporter_activity_neg) #%>%
+  #filter(abs(reference_activity) > 1)
+
+cDNA_df3 <- cDNA_df2 %>%
+  filter(cell %in% c("HepG2", "mES")) %>%
+  filter(stimulation == "KD") %>%
+  left_join(reference_condition) %>%
+  mutate(reporter_FC = reporter_activity_neg - reference_activity) %>%
+  mutate(TF_dif = ave(reporter_FC, tf, condition, FUN = mean)) %>%
+  mutate(TF_dif = ifelse(abs(TF_dif) > 0.2, TF_dif, 0))
+
+cDNA_df3[is.na(cDNA_df3)] <- 0
+
+cDNA_df4 <- cDNA_df3 %>%
+  distinct(tf, condition, TF_dif, cell) %>%
+  mutate(condition = gsub("HepG2_", "", condition)) %>%
+  mutate(condition = gsub("mES_", "", condition)) %>%
+  filter(condition %in% tf) %>%
+  filter(tf %in% condition) %>%
+  mutate(diag = ifelse(tf == condition, T, F)) 
+
+KD_doubles <- cDNA_df4 %>%
+  filter(diag == T) %>%
+  mutate(n_kd = ave(tf, tf, FUN = length)) %>%
+  filter(n_kd == 2) %>%
+  group_by(tf) %>%
+  dplyr::arrange(TF_dif, .by_group = T) %>%
+  dplyr::slice(n = 1, .preserve = T) %>%
+  ungroup() %>%
+  mutate(condition2 = paste(condition, cell, sep = "_"))
+
+KD_singles <- cDNA_df4 %>%
+  filter(diag == T) %>%
+  mutate(n_kd = ave(tf, tf, FUN = length)) %>%
+  filter(n_kd == 1) %>%
+  mutate(condition2 = paste(condition, cell, sep = "_"))
+
+cDNA_df5 <- cDNA_df4 %>%
+  mutate(condition2 = paste(condition, cell, sep = "_")) %>%
+  filter(condition2 %in% KD_doubles$condition2 | condition2 %in% KD_singles$condition2) %>%
+  filter(!condition %in% c("TP53"), !tf %in% c("TP53")) %>%
+  arrange(diag)
+ 
+ggplot(cDNA_df5,
+       aes(x = tf, y = condition, fill = TF_dif)) +
+  geom_tile(color = cDNA_df5$diag, size = .5) +
+  scale_color_manual(values = c("black", "white")) +
+  scale_fill_gradient2(low = "#99B2DD",
+                        mid = "white",
+                        high = "#dd6b48",
+                       limits = c(-1.5,1.5),
+                       oob = squish) +
+  coord_fixed() +
+  xlab("TF reporter") +
+  ylab("KD condition") +
+  theme_pubr(border = T, x.text.angle = 90) 
+
+
+### TF activity changes upon stimulation 
+cDNA_df2 <- cDNA_df %>%
+  filter(reporter_id %in% optimal_reporters$reporter_id) %>%
+  dplyr::filter(neg_ctrls == "No", 
+                #commercial_reporter == "No", 
+                hPGK == "No", 
+                str_detect(tf, "RANDOM", negate = T), 
+                native_enhancer == "No") %>%
+  distinct(tf, condition, reporter_activity_neg, stimulation, reference_condition, cell) %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  mutate(reporter_activity_neg = log2(ave(reporter_activity_neg, tf, condition, FUN = mean))) %>%
+  distinct()
+
+reference_condition <- cDNA_df2 %>%
+  filter(condition %in% reference_condition) %>%
+  dplyr::select(-reference_condition, "reference_condition" = condition, -stimulation, "reference_activity" = reporter_activity_neg) #%>%
+  #filter(abs(reference_activity) > 1)
+
+stimulations <- stimulations %>%
+  distinct(condition, tf) %>%
+  mutate(target = "Yes")
+
+cDNA_df3 <- cDNA_df2 %>%
+  filter(stimulation == "pathway", condition %in% c("HCT116_Calcymicin", "HepG2_CDCA", "K562_Hemin", "K562_T3", "MCF7_Hexestrol", "mES_2i", "mES_BX", "mES_HQ",
+                                                    "mES_IWP2", "mES_LIF_CH", "mES_LIF_PD", "mES_N2B27", "mES_serum_2i_LIF", "mES_vitC", "U2OS_Calcitriol", "U2OS_Heat",
+                                                    "U2OS_PMA", "U2OS_Wortmannin")) %>%
+  left_join(stimulations) %>%
+  left_join(reference_condition) %>%
+  mutate(reporter_FC = reporter_activity_neg - reference_activity) %>%
+  mutate(TF_dif = ave(reporter_FC, tf, condition, FUN = mean)) %>%
+  mutate(TF_dif = ifelse(abs(TF_dif) > 0.5, TF_dif, 0)) %>%
+  mutate(mean_activity = ave(reporter_activity_neg, tf, condition, FUN = mean)) %>%
+  mutate(mean_TF_dif = ave(TF_dif, condition, FUN = mean)) %>%
+  mutate(mean_TF_dif2 = ave(TF_dif, tf, FUN = mean)) %>%
+  filter(mean_TF_dif != 0, mean_TF_dif2 != 0)
+
+target_change <- cDNA_df3 %>%
+  filter(target == "Yes") %>%
+  filter(TF_dif != 0)
+
+cDNA_df3[is.na(cDNA_df3)] <- 0
+
+cDNA_df3 <- cDNA_df3 %>%
+  #filter(condition %in% target_change$condition) %>%
+  distinct(tf, condition, TF_dif) %>%
+  spread(tf, TF_dif) %>%
+  column_to_rownames("condition")
+
+myBreaks <- c(seq(-2, 0, length.out=50+1), 
+              seq(0.000001, 2, length.out=50))
+
+pheatmap(cDNA_df3 %>% 
+                 as.matrix(),
+         color = colorRampPalette(c("#99B2DD", "white", "#E07A5F"))(100),
+         clustering_method = "ward.D",
+         border_color = F, 
+         cellwidth = 8, 
+         cellheight = 8,
+         #annotation_col = tf_clusters, 
+         angle_col = 90,
+         cutree_cols = 5,
+         #cutree_rows = 3,
+         breaks = myBreaks)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Effect of TF perturbations of TF activity
+
+```{r}
+cDNA_df2 <- cDNA_df %>%
+  filter(tf != "RFX1") %>%
+  dplyr::filter(neg_ctrls == "No", 
+                commercial_reporter == "No", 
+                hPGK == "No", 
+                str_detect(tf, "RANDOM", negate = T), 
+                native_enhancer == "No") %>%
+  distinct(tf, condition, reporter_activity_minP, stimulation, reference_condition) %>%
+  mutate(reporter_activity_minP = log2(ave(reporter_activity_minP, tf, condition, FUN = mean))) %>%
+  distinct()
+
+reference_condition <- cDNA_df2 %>%
+  filter(condition %in% reference_condition) %>%
+  dplyr::select(-reference_condition, "reference_condition" = condition, -stimulation, "reference_activity" = reporter_activity_minP) #%>%
+  #filter(abs(reference_activity) > 1)
+
+cDNA_df3 <- cDNA_df2 %>%
+  filter(stimulation == "degron") %>%
+  left_join(reference_condition) %>%
+  mutate(reporter_FC = reporter_activity_minP - reference_activity) %>%
+  mutate(TF_dif = ave(reporter_FC, tf, condition, FUN = mean)) %>%
+  mutate(TF_dif = ifelse(abs(TF_dif) > 0.5, TF_dif, 0)) %>%
+  mutate(mean_activity = ave(reporter_activity_minP, tf, condition, FUN = mean)) #%>%
+  #filter(mean_activity > 0.5)
+
+cDNA_df3[is.na(cDNA_df3)] <- 0
+
+cDNA_df3 <- cDNA_df3 %>%
+  distinct(tf, condition, TF_dif) %>%
+  spread(tf, TF_dif) %>%
+  column_to_rownames("condition")%>%
+  select_if(colSums(.) != 0)
+
+myBreaks <- c(seq(-1.5, 0, length.out=50+1), 
+              seq(0.000001, 1.5, length.out=50))
+
+pheatmap(cDNA_df3 %>% 
+                 as.matrix(),
+         color = colorRampPalette(c("#99B2DD", "white", "#E07A5F"))(100),
+         clustering_method = "ward.D",
+         border_color = F, 
+         cellwidth = 8, 
+         cellheight = 8,
+         #annotation_col = tf_clusters, 
+         angle_col = 90,
+         #cutree_cols = 5,
+         #cutree_rows = 3,
+         breaks = myBreaks)
+```
+
+## Effect of TF perturbations on TF activity
+
+```{r}
+cDNA_df2 <- cDNA_df %>%
+  #filter(reporter_id %in% optimal_reporters$reporter_id) %>%
+  filter(tf != "RFX1") %>%
+  dplyr::filter(neg_ctrls == "No", 
+                commercial_reporter == "No", 
+                hPGK == "No", 
+                str_detect(tf, "RANDOM", negate = T), 
+                native_enhancer == "No") %>%
+  distinct(tf, condition, reporter_activity_minP, stimulation, reference_condition, cell) %>%
+  mutate(reporter_activity_minP = log2(ave(reporter_activity_minP, tf, condition, FUN = mean))) %>%
+  distinct()
+
+reference_condition <- cDNA_df2 %>%
+  filter(condition %in% reference_condition) %>%
+  dplyr::select(-reference_condition, "reference_condition" = condition, -stimulation, "reference_activity" = reporter_activity_minP) #%>%
+  #filter(abs(reference_activity) > 1)
+
+cDNA_df3 <- cDNA_df2 %>%
+  filter(cell == "HepG2") %>%
+  filter(stimulation == "KD") %>%
+  left_join(reference_condition) %>%
+  mutate(reporter_FC = reporter_activity_minP - reference_activity) %>%
+  mutate(TF_dif = ave(reporter_FC, tf, condition, FUN = mean)) %>%
+  mutate(TF_dif = ifelse(abs(TF_dif) > 0.2, TF_dif, 0)) %>%
+  mutate(mean_activity = ave(reporter_activity_minP, tf, condition, FUN = mean)) #%>%
+  #filter(mean_activity > 0.5)
+
+cDNA_df3[is.na(cDNA_df3)] <- 0
+
+cDNA_df4 <- cDNA_df3 %>%
+  distinct(tf, condition, TF_dif) %>%
+  spread(tf, TF_dif) %>%
+  column_to_rownames("condition")%>%
+  select_if(colSums(.) != 0)
+
+myBreaks <- c(seq(-1, 0, length.out=50+1), 
+              seq(0.000001, 1, length.out=50))
+
+pheatmap(cDNA_df4 %>% 
+                 as.matrix(),
+         color = colorRampPalette(c("#99B2DD", "white", "#E07A5F"))(100),
+         clustering_method = "ward.D",
+         border_color = F, 
+         cellwidth = 8, 
+         cellheight = 8,
+         #annotation_col = tf_clusters, 
+         angle_col = 90,
+         #cutree_cols = 5,
+         #cutree_rows = 3,
+         breaks = myBreaks)
+
+cDNA_df4 <- cDNA_df3 %>%
+  distinct(tf, condition, TF_dif) %>%
+  mutate(condition = gsub("HepG2_", "", condition)) %>%
+  filter(condition %in% tf) %>%
+  filter(tf %in% condition) %>%
+  mutate(diag = ifelse(tf == condition, T, F)) %>%
+  arrange(diag)
+
+ggplot(cDNA_df4,
+       aes(x = tf, y = condition, fill = TF_dif)) +
+  geom_tile(color = cDNA_df4$diag, size = .5) +
+  scale_color_manual(values = c("black", "white")) +
+  scale_fill_gradient2(low = "#99B2DD",
+                        mid = "white",
+                        high = "#dd6b48",
+                       limits = c(-2,2),
+                       oob = squish) +
+  coord_fixed() +
+  xlab("TF reporter") +
+  ylab("KD condition") +
+  ggtitle("Only TFs that are direct target of KD") +
+  theme_pubr(border = T, x.text.angle = 90) +
+  labs(fill="FC compared to control - mean of all reporters")
+```
+
+
+```{r}
+cDNA_df2 <- cDNA_df %>%
+  filter(tf != "RFX1") %>%
+  dplyr::filter(neg_ctrls == "No", 
+                commercial_reporter == "No", 
+                hPGK == "No", 
+                str_detect(tf, "RANDOM", negate = T), 
+                native_enhancer == "No") %>%
+  distinct(tf, condition, reporter_activity_minP, stimulation, reference_condition, cell) %>%
+  mutate(reporter_activity_minP = log2(ave(reporter_activity_minP, tf, condition, FUN = mean))) %>%
+  distinct()
+
+reference_condition <- cDNA_df2 %>%
+  filter(condition %in% reference_condition) %>%
+  dplyr::select(-reference_condition, "reference_condition" = condition, -stimulation, "reference_activity" = reporter_activity_minP) #%>%
+  #filter(abs(reference_activity) > 1)
+
+cDNA_df3 <- cDNA_df2 %>%
+  filter(cell == "mES") %>%
+  filter(stimulation == "KD") %>%
+  left_join(reference_condition) %>%
+  mutate(reporter_FC = reporter_activity_minP - reference_activity) %>%
+  mutate(TF_dif = ave(reporter_FC, tf, condition, FUN = mean)) %>%
+  mutate(TF_dif = ifelse(abs(TF_dif) > 0.2, TF_dif, 0)) %>%
+  mutate(mean_activity = ave(reporter_activity_minP, tf, condition, FUN = mean)) #%>%
+  #filter(mean_activity > 0.5)
+
+cDNA_df3[is.na(cDNA_df3)] <- 0
+
+cDNA_df4 <- cDNA_df3 %>%
+  distinct(tf, condition, TF_dif) %>%
+  spread(tf, TF_dif) %>%
+  column_to_rownames("condition")%>%
+  select_if(colSums(.) != 0)
+
+myBreaks <- c(seq(-1, 0, length.out=50+1), 
+              seq(0.000001, 1, length.out=50))
+
+pheatmap(cDNA_df4 %>% 
+                 as.matrix(),
+         color = colorRampPalette(c("#99B2DD", "white", "#E07A5F"))(100),
+         clustering_method = "ward.D",
+         border_color = F, 
+         cellwidth = 8, 
+         cellheight = 8,
+         #annotation_col = tf_clusters, 
+         angle_col = 90,
+         #cutree_cols = 5,
+         #cutree_rows = 3,
+         breaks = myBreaks)
+
+cDNA_df4 <- cDNA_df3 %>%
+  distinct(tf, condition, TF_dif) %>%
+  mutate(condition = gsub("mES_", "", condition)) %>%
+  filter(condition %in% tf) %>%
+  filter(tf %in% condition) %>%
+  mutate(diag = ifelse(tf == condition, T, F)) %>%
+  arrange(diag)
+
+ggplot(cDNA_df4,
+       aes(x = tf, y = condition, fill = TF_dif)) +
+  geom_tile(color = cDNA_df4$diag, size = .5) +
+  scale_color_manual(values = c("black", "white")) +
+  scale_fill_gradient2(low = "#99B2DD",
+                        mid = "white",
+                        high = "#dd6b48",
+                       limits = c(-1,1),
+                       oob = squish) +
+  coord_fixed() +
+  xlab("TF reporter") +
+  ylab("KD condition") +
+  ggtitle("Only TFs that are direct target of KD") +
+  theme_pubr(border = T, x.text.angle = 90) +
+  labs(fill="FC compared to control - mean of all reporters")
+```
+
+
+## Compare degron data to KD data
+```{r}
+cDNA_df3 <- cDNA_df2 %>%
+  filter(condition %in% c("mES_POU5F1", "mES_Pou5f1_AID")) %>%
+  left_join(reference_condition) %>%
+  mutate(reporter_FC = reporter_activity_minP - reference_activity) %>%
+  mutate(TF_dif = ave(reporter_FC, tf, condition, FUN = mean)) %>%
+  #mutate(TF_dif = ifelse(abs(TF_dif) > 0.2, TF_dif, 0)) %>%
+  mutate(mean_activity = ave(reporter_activity_minP, tf, condition, FUN = mean)) %>%
+  distinct(tf, TF_dif, condition) %>%
+  spread(key = "condition", value = "TF_dif")
+
+ggplot(cDNA_df3,
+       aes(x = mES_POU5F1, y = mES_Pou5f1_AID)) +
+  geom_point() +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm")
+
+cDNA_df3 <- cDNA_df2 %>%
+  filter(condition %in% c("mES_SOX2", "mES_Sox2_AID")) %>%
+  left_join(reference_condition) %>%
+  mutate(reporter_FC = reporter_activity_minP - reference_activity) %>%
+  mutate(TF_dif = ave(reporter_FC, tf, condition, FUN = mean)) %>%
+  #mutate(TF_dif = ifelse(abs(TF_dif) > 0.2, TF_dif, 0)) %>%
+  mutate(mean_activity = ave(reporter_activity_minP, tf, condition, FUN = mean)) %>%
+  distinct(tf, TF_dif, condition) %>%
+  spread(key = "condition", value = "TF_dif")
+
+ggplot(cDNA_df3,
+       aes(x = mES_SOX2, y = mES_Sox2_AID)) +
+  geom_point() +
+  geom_abline(lty = 2) +
+  geom_smooth(method = "lm")
+```
+
+
+
+
+
+
+
+
+
+
+```{r warning = F}
+## Heatmap: mean reporter activity per condition
+cDNA_df4 <- cDNA_df %>%
+  filter(stimulation == "no") %>%
+  filter(tf != "RFX1") %>%
+  dplyr::filter(neg_ctrls == "No", 
+                commercial_reporter == "No", 
+                hPGK == "No", 
+                str_detect(tf, "RANDOM", negate = T), 
+                native_enhancer == "No") %>%
+  distinct(tf, condition, reporter_activity_minP) %>%
+  mutate(reporter_activity_minP = ave(reporter_activity_minP, tf, condition, FUN = mean)) %>%
+  mutate(log_reporter_activity_minP = log2(reporter_activity_minP)) %>%
+  mutate(mean_tf_activity = ave(reporter_activity_minP, tf, FUN = mean)) %>%
+  #filter(abs(mean_tf_activity) > 0.5) %>%
+  distinct()
+
+nt_df <- cDNA_df4 %>%
+  filter(condition == "HepG2_NT") %>%
+  mutate(log_reporter_activity_minP = ave(log_reporter_activity_minP, tf, FUN = mean)) %>%
+  filter(abs(log_reporter_activity_minP) > 0.15) %>%
+  dplyr::select(tf, "nt_activity" = reporter_activity_minP) %>%
+  mutate(nt_activity = ave(nt_activity, tf, FUN = mean)) %>%
+  distinct()
+
+
+## First only plot identical matches to check direct KDs
+cDNA_df5 <- merge(cDNA_df4, nt_df, all = T) %>%
+  na.omit() %>%
+  mutate(reporter_FC = log2(reporter_activity_minP/nt_activity)) %>%
+  filter(condition %in% tf) %>%
+  filter(tf %in% condition) %>%
+  distinct(tf, condition, reporter_FC) %>%
+  mutate(diag = ifelse(tf == condition, T, F)) %>%
+  arrange(diag)
+
+ggplot(cDNA_df5,
+       aes(x = tf, y = condition, fill = reporter_FC)) +
+  geom_tile(color = cDNA_df5$diag, size = .5) +
+  scale_color_manual(values = c("black", "white")) +
+  scale_fill_gradient2(low = "#99B2DD",
+                        mid = "white",
+                        high = "#dd6b48",
+                       limits = c(-.5,.5),
+                       oob = squish) +
+  coord_fixed() +
+  xlab("TF reporter") +
+  ylab("KD condition") +
+  ggtitle("Only TFs that are direct target of KD") +
+  theme_pubr(border = T, x.text.angle = 90) +
+  labs(fill="FC compared to control - mean of all reporters")
+
+
+## Now also include indirect targets
+cDNA_df5 <- merge(cDNA_df4, nt_df, all = T) %>%  na.omit() %>%
+  mutate(reporter_FC = log2(reporter_activity_minP/nt_activity)) %>%
+  #filter(condition %in% tf) %>%
+  #filter(tf %in% condition) %>%
+  distinct(tf, condition, reporter_FC)
+ 
+tf_kd_targets <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7027_KD_mES/tf_kd_targets_mES.csv") %>% 
+  #filter(condition %in% cDNA_df5$condition) %>%
+  setnames("target", "tf") %>%
+  mutate(is_target = T) %>%
+  right_join(cDNA_df5, by = c("condition", "tf")) 
+
+tf_kd_targets$is_target[is.na(tf_kd_targets$is_target)] <- F
+tf_kd_targets <- tf_kd_targets %>%
+  filter(condition != "NT") %>%
+  arrange(is_target)
+
+ggplot(tf_kd_targets,
+       aes(x = tf, y = condition, fill = reporter_FC)) +
+  geom_tile(color = tf_kd_targets$is_target, size = .5) +
+  scale_color_manual(values = c("black", "white")) +
+  scale_fill_gradient2(low = "#99B2DD",
+                        mid = "grey95",
+                        high = "#dd6b48",
+                       na.value = "white",
+                       limits = c(-.5,.5),
+                       oob = squish) +
+  coord_fixed() +
+  xlab("TF reporter") +
+  ylab("KD condition") +
+  ggtitle("All 'active' TFs - KD targets highlighted by box") +
+  theme_pubr(border = T, x.text.angle = 90) +
+  labs(fill="FC compared to control - mean of all reporters")
+
+
+tf_kd_targets <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6952_KD_HepG2/tf_kd_targets.csv") %>% 
+  #filter(condition %in% cDNA_df5$condition) %>%
+  setnames("target", "tf") %>%
+  mutate(is_target = T) %>%
+  right_join(cDNA_df5, by = c("condition", "tf")) 
+
+tf_kd_targets$is_target[is.na(tf_kd_targets$is_target)] <- F
+tf_kd_targets <- tf_kd_targets %>%
+  filter(condition != "NT") %>%
+  arrange(is_target) %>%
+  mutate(target_length = ave(is_target, tf, FUN = function(x) length(unique(x)))) %>%
+  filter(target_length > 1) %>%
+  dplyr::select(-target_length)
+
+ggplot(tf_kd_targets,
+       aes(x = tf, y = condition, fill = reporter_FC)) +
+  geom_tile(color = tf_kd_targets$is_target, size = .5) +
+  scale_color_manual(values = c("black", "white")) +
+  scale_fill_gradient2(low = "#99B2DD",
+                        mid = "grey95",
+                        high = "#dd6b48",
+                       na.value = "white",
+                       limits = c(-1,1),
+                       oob = squish) +
+  coord_fixed() +
+  xlab("TF reporter") +
+  ylab("KD condition") +
+  ggtitle("Only targeted TFs - KD targets highlighted by box") +
+  theme_pubr(border = T, x.text.angle = 90) +
+  labs(fill="FC compared to control - mean of all reporters")
+
+
+tf_kd_targets <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6952_KD_HepG2/tf_kd_targets.csv") %>% 
+  #filter(condition %in% cDNA_df5$condition) %>%
+  setnames("target", "tf") %>%
+  mutate(is_target = T) %>%
+  left_join(cDNA_df5, by = c("condition", "tf")) 
+
+tf_kd_targets$is_target[is.na(tf_kd_targets$is_target)] <- F
+tf_kd_targets <- tf_kd_targets %>%
+  filter(condition != "NT") %>%
+  arrange(is_target)
+
+ggplot(tf_kd_targets,
+       aes(x = tf, y = condition, fill = reporter_FC)) +
+  geom_tile(color = tf_kd_targets$is_target, size = .5) +
+  scale_color_manual(values = c("black", "white")) +
+  scale_fill_gradient2(low = "#99B2DD",
+                        mid = "grey95",
+                        high = "#dd6b48",
+                       na.value = "white",
+                       limits = c(-1,1),
+                       oob = squish) +
+  coord_fixed() +
+  xlab("TF reporter") +
+  ylab("KD condition") +
+  ggtitle("Only KD targets") +
+  theme_pubr(border = T, x.text.angle = 90) +
+  labs(fill="FC compared to control - mean of all reporters")
+```
+
+Conclusion: KDs worked to varying degrees. Some were efficient and specific, others were unspecific, or didn't work at all.
+
+---
+
+
+## Interaction network between TFs
+```{r}
+# threshold <- 1
+# 
+# interaction_df <- cDNA_df4 %>%
+#   dplyr::select("receiver" = tf, "signal" = condition, TF_dif) %>%
+#   distinct() %>%
+#   mutate(TF_dif_binary = "0") %>%
+#   mutate(TF_dif_binary = ifelse(TF_dif > threshold, "-1", TF_dif_binary)) %>%
+#   mutate(TF_dif_binary = ifelse(TF_dif < -threshold, "1", TF_dif_binary)) %>%
+#   mutate(TF_dif_binary = ifelse(TF_dif > -threshold & TF_dif < threshold, "0", TF_dif_binary)) %>%
+#   mutate(TF_dif_binary = as.numeric(TF_dif_binary)) %>%
+#   mutate(TF_dif_binary = (ifelse(receiver == signal, 0, TF_dif_binary))) %>%
+#   mutate(sum_receiver = ave(TF_dif_binary, receiver, FUN = function(x) sum(x))) %>%
+#   mutate(sum_signal = ave(TF_dif_binary, signal, FUN = function(x) sum(x))) %>%
+#   mutate(sum_receiver_size = ave(TF_dif_binary, receiver, FUN = function(x) sum(abs(x)))) %>%
+#   mutate(sum_signal_size = ave(TF_dif_binary, signal, FUN = function(x) sum(abs(x)))) 
+# 
+# 
+# interaction_matrix <- interaction_df %>%
+#   distinct(TF_dif_binary, receiver, signal) %>%
+#   spread(key = "receiver", value = "TF_dif_binary") %>%
+#   column_to_rownames("signal")
+# 
+# pheatmap(interaction_matrix,
+#          border_color = NA,
+#          color = colorRampPalette(c("#d5bdaf", 'white', "#84a98c"))(100),
+#          clustering_method = "ward.D")
+# 
+# 
+# ###
+# interaction_nodes <- interaction_df %>%
+#   filter(signal == receiver) %>%
+#   distinct(receiver, signal, sum_signal, sum_receiver, sum_signal_size, sum_receiver_size) %>%
+#   mutate(sum_total = sum_receiver_size + sum_signal_size) %>%
+#   mutate(class = ifelse(sum_signal <= 0, "repressor", "activator")) %>%
+#   distinct(receiver, sum_total, class) 
+# 
+# 
+# interaction_edges <- interaction_df %>%
+#   filter(receiver != signal) %>%
+#   distinct(receiver, signal, TF_dif_binary, TF_dif) %>%
+#   mutate(weight = 0) %>%
+#   mutate(weight = ifelse(TF_dif_binary == -1, 1, weight)) %>%
+#   mutate(weight = ifelse(TF_dif_binary == 1, 2, weight)) %>%
+#   mutate(class = ifelse(weight == 1, "repressor", "activator")) %>%
+#   dplyr::select(signal, receiver, weight, class, TF_dif) %>%
+#   filter(weight != 0) %>%
+#   mutate(TF_dif = abs(TF_dif))
+#   
+# interaction_nodes <- interaction_nodes %>%
+#   filter(receiver %in% c(unique(interaction_edges$receiver),unique(interaction_edges$signal)))
+# 
+# routes_igraph <- graph_from_data_frame(d = interaction_edges, vertices = interaction_nodes, directed = TRUE)
+# 
+# 
+# visIgraph(routes_igraph) %>%
+#     visNodes(size = 25, shape = "circle") %>%
+#     visOptions(highlightNearest = list(enabled = TRUE, hover = TRUE),
+#                nodesIdSelection = TRUE) %>%
+#     visInteraction(keyboard = TRUE)
+# 
+# ggraph(routes_igraph, layout = "sugiyama") + 
+#   geom_node_point(aes(size = sum_total, color = class)) +
+#   geom_edge_link(aes(color = class, width = TF_dif), 
+#                  alpha = 0.8,
+#                  arrow = arrow(length = unit(3, 'mm')), 
+#                  start_cap = circle(2, 'mm'),
+#                  end_cap = circle(3, 'mm')) + 
+#   scale_edge_width(range = c(0.2, 2)) +
+#   scale_radius(limits = c(1, NA), range = c(1, 6)) + 
+#   geom_node_text(aes(label = name), repel = TRUE) +
+#   scale_edge_color_manual(values = c("activator" = colors_diverse[2], "repressor" = colors_diverse[1])) +
+#   scale_color_manual(values = c("activator" = colors_diverse[2], "repressor" = colors_diverse[1])) +
+#   theme_graph()
+
+```
+
+
+
+
+## Cistrome TF targets
+```{r}
+# bc_files = list.files('/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6952_KD_HepG2/cistrome/',
+#                        full.names=T, patter='*.txt')
+# bc_list <- lapply(bc_files, fread, header = T)
+# names(bc_list)<- gsub('.*/cistrome//(.*?).txt', '\\1', bc_files)
+# 
+# cistrome_df <- bind_rows(bc_list, .id = "TF") %>%
+#   distinct(score, symbol, TF)
+# 
+# cistrome_df <- cistrome_df %>%
+#   filter(TF %in% interaction_df$receiver, symbol %in% interaction_df$receiver) %>%
+#   mutate(score = ave(score, TF, symbol, FUN = mean)) %>%
+#   distinct() %>%
+#   filter(TF != symbol) %>%
+#   filter(score > 2) %>%
+#   mutate(sum_target = as.numeric(ave(symbol, symbol, FUN = function(x) length(x))))
+# 
+# cistrome_matrix <- cistrome_df %>%
+#   dplyr::select(-sum_target) %>%
+#   spread(key = "symbol", value = "score") %>%
+#   column_to_rownames("TF")
+# 
+# cistrome_matrix[is.na(cistrome_matrix)] <- 0
+# 
+# pheatmap(cistrome_matrix,
+#          border_color = NA,
+#          color = colorRampPalette(c("#d5bdaf", 'white', "#84a98c"))(100),
+#          clustering_method = "ward.D")
+# 
+# cistrome_nodes <- cistrome_df %>%
+#   distinct(symbol, sum_target)
+# 
+# cistrome_edges <- cistrome_df %>%
+#   filter(symbol %in% cistrome_nodes$symbol) %>%
+#   distinct(TF, symbol, "weight" = score)
+# 
+# cistrome_igraph <- graph_from_data_frame(d = cistrome_edges, vertices = cistrome_nodes, directed = TRUE)
+# 
+# ggraph(cistrome_igraph, layout = "sugiyama") + 
+#   geom_node_point(aes(size = sum_target)) +
+#   geom_edge_link(aes(width = weight), 
+#                  alpha = 0.8,
+#                  arrow = arrow(length = unit(3, 'mm')), 
+#                  start_cap = circle(2, 'mm'),
+#                  end_cap = circle(3, 'mm')) + 
+#   scale_edge_width(range = c(0.2, 2)) +
+#   geom_node_text(aes(label = name), repel = TRUE) +
+#   theme_graph()
+```
+
+
+## Cistrome TF targets
+```{r}
+# bc_files = list.files('/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6952_KD_HepG2/cistrome/',
+#                        full.names=T, patter='*.csv')
+# bc_list <- lapply(bc_files, fread, header = T)
+# names(bc_list)<- gsub('.*/cistrome//.*M_.*_(.*?)hg38.*.csv', '\\1', bc_files)
+# 
+# cistrome_df <- bind_rows(bc_list, .id = "target") %>%
+#   distinct(RP_score, "TF" = Factor, target)
+# 
+# cistrome_df <- cistrome_df %>%
+#   filter(TF %in% interaction_df$receiver, target %in% interaction_df$receiver) %>%
+#   mutate(RP_score = ave(RP_score, TF, target, FUN = mean)) %>%
+#   distinct() %>%
+#   filter(TF != target) %>%
+#   #filter(RP_score > 0.3) %>%
+#   mutate(sum_target = as.numeric(ave(target, target, FUN = function(x) length(x))))
+# 
+# cistrome_matrix <- cistrome_df %>%
+#   dplyr::select(-sum_target) %>%
+#   spread(key = "target", value = "RP_score") %>%
+#   column_to_rownames("TF")
+# 
+# cistrome_matrix[is.na(cistrome_matrix)] <- 0
+# 
+# pheatmap(cistrome_matrix,
+#          border_color = NA,
+#          color = colorRampPalette(c("#d5bdaf", 'white', "#84a98c"))(100),
+#          clustering_method = "ward.D")
+# 
+# cistrome_nodes <- cistrome_df %>%
+#   distinct(target, sum_target)
+# 
+# cistrome_edges <- cistrome_df %>%
+#   filter(target %in% cistrome_nodes$target) %>%
+#   distinct(TF, target, "weight" = RP_score)
+# 
+# cistrome_igraph <- graph_from_data_frame(d = cistrome_edges, vertices = cistrome_nodes, directed = TRUE)
+# 
+# ggraph(cistrome_igraph, layout = "sugiyama") + 
+#   geom_node_point(aes(size = sum_target)) +
+#   geom_edge_link(aes(width = weight), 
+#                  alpha = 0.8,
+#                  arrow = arrow(length = unit(3, 'mm')), 
+#                  start_cap = circle(2, 'mm'),
+#                  end_cap = circle(3, 'mm')) + 
+#   scale_edge_width(range = c(0.2, 2)) +
+#   geom_node_text(aes(label = name), repel = TRUE) +
+#   theme_graph()
+```
+
+
+
+## Reporter activity compared to background
+
+Aim: Display reporter activities relative to background activity per tf and condition. Get an overview over all reporter activities per condition.
+
+```{r reporter_activities, out.width= "80%", fig.align= "center"}
+nt_df <- cDNA_df %>%
+  dplyr::filter(condition %in% c("NT_1", "NT_2")) %>%
+  dplyr::select(reporter_id, "nt_reporter_activity_minP" = reporter_activity_minP) %>%
+  mutate(nt_reporter_activity_minP = ave(nt_reporter_activity_minP, reporter_id, FUN = mean)) %>%
+  distinct()
+
+cDNA_df2 <- merge(cDNA_df, nt_df, all = T) %>%
+  #na.omit() %>%
+  filter(neg_ctrls == "No") %>%
+  mutate(reporter_FC = log2(reporter_activity_minP/nt_reporter_activity_minP)) %>%
+  distinct(tf, reporter_id, condition, reporter_FC, commercial_reporter) %>%
+  mutate(mean_tf_activity = ave(reporter_FC, tf, condition, FUN = mean))
+
+## Reporter FC vs reporter activity in NT control - are the most changing reporters the ones with higher activity?
+ggplot(merge(cDNA_df, nt_df, all = T) %>%
+  filter(neg_ctrls == "No", tf == "SP1", condition == "SP1") %>%
+  mutate(reporter_FC = log2(reporter_activity_minP/nt_reporter_activity_minP)) %>%
+  distinct(tf, reporter_id, condition, reporter_FC, commercial_reporter, nt_reporter_activity_minP),
+       aes(x = reporter_FC, y = nt_reporter_activity_minP)) +
+  geom_point()
+
+tf_kd_targets <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7027_KD_mES/tf_kd_targets_mES.csv") %>%
+  #filter(condition %in% cDNA_df5$condition) %>%
+  setnames("target", "tf") %>%
+  mutate(is_target = T) %>%
+  right_join(cDNA_df2, by = c("condition", "tf"))
+
+tf_kd_targets$is_target[is.na(tf_kd_targets$is_target)] <- F
+tf_kd_targets <- tf_kd_targets %>%
+  filter(condition != "NT") %>%
+  arrange(is_target)
+
+# for (i in unique(tf_kd_targets$condition)) {
+#   print(i)
+#   p <- ggplot(tf_kd_targets %>%
+#                 filter(condition == i),
+#               mapping = aes(x = reorder(tf, -mean_tf_activity), y = reporter_FC, color = is_target)) +
+#     geom_boxplot(aes(alpha = 0.7)) +
+#     geom_quasirandom(aes(alpha = 0.7)) +
+#     scale_color_manual(values = c(colors_diverse[1], colors_diverse[3])) +
+#     ggtitle(i) +
+#     theme_classic_lines_90()
+#
+#   print(p)
+# }
+
+tf_kd_targets <- tf_kd_targets %>%
+  mutate(tf = gsub("_.*", "", tf))
+
+tf_kd_targets2 <- tf_kd_targets %>%
+  filter(tf %in% cDNA_df4$tf) %>%
+  mutate(is_target = ifelse(commercial_reporter == "Yes", "commercial", is_target))
+
+for (i in unique(tf_kd_targets2$condition)) {
+  print(i)
+  p <- ggplot(tf_kd_targets2 %>%
+                filter(condition == i),
+              mapping = aes(x = reorder(tf, -mean_tf_activity), y = reporter_FC, color = is_target, group = commercial_reporter)) +
+    geom_hline(yintercept = 0, lty = 2) +
+    geom_quasirandom(dodge.width = .75) +
+    scale_color_manual(values = c("FALSE" = colors_diverse[1], "TRUE" = colors_diverse[3], "commercial" = colors_diverse[4])) +
+    ggtitle(i) +
+    theme_pubr(border = T, x.text.angle = 90)
+
+  print(p)
+}
+
+for (i in unique(tf_kd_targets2$tf)) {
+  print(i)
+  p <- ggplot(tf_kd_targets2 %>%
+                filter(tf == i),
+              mapping = aes(x = reorder(condition, -mean_tf_activity), y = reporter_FC, color = is_target, group = commercial_reporter)) +
+    geom_hline(yintercept = 0, lty = 2) +
+    geom_quasirandom(dodge.width = .75, raster.dpi = 600) +
+    scale_color_manual(values = c("FALSE" = colors_diverse[1], "TRUE" = colors_diverse[3], "commercial" = colors_diverse[4])) +
+    ggtitle(i) +
+    theme_pubr(border = T, x.text.angle = 90)
+
+  print(p)
+}
+
+
+```
+
+Conclusion: Some KDs work well, some synthetic reporters are better than the positive controls.
+
+---
+
+
+
+## Include infered TF activity from regulon expression
+
+Aim: Similar as before: How well does regulon activity correlate with TF reporter activity across cell types?
+```{r}
+# # VIPER
+# library(decoupleR)
+# library(dorothea)
+# library(OmnipathR)
+# 
+# tf_rna <- read_tsv("/DATA/usr/m.trauernicht/data/RNA_seq/rna_tpm_all_tfs.tsv")
+# 
+# ## Import human TF regulon information
+# tf_interactions <- decoupleR::get_dorothea()
+# 
+# ## Import mouse regulons
+# tf_interactions_mouse <- decoupleR::get_dorothea(organism = "mouse") %>%
+#   mutate(source = toupper(source)) %>%
+#   mutate(target = toupper(target))
+# 
+# ## Import TF expression data
+# tf_rna_condition <- tf_rna %>% 
+#   distinct() %>%
+#   # mutate(TPM = log2(TPM)) %>%
+#   # mutate(TPM = ifelse(!is.finite(TPM), NA, TPM)) %>%
+#   spread(key = "cell", value = "TPM")
+# 
+# ### Rename TFs so they match the official names
+# tf_rna_condition$tf[tf_rna_condition$tf == "AHR::ARNT"] <- "AHR"
+# tf_rna_condition$tf[tf_rna_condition$tf == "FOS::JUN"] <- "FOS"
+# tf_rna_condition$tf[tf_rna_condition$tf == "MAF::NFE2"] <- "NFE2"
+# tf_rna_condition$tf[tf_rna_condition$tf == "NR1H4::RXRA"] <- "NR1H4"
+# tf_rna_condition$tf[tf_rna_condition$tf == "NR4A2::RXRA"] <- "NR4A2"
+# tf_rna_condition$tf[tf_rna_condition$tf == "PPARA::RXRA"] <- "PPARA"
+# tf_rna_condition$tf[tf_rna_condition$tf == "PPARG::RXRA"] <- "PPARG"
+# tf_rna_condition$tf[tf_rna_condition$tf == "SMAD2::SMAD3::SMAD4"] <- "SMAD2"
+# tf_rna_condition$tf[tf_rna_condition$tf == "STAT1::STAT2"] <- "STAT1"
+# tf_rna_condition$tf[tf_rna_condition$tf == "VDR::RXRA"] <- "VDR"
+# tf_rna_condition$tf[tf_rna_condition$tf == "NFATc1"] <- "NFATC1"
+# tf_rna_condition$tf[tf_rna_condition$tf == "RARA:RXRA"] <- "RARA"
+# 
+# ## Select human expression data
+# tf_rna_condition_human <- tf_rna_condition %>%
+#   na.omit() %>%
+#   distinct() %>%
+#   column_to_rownames("tf") %>%
+#   dplyr::select(-mES, -NPC) 
+# 
+# ## Run VIPER on human expression data and human regulons
+# viper_res_human <- decoupleR::run_viper(tf_rna_condition_human, tf_interactions, minsize = 1) %>%
+#   dplyr::select("tf" = source, "cell" = condition, "viper_score" = score)
+# 
+# ## Select mouse expression data
+# tf_rna_condition_mouse <- tf_rna_condition %>%
+#   na.omit() %>%
+#   distinct() %>%
+#   column_to_rownames("tf") %>%
+#   dplyr::select(mES, NPC)
+# 
+# ## Run VIPER on mouse expression data and human regulons
+# viper_res_mouse <- decoupleR::run_viper(tf_rna_condition_mouse, tf_interactions_mouse, minsize = 1) %>%
+#   dplyr::select("tf" = source, "cell" = condition, "viper_score" = score)
+# 
+# ## Combine human and mouse VIPER output
+# viper_res <- rbind(viper_res_mouse, viper_res_human)
+# 
+# ### Change names back to original TF names
+# viper_res2 <- viper_res %>% filter(tf == "POU5F1")
+# viper_res2$tf[viper_res2$tf == "POU5F1"] <- "POU5F1::SOX2"
+# viper_res <- rbind(viper_res, viper_res2)
+# 
+# viper_res2 <- viper_res %>% filter(tf == "RARA")
+# viper_res2$tf[viper_res2$tf == "RARA"] <- "RARA:RXRA"
+# viper_res <- rbind(viper_res, viper_res2)
+# 
+# viper_res2 <- viper_res %>% filter(tf == "SMAD4")
+# viper_res2$tf[viper_res2$tf == "SMAD4"] <- "SMAD2::SMAD3::SMAD4"
+# viper_res <- rbind(viper_res, viper_res2)
+# 
+# viper_res$tf[viper_res$tf == "OTX2"] <- "OTX1"
+# viper_res$tf[viper_res$tf == "AHR"] <- "AHR::ARNT"
+# viper_res$tf[viper_res$tf == "ARNT"] <- "AHR::ARNT"
+# viper_res$tf[viper_res$tf == "FOS"] <- "FOS::JUN"
+# viper_res$tf[viper_res$tf == "NFE2"] <- "MAF::NFE2"
+# viper_res$tf[viper_res$tf == "NR1H4"] <- "NR1H4::RXRA"
+# viper_res$tf[viper_res$tf == "NR4A2"] <- "NR4A2::RXRA"
+# viper_res$tf[viper_res$tf == "PPARA"] <- "PPARA::RXRA"
+# viper_res$tf[viper_res$tf == "PPARG"] <- "PPARG::RXRA"
+# viper_res$tf[viper_res$tf == "SMAD2"] <- "SMAD2::SMAD3::SMAD4"
+# viper_res$tf[viper_res$tf == "SMAD3"] <- "SMAD2::SMAD3::SMAD4"
+# viper_res$tf[viper_res$tf == "STAT1"] <- "STAT1::STAT2"
+# viper_res$tf[viper_res$tf == "VDR"] <- "VDR::RXRA"
+# viper_res$tf[viper_res$tf == "NFATC1"] <- "NFATc1"
+# 
+# #write_tsv(viper_res, "/DATA/usr/m.trauernicht/data/RNA_seq/viper_activities.tsv")
+# 
+# viper_res_filt <- viper_res %>%
+#   filter(tf %in% unique(cDNA_df2$tf)) %>%
+#   mutate(viper_score = ave(viper_score, tf, cell, FUN = mean)) %>%
+#   distinct()
+# 
+# ## Set viper score to 0 if the TF is not expressed (somehow viper doesn't take care of this now)
+# 
+# 
+# 
+# # # Other models, don't use for now, I checked that they correlate very well, so no need to include redundant information
+# # mlm_res <- decoupleR::run_mlm(mat = tf_rna_condition %>% na.omit(), network = tf_interactions)
+# # ulm_res <- decoupleR::run_ulm(mat = tf_rna_condition %>% na.omit(), network = tf_interactions)
+# 
+# # ## Alternative workflow using the original viper algorithm
+# # library(minet)
+# # mim <- minet::build.mim(t(tf_rna_condition))
+# # regulon <- aracne(mim)
+# # regul <- viper::aracne2regulon(regulon, t(tf_rna_condition))
+# # viper_res <- viper::viper(tf_rna_condition, regulon) %>%
+# #   dplyr::select("tf" = source, "cell" = condition, "viper_score" = score)
+# 
+# 
+# ## Combine TF reporter data with RNA-seq data
+# cDNA_df3 <- merge(cDNA_df2, viper_res_filt, all = T) %>%
+#   mutate(viper_score = ifelse(is.na(viper_score), min(viper_score, na.rm = T), viper_score))
+# 
+# ## Compute correlations for each individual reporter of reporter activity vs. TPM counts across the nine cell types
+# for (i in unique(cDNA_df3$reporter_id)) {
+#     if (nrow(cDNA_df3[cDNA_df3$reporter_id == i,]) > 2) {
+#       cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- -log10(cor.test(cDNA_df3$reporter_activity_neg[cDNA_df3$reporter_id == i], cDNA_df3$viper_score[cDNA_df3$reporter_id == i], method = "pearson", exact = F)$p.value)
+#       cDNA_df3$cor[cDNA_df3$reporter_id == i] <- cor(cDNA_df3$reporter_activity_neg[cDNA_df3$reporter_id == i], cDNA_df3$viper_score[cDNA_df3$reporter_id == i], method = "pearson")
+#     }
+#   else {
+#     cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- 1
+#     cDNA_df3$cor[cDNA_df3$reporter_id == i] <- 0
+#   }
+# }
+# 
+# ## I am only interested in positive correlations, so set all negative correlations to zero
+# cDNA_df3 <- cDNA_df3 %>%
+#   mutate(cor_pval = ifelse(cor < 0, 0, cor_pval))
+# 
+# # for (i in unique(cDNA_df3$tf)) {
+# #   
+# #   x <- cDNA_df3 %>%filter(tf == i)
+# #   
+# #   label <- data.frame(reporter_id = x$reporter_id, label = round(x$cor_pval, 2))
+# #   
+# #   p <- ggplot(x,
+# #               aes(x = viper_score, y = reporter_activity_neg)) +
+# #     geom_point() +
+# #     geom_abline(lty = 2) +
+# #     geom_smooth(method = "lm", se = F) +
+# #     facet_wrap(~reporter_id) +
+# #     ggtitle(i) +
+# #     geom_label(data = label, aes(label = label, color = ifelse(label > 1, "red", "black")),
+# #                x = Inf, y = -Inf, hjust=1, vjust=0,
+# #                inherit.aes = FALSE) +
+# #     ylab("Reporter Activity") +
+# #     xlab("VIPER score") +
+# #     scale_color_manual(values = c("black", "red"))
+# #   
+# #   print(p)
+# # }
+# 
+# ## Export correlations
+# viper_correlations <- cDNA_df3 %>%
+#   dplyr::select(reporter_id, "viper_cor_pval" = cor_pval)
+# 
+# # ## Correlate RNA-seq vs. VIPER correlations (only significant in one of the two)
+# # cor_rna_viper <- viper_correlations %>%
+# #   setnames("cor", "viper_cor") %>%
+# #   #mutate(viper_cor = ifelse(cor_pval < 1, 0, cor_pval)) %>%
+# #   dplyr::select(-cor_pval) %>%
+# #   left_join(rna_correlations) #%>%
+# #   #mutate(cor = ifelse(cor_pval < 1, 0, cor_pval)) %>%
+# #   #mutate(sum_cor = cor + viper_cor) %>%
+# #   #filter(sum_cor != 0)
+# # 
+# # ggplot(cor_rna_viper,
+# #        aes(x = cor, y = viper_cor)) +
+# #   geom_point() +
+# #   geom_abline(lty = 2) 
+```
+
+
+
+
+
+# Session Info
+```{r}
+paste("Run time: ",format(Sys.time()-StartTime))
+getwd()
+date()
+sessionInfo()
+```
+

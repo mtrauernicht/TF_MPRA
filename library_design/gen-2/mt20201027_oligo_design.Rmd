@@ -155,7 +155,7 @@ get_pwm_feature_matrix <- function(motif_meta_fn, fimo_fn, db = 2) {
     # load fimo results
     tib_fimo <- read_tsv(fimo_fn) %>%
       # extract motif id, sequence id and p-value
-      dplyr::select(motif_id, sequence_name, pval = `p-value`)
+      dplyr::select(motif_id, sequence_name, pval = `p-value`, start)
 
     # add tf symbol to fimo results
     tib_fimo <- tib_fimo %>%
@@ -163,11 +163,11 @@ get_pwm_feature_matrix <- function(motif_meta_fn, fimo_fn, db = 2) {
       # remove hits with missing motif id (composite pwms)
       filter(!is.na(tf_symbol))
 
-    # select best hit for each motif and sequence
-    tib_fimo <- tib_fimo %>%
-      group_by(sequence_name, tf_symbol) %>%
-      dplyr::slice(which.min(pval)) %>%
-      ungroup()
+    # # select best hit for each motif and sequence
+    # tib_fimo <- tib_fimo %>%
+    #   group_by(sequence_name, tf_symbol) %>%
+    #   dplyr::slice(which.min(pval)) %>%
+    #   ungroup()
 
     # spread into feature matrix
     tib_fimo <- tib_fimo %>%
@@ -769,6 +769,10 @@ setnames(motif_check, c("seq.name", "seq.text"))
 # load motif Metadata --> PWM feature matrix
 tib_pwm_motif_check  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
                                         fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-2/fimo/motif_check/fimo.tsv',
+                                        db            = 2)
+
+tib_pwm_motif_check  <- get_pwm_feature_matrix(motif_meta_fn = '/home/m.trauernicht/mydata/data/TFDB/natoli_update_2017/fc181127_curated_metadata_no_composite_filt.csv', 
+                                        fimo_fn       = '/home/m.trauernicht/mydata/projects/SuRE-TF/data/library_design/gen-2/fimo/reporter_check/fimo.tsv',
                                         db            = 2)
 
 tib_pwm_motif_check$ctrl <- "No"
