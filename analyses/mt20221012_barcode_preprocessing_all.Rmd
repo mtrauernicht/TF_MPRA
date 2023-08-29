@@ -485,7 +485,7 @@ bc_df_filt2 <- bc_df_filt2 %>%
                            "mES_GSK4716_r4_gcf7124", "mES_Progesterone_r2_gcf7124", "mES_Progesterone_r3_gcf7124", "mES_Progesterone_r4_gcf7124", "mES_r3_gcf7124", 
                            "mES_r4_gcf7124", "mES_r5_gcf7124", "mES_r6_gcf7124", "mES_SRI011381_r2_gcf7124", "mES_SRI011381_r4_gcf7124", "NPC_5aDHT_r1_gcf7124", 
                            "NPC_5aDHT_r3_gcf7124", "NPC_ITE_r1_gcf7124", "NPC_ITE_r2_gcf7124", "NPC_ITE_r3_gcf7124", "NPC_SR1078_r1_gcf7124", "NPC_SR1078_r2_gcf7124", 
-                           "NPC_SR1078_r3_gcf7124", "NPC_TCPOBOP_r1_gcf7124", "NPC_TCPOBOP_r2_gcf7124", "NPC_TCPOBOP_r3_gcf7124", "mES_SRI011381_r3_gcf7124"))
+                           "NPC_SR1078_r3_gcf7124", "NPC_TCPOBOP_r1_gcf7124", "NPC_TCPOBOP_r2_gcf7124", "NPC_TCPOBOP_r3_gcf7124", "mES_SRI011381_r3_gcf7124", "mES_FK_r2_gcf6139", "mES_FK_r3_gcf6139"))
 
 ## NPC should be done again and the data from gcf6881/7124 should be removed
 
@@ -1005,6 +1005,54 @@ dens1 + plot_spacer() + scatter_rep + dens2 +
   plot_layout(ncol = 2, nrow = 2, widths = c(4, 1), heights = c(1, 4))
 ```
 
+---
+
+## Review which conditions to include - compute correlations between replicates of the same samples
+```{r sample correlations}
+bc_df_sample <- bc_df_cDNA_filt %>%
+  filter(is.na(stimulation) | stimulation != "KD") %>%
+  mutate(unique_sample = gsub(".*_(r[1-7]{1}_gcf.*)", "\\1", sample_id)) %>%
+  distinct(mean_activity_sample_minP, reporter_id, condition, unique_sample) %>% 
+  mutate(mean_activity_sample_minP = log2(mean_activity_sample_minP)) %>%
+  spread(unique_sample, mean_activity_sample_minP)
+
+for (i in unique(bc_df_sample$condition)) {
+  
+  print(i)
+  
+  bc_df_sample_i <- bc_df_sample %>% filter(condition == i)
+  bc_df_sample_i <- bc_df_sample_i[,colSums(is.na(bc_df_sample_i))<nrow(bc_df_sample_i)]
+  
+  if (nrow(bc_df_sample_i) > 300) {
+  
+  n <- sample(1:nrow(bc_df_sample_i), 300)
+
+  
+  p <- ggpairs(bc_df_sample_i %>% dplyr::select(-reporter_id, -condition),
+               upper = list(continuous = corColor),
+               lower = list(continuous = function(data, mapping, ...) {
+                   ggally_points(data = data[n, ], mapping = mapping, alpha = 0.1, size = 0.5) +
+                   geom_abline(slope = 1, lty = "dashed", col = "red") +
+                   theme_pubr(border = T)}),
+               diag = list(continuous = function(data, mapping, ...) {
+                   ggally_densityDiag(data = data, mapping = mapping, alpha = 0.3, fill = "red") +
+                   theme_pubr(border = T)})) +
+  ggtitle(i) +
+  xlab("Reporter activity") +
+  ylab("Reporter activity")
+  
+  print(p)
+  }
+}
+
+### Remove conditions based on low correlation scores
+remove_conditions <- c("U2OS_r1_gcf6881", "U2OS_r2_gcf6881", "U2OS_r1_gcf6210", "mES_2i_LIF_r2_gcf7218", "mES_2i_LIF_r1_gcf7218")
+
+bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
+  filter(!sample_id %in% remove_conditions)
+```
+
+---
 
 ```{r data export, out.width= "80%", fig.align= "center",  warning= FALSE}
 # Mean of the three replicates
