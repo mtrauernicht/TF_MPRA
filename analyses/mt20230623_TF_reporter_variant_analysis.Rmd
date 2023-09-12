@@ -613,7 +613,7 @@ ggplot(native_activities,
 ## Correlate with RNA-seq data
 
 Aim: Does the reporter activity correlate with transcript abundance across conditions?
-```{r}
+```{r, warning = F}
 ## Prepare tf reporter data frame
 cDNA_df2 <- cDNA_df %>%
   #filter(tf != "RFX1") %>%
@@ -641,11 +641,17 @@ cDNA_df3 <- merge(cDNA_df2, tf_rna, all = T) %>%
   mutate(log_TPM_norm = log_TPM_norm / dif_range) %>%
   dplyr::select(-range_TPM, -range_activity, -dif_range)
 
-## Compute spearman correlations for each individual reporter of reporter activity vs. TPM_norm counts across the nine cell types
+## Compute pearson correlations for each individual reporter of reporter activity vs. TPM_norm counts across the nine cell types
 for (i in unique(cDNA_df3$reporter_id)) {
-  if (nrow(cDNA_df3[cDNA_df3$reporter_id == i,]) > 2) {
-  cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- -log10(cor.test(cDNA_df3$reporter_activity_minP[cDNA_df3$reporter_id == i], cDNA_df3$TPM_norm[cDNA_df3$reporter_id == i], method = "pearson", exact = F)$p.value)
-  cDNA_df3$cor[cDNA_df3$reporter_id == i] <- cor(cDNA_df3$reporter_activity_minP[cDNA_df3$reporter_id == i], cDNA_df3$TPM_norm[cDNA_df3$reporter_id == i], method = "pearson")
+  if (nrow(cDNA_df3[cDNA_df3$reporter_id == i,]) > 4) {
+    
+    #print(i)
+    
+    cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- cor.test(cDNA_df3$reporter_activity_minP[cDNA_df3$reporter_id == i],
+                                                                    cDNA_df3$log_TPM_norm[cDNA_df3$reporter_id == i], method = "pearson", exact = F)$p.value
+    
+    cDNA_df3$cor[cDNA_df3$reporter_id == i] <- cor(cDNA_df3$reporter_activity_minP[cDNA_df3$reporter_id == i], 
+                                                 cDNA_df3$log_TPM_norm[cDNA_df3$reporter_id == i], method = "pearson")
   }
   else {
     cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- 1
@@ -655,7 +661,12 @@ for (i in unique(cDNA_df3$reporter_id)) {
 
 ## I am only interested in positive correlations, so set all negative correlations to zero
 cDNA_df3 <- cDNA_df3 %>%
-  mutate(cor_pval = ifelse(cor < 0, 0, cor_pval))
+  mutate(cor_pval = ifelse(cor_pval == cor, 1, cor_pval)) %>%
+  group_by(tf) %>%
+  mutate(cor_pval = p.adjust(cor_pval, method = "fdr")) %>%
+  ungroup() %>%
+  mutate(cor_pval = ifelse(cor < 0, 1, cor_pval)) %>%
+  mutate(cor_pval = -log10(cor_pval))
 #
 # ## Plot the correlations including the p-values
 # for (i in unique(cDNA_df3$tf)) {
@@ -947,9 +958,13 @@ cDNA_df3 <- merge(cDNA_df2, proteomics_df_long, all = T) %>%
 
 ## Compute spearman correlations for each individual reporter of reporter activity vs. TPM counts across the nine cell types
 for (i in unique(cDNA_df3$reporter_id)) {
-  if (nrow(cDNA_df3[cDNA_df3$reporter_id == i,]) > 2) {
-  cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- -log10(cor.test(cDNA_df3$reporter_activity_minP[cDNA_df3$reporter_id == i], cDNA_df3$protein_abundance[cDNA_df3$reporter_id == i], method = "pearson", exact = F)$p.value)
-  cDNA_df3$cor[cDNA_df3$reporter_id == i] <- cor(cDNA_df3$reporter_activity_minP[cDNA_df3$reporter_id == i], cDNA_df3$protein_abundance[cDNA_df3$reporter_id == i], method = "pearson")
+  if (nrow(cDNA_df3[cDNA_df3$reporter_id == i,]) > 4) {
+    
+    cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- cor.test(cDNA_df3$reporter_activity_minP[cDNA_df3$reporter_id == i],
+                                                             cDNA_df3$protein_abundance[cDNA_df3$reporter_id == i], method = "pearson", exact = F)$p.value
+    
+    cDNA_df3$cor[cDNA_df3$reporter_id == i] <- cor(cDNA_df3$reporter_activity_minP[cDNA_df3$reporter_id == i],
+                                                   cDNA_df3$protein_abundance[cDNA_df3$reporter_id == i], method = "pearson")
   }
   else {
     cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- 1
@@ -959,7 +974,12 @@ for (i in unique(cDNA_df3$reporter_id)) {
 
 ## I am only interested in positive correlations, so set all negative correlations to zero
 cDNA_df3 <- cDNA_df3 %>%
-  mutate(cor_pval = ifelse(cor < 0, 0, cor_pval))
+  mutate(cor_pval = ifelse(cor_pval == cor, 1, cor_pval)) %>%
+  group_by(tf) %>%
+  mutate(cor_pval = p.adjust(cor_pval, method = "fdr")) %>%
+  ungroup() %>%
+  mutate(cor_pval = ifelse(cor < 0, 1, cor_pval)) %>%
+  mutate(cor_pval = -log10(cor_pval))
 
 ## Set Inf values to max per TF
 cDNA_df3 <- cDNA_df3 %>%
@@ -1638,6 +1658,7 @@ pheatmap(exp_variance2 %>%
 
 Aim: We want to find for each TF the optimal reporters. Here I combine all data to compute reporter quality scores to find the best reporters for each TF.
 ```{r}
+## Combine all data into one data table
 reference_activities <- cDNA_df %>%
   filter(neg_ctrls == "No", 
          hPGK == "No", 
@@ -1649,7 +1670,6 @@ reference_activities <- cDNA_df %>%
   mutate(tf_condition = paste(tf, condition, sep = "_")) %>%
   filter(tf_condition %in% chosen_conditions$tf_condition) %>%
   dplyr::select(-tf_condition)
-
 
 cDNA_df6 <- reference_activities %>%
   mutate(reporter_activity_minP = ifelse(tf == "NR5A2", -reporter_activity_minP, reporter_activity_minP)) %>%
@@ -1669,75 +1689,17 @@ cDNA_df6 <- reference_activities %>%
 
 # write_tsv(cDNA_df6, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20230302_reporter_scores.tsv")
 
-cDNA_df7 <- cDNA_df6 %>%
-  distinct() %>%
-  mutate(length_tf = as.numeric(ave(tf, tf, FUN = length))) %>%
-  #filter(length_tf > 15) %>%
-  mutate(mean_quality_score = ave(quality_score, tf, FUN = mean)) %>%
-  arrange(desc(mean_quality_score)) %>%
-  mutate(quality_score2 = -quality_score) %>%
-  mutate(score_rank = as.numeric(ave(quality_score2, quality, tf, FUN = rank))) %>%
-  mutate(top_3 = ifelse(score_rank <= 3, "Yes", "No")) %>%
-  mutate(top_3 = ifelse(quality_score < 2, "No", top_3))
-
-ggplot(cDNA_df7 %>%
-         filter(quality == "Sensitivity"),
-       aes(y = quality_score, x = reorder(tf, -mean_quality_score))) +
-  geom_hline(yintercept = 2, color = "red") +
-  geom_quasirandom_rast(aes(shape = commercial_reporter, color = top_3), raster.dpi = 600, width = 0.25) +
-  stat_summary(fun = mean, fun.min = mean, fun.max = mean, geom = "crossbar", color = "black", width = 0.25, lwd = 0.4) +
-  theme_pubr(border = T, x.text.angle = 90) +
-  scale_color_manual(values = c("Yes" = "#9AC1AE", "No" = "#264653", "Insignificant" = "grey"))
-
-ggplot(cDNA_df7 %>%
-         filter(quality == "Specificity"),
-       aes(y = quality_score, x = reorder(tf, -mean_quality_score))) +
-  geom_hline(yintercept = 2, color = "red") +
-  geom_quasirandom_rast(aes(shape = commercial_reporter, color = commercial_reporter), raster.dpi = 600, width = 0.25) +
-  stat_summary(fun = mean, fun.min = mean, fun.max = mean, geom = "crossbar", color = "black", width = 0.25, lwd = 0.4) +
-  theme_pubr(border = T, x.text.angle = 90) +
-  scale_color_manual(values = c("Yes" = "#A5A58D", "No" = "black"))
-
-myBreaks <- c(seq(-2, 0, length.out=50+1), 
-              seq(0.000001, 4, length.out=50))
-
-## Show how reporter quality score is computed for one example TF
-for (i in unique(cDNA_df7$tf)){
-  cDNA_df7_example <- cDNA_df7 %>%
-  filter(quality == "Sensitivity") %>%
-  filter(tf == i) %>%
-  distinct(reporter_id, reporter_dif, reporter_activity_minP, cor_pval, off_target_activity, quality_score)
-  
-  p <- pheatmap(cDNA_df7_example %>%
-                  arrange(desc(quality_score)) %>%
-                  column_to_rownames("reporter_id") %>% 
-                  t(),
-         clustering_method = "complete",
-         cellwidth = 10,
-         cellheight = 10,
-         border_color = F,
-         color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdBu")))(100),
-         angle_col = 90,
-         cutree_rows = 4,
-         cluster_rows = F,
-         cluster_cols = F,
-         breaks = myBreaks,
-         main = i)
-  
-  print(p)
-}
-
-## Alternative: sort by confidence levels first
 lm_pval <- cDNA_df_TF4 %>%
   group_by(tf) %>%
   arrange(pval_adj, .by_group = T) %>%
   dplyr::slice(n = 1, .preserve = T) %>%
   distinct(tf, pval_adj)
 
+## Compute condifence levels based on thresholds
 cDNA_df_confidence <- cDNA_df6 %>%
   left_join(lm_pval) %>%
   mutate(conf_level = ifelse((commercial_reporter == "No" & pval_adj < 0.05 & reporter_activity_minP > 0.5) |
-                               (commercial_reporter == "Yes" & reporter_activity_minP > 0.5), 1, 0)) %>% 
+                               (commercial_reporter == "Yes" & reporter_activity_minP > 1), 1, 0)) %>% 
   ## Confidence level 1 = reporter activities can be predicted by log-linear model
   mutate(conf_level = ifelse(conf_level == 1 & cor_pval > 1, 2, conf_level)) %>% 
   ## Confidence level 2 = reporter activity follows transcript/protein levels
@@ -1746,60 +1708,6 @@ cDNA_df_confidence <- cDNA_df6 %>%
   mutate(conf_level = ifelse(conf_level >= 1 & cor_pval > 1 & reporter_dif > 1, 4, conf_level)) %>% 
   ## Confidence level 4 = All of the above together
   mutate(conf_level = ifelse(conf_level >= 2 & off_target_activity < -.5, conf_level - 1, conf_level)) ## Penalize if off-target activity
-
-myBreaks <- c(seq(-3, 0, length.out=50+1), 
-              seq(0.000001, 6, length.out=50))
-
-color_fun <- colorRampPalette(c("#2a9d8f", "white", "#264653"))
-
-myBreaks2 <- c(-1,0,1,2,3,4)
-
-for (i in unique(cDNA_df_confidence$tf)){
-  cDNA_df_confidence_example <- cDNA_df_confidence %>%
-    filter(quality == "Sensitivity") %>%
-    filter(tf == i) %>%
-    distinct(reporter_id, cor_pval, reporter_dif, reporter_activity_minP, off_target_activity, quality_score, conf_level) %>%
-    relocate(reporter_id, reporter_activity_minP, cor_pval, reporter_dif, off_target_activity, quality_score, conf_level)
-  
-  print(i)
-  
-  p1 <- pheatmap(cDNA_df_confidence_example %>%
-                  arrange(desc(conf_level), desc(quality_score)) %>%
-                  dplyr::select(-conf_level) %>%
-                  column_to_rownames("reporter_id"),
-         clustering_method = "complete",
-         cellwidth = 10,
-         cellheight = 10,
-         border_color = F,
-         color = color_fun(100),
-         angle_col = 90,
-         cutree_rows = 4,
-         cluster_rows = F,
-         cluster_cols = F,
-         breaks = myBreaks,
-         main = i)
-  
-  print(p1)
-  
-  p2 <- pheatmap(cDNA_df_confidence_example %>%
-                   arrange(desc(conf_level), desc(quality_score)) %>%
-                   dplyr::select(reporter_id, conf_level) %>%
-                   #mutate(conf_level = factor(conf_level)) %>%
-                   column_to_rownames("reporter_id"),
-         clustering_method = "complete",
-         cellwidth = 10,
-         cellheight = 10,
-         border_color = F,
-         color = c("#CCCCCB", "#EFC9BD", "#E7A08A", "#E38568", "#E76F51"),
-         breaks = myBreaks2,
-         angle_col = 90,
-         cutree_rows = 4,
-         cluster_rows = F,
-         cluster_cols = F,
-         main = i)
-  
-  print(p2)
-}
 
 reporter_features <- cDNA_df %>%
   distinct(promoter, spacing, distance, background, tf, reporter_id)
@@ -1812,6 +1720,7 @@ for (i in unique(cDNA_df_confidence$tf)){
   
   x_order <- c("reporter_activity_minP", "cor_pval", "reporter_dif", "off_target_activity", "quality_score")
   y_order <- cDNA_df_confidence_example %>%
+    ## sort by confidence level and then by quality score
     arrange(desc(conf_level), desc(quality_score)) %>%
     distinct(reporter_id)
   
