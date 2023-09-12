@@ -482,10 +482,14 @@ bc_df_filt2 <- bc_df_filt2 %>%
 # Remove samples with low quality manually
 bc_df_filt2 <- bc_df_filt2 %>%
   filter(!sample_id %in% c("mES_r1_gcf7124", "K562_r1_gcf7124", "mES_Aldosterone_r4_gcf7124", "mES_GSK4716_r2_gcf7124",
-                           "mES_GSK4716_r4_gcf7124", "mES_Progesterone_r2_gcf7124", "mES_Progesterone_r3_gcf7124", "mES_Progesterone_r4_gcf7124", "mES_r3_gcf7124", 
-                           "mES_r4_gcf7124", "mES_r5_gcf7124", "mES_r6_gcf7124", "mES_SRI011381_r2_gcf7124", "mES_SRI011381_r4_gcf7124", "NPC_5aDHT_r1_gcf7124", 
-                           "NPC_5aDHT_r3_gcf7124", "NPC_ITE_r1_gcf7124", "NPC_ITE_r2_gcf7124", "NPC_ITE_r3_gcf7124", "NPC_SR1078_r1_gcf7124", "NPC_SR1078_r2_gcf7124", 
-                           "NPC_SR1078_r3_gcf7124", "NPC_TCPOBOP_r1_gcf7124", "NPC_TCPOBOP_r2_gcf7124", "NPC_TCPOBOP_r3_gcf7124", "mES_SRI011381_r3_gcf7124", "mES_FK_r2_gcf6139", "mES_FK_r3_gcf6139"))
+                           "mES_GSK4716_r4_gcf7124", "mES_Progesterone_r2_gcf7124", 
+                           "mES_Progesterone_r3_gcf7124", "mES_Progesterone_r4_gcf7124", "mES_r3_gcf7124", 
+                           "mES_r4_gcf7124", "mES_r5_gcf7124", "mES_r6_gcf7124", "mES_SRI011381_r2_gcf7124", 
+                           "mES_SRI011381_r4_gcf7124", "NPC_5aDHT_r1_gcf7124", "NPC_5aDHT_r3_gcf7124", 
+                           "NPC_ITE_r1_gcf7124", "NPC_ITE_r2_gcf7124", "NPC_ITE_r3_gcf7124", "NPC_SR1078_r1_gcf7124", 
+                           "NPC_SR1078_r2_gcf7124", "NPC_SR1078_r3_gcf7124", "NPC_TCPOBOP_r1_gcf7124", 
+                           "NPC_TCPOBOP_r2_gcf7124", "NPC_TCPOBOP_r3_gcf7124", "mES_SRI011381_r3_gcf7124", 
+                           "mES_FK_r2_gcf6139", "mES_FK_r3_gcf6139"))
 
 ## NPC should be done again and the data from gcf6881/7124 should be removed
 
@@ -1115,6 +1119,10 @@ bc_df_cDNA_filt_short <- bc_df_cDNA_filt %>%
 filename <- SetFileName("_reporter_activity_filt_combined", "mt")
 setwd("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7124_stimulations/results/")
 write.csv(bc_df_cDNA_filt_short, file = paste(filename,".csv", sep = ""), row.names = F)
+
+filename <- SetFileName("_reporter_activity_filt_combined_complete", "mt")
+setwd("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7124_stimulations/results/")
+write.csv(bc_df_cDNA_filt, file = paste(filename,".csv", sep = ""), row.names = F)
 ```
 
 
