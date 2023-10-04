@@ -2294,9 +2294,7 @@ ggplot(cDNA_df %>%
 ---
 
 
-
-
-## Explore activities using set of top reporters
+## Rate performance of synthetic vs. published reporters
 ```{r, fig.width=9, fig.height=9}
 ## First I want to show how well commercial reporters perform compared to synthetic ones
 bad_tfs <- cDNA_df_confidence2 %>%
@@ -2426,13 +2424,18 @@ ggplot(commercial_ranking_best_only_comm,
   theme_pubr(x.text.angle = 90) +
   scale_fill_manual(values = c("0" = "#CCCCCB", "1" = "#EFCABE", "2" = "#E7A08B", "3" = "#DD6840", "4" = "#BF4A27")) 
 
+```
 
+---
+
+### Explore activities of best reporters in all cell types
+```{r}
 ## Select set of best reporters
 optimal_reporters <- cDNA_df_confidence2 %>%
   group_by(tf) %>%
   arrange(desc(conf_level), desc(quality_score)) %>%
   mutate(rank = row_number()) %>%
-  filter(rank <= 3 & conf_level >= 2)
+  filter(rank <= 3 & conf_level >= 3 & tf != "RFX1")
 
 
 ### Activity across the 9 cell types
@@ -2462,11 +2465,46 @@ pheatmap(heatmap_cell_activities %>%
          cellwidth = 8, 
          cellheight = 8,
          angle_col = 90,
-         cutree_cols = 6,
+         cutree_cols = 10,
          #cutree_rows = 3,
          breaks = myBreaks)
+  
+rna_prot_cor2 <- rna_protein_cor %>%
+  filter(reporter_id %in% optimal_reporters$reporter_id) %>%
+  mutate(max_cor = pmax(prot_cor, rna_cor)) %>%
+  mutate(tf = gsub("(.*)_.*_.*_.*_.*", "\\1", reporter_id)) %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  distinct(tf, max_cor) %>%
+  mutate(max_cor_mean = ave(max_cor, tf, FUN = mean)) %>%
+  distinct(tf, max_cor_mean)
 
 
+hc <- hclust(dist(heatmap_cell_activities %>% t()), method = "ward.D2")
+order_dendogram <- data.frame("order" = 1:ncol(heatmap_cell_activities),
+                              "tf" = "")
+
+for(i in unique(order_dendogram$order)) {
+  order_dendogram$tf[order_dendogram$order == i] <- names(heatmap_cell_activities[hc$order[i]])
+}
+
+ggplot(rna_prot_cor2 %>%
+         mutate(cor_bin = ifelse(max_cor_mean > 1, 1, 0)) %>%
+         left_join(order_dendogram),
+       aes(x = reorder(tf, order), y = "", fill = max_cor_mean)) +
+  geom_tile() +
+  coord_fixed() +
+  scale_fill_gradient(low = "white", high = "#2a9d8f", na.value = "grey80", limits = c(0, 3), oob = squish) +
+  theme_pubr(border = T, x.text.angle = 90, legend = "none") 
+
+
+### UMAP analysis
+
+```
+
+---
+
+### Explore activities of optimal reporters upon KDs  
+```{r}
 ### Activities upon KD
 cDNA_df2 <- cDNA_df %>%
   filter(reporter_id %in% optimal_reporters$reporter_id) %>%
@@ -2562,6 +2600,81 @@ ggplot(cDNA_df5_eff,
   ylab("KD condition") +
   theme_pubr(border = T, x.text.angle = 90) 
 
+
+### Interaction analysis
+threshold <- 1
+
+interaction_df <- cDNA_df5_eff %>%
+  dplyr::select("receiver" = tf, "signal" = condition, TF_dif) %>%
+  distinct() %>%
+  mutate(TF_dif_binary = "0") %>%
+  mutate(TF_dif_binary = ifelse(TF_dif > threshold, "-1", TF_dif_binary)) %>%
+  mutate(TF_dif_binary = ifelse(TF_dif < -threshold, "1", TF_dif_binary)) %>%
+  mutate(TF_dif_binary = ifelse(TF_dif > -threshold & TF_dif < threshold, "0", TF_dif_binary)) %>%
+  mutate(TF_dif_binary = as.numeric(TF_dif_binary)) %>%
+  mutate(TF_dif_binary = (ifelse(receiver == signal, 0, TF_dif_binary))) %>%
+  mutate(sum_receiver = ave(TF_dif_binary, receiver, FUN = function(x) sum(x))) %>%
+  mutate(sum_signal = ave(TF_dif_binary, signal, FUN = function(x) sum(x))) %>%
+  mutate(sum_receiver_size = ave(TF_dif_binary, receiver, FUN = function(x) sum(abs(x)))) %>%
+  mutate(sum_signal_size = ave(TF_dif_binary, signal, FUN = function(x) sum(abs(x))))
+
+interaction_matrix <- interaction_df %>%
+  distinct(TF_dif_binary, receiver, signal) %>%
+  spread(key = "receiver", value = "TF_dif_binary") %>%
+  column_to_rownames("signal")
+
+interaction_nodes <- interaction_df %>%
+  filter(signal == receiver) %>%
+  distinct(receiver, signal, sum_signal, sum_receiver, sum_signal_size, sum_receiver_size) %>%
+  mutate(sum_total = sum_receiver_size + sum_signal_size) %>%
+  mutate(class = ifelse(sum_signal <= 0, "repressor", "activator")) %>%
+  distinct(receiver, sum_total, class)
+
+interaction_edges <- interaction_df %>%
+  left_join(target_tf %>% dplyr::select("signal" = condition, target)) %>%
+  filter(signal != receiver) %>%
+  distinct(receiver, signal, TF_dif_binary, TF_dif) %>%
+  mutate(weight = 0) %>%
+  mutate(weight = ifelse(TF_dif_binary == -1, 1, weight)) %>%
+  mutate(weight = ifelse(TF_dif_binary == 1, 2, weight)) %>%
+  mutate(class = ifelse(weight == 1, "repressor", "activator")) %>%
+  dplyr::select(signal, receiver, weight, class, TF_dif) %>%
+  filter(weight != 0) %>%
+  mutate(TF_dif = abs(TF_dif))
+
+interaction_nodes <- interaction_nodes %>%
+  filter(receiver %in% c(unique(interaction_edges$receiver),unique(interaction_edges$signal)))
+
+routes_igraph <- graph_from_data_frame(d = interaction_edges, vertices = interaction_nodes, directed = TRUE)
+
+visIgraph(routes_igraph) %>%
+    visNodes(size = 25, shape = "circle") %>%
+    visOptions(highlightNearest = list(enabled = TRUE, hover = TRUE),
+               nodesIdSelection = TRUE) %>%
+    visInteraction(keyboard = TRUE)
+
+
+ggraph(routes_igraph, layout = "sugiyama") +
+  geom_node_point(aes(size = sum_total, color = class)) +
+  geom_edge_link(aes(color = class, width = TF_dif),
+                 alpha = 0.8,
+                 arrow = arrow(length = unit(3, 'mm')),
+                 start_cap = circle(2, 'mm'),
+                 end_cap = circle(3, 'mm')) +
+  scale_edge_width(range = c(0.2, 2)) +
+  scale_radius(limits = c(1, NA), range = c(1, 6)) +
+  geom_node_text(aes(label = name), repel = TRUE) +
+  scale_edge_color_manual(values = c("activator" = colors_diverse[2], "repressor" = colors_diverse[1])) +
+  scale_color_manual(values = c("activator" = colors_diverse[2], "repressor" = colors_diverse[1])) +
+  theme_graph()
+
+```
+
+
+---
+
+### Explore overexpression data
+``` {r}
 ### Activities upon overexpression
 cDNA_df2 <- cDNA_df %>%
   #filter(reporter_id %in% optimal_reporters$reporter_id) %>%
@@ -2609,7 +2722,12 @@ ggplot(cDNA_df4,
   xlab("TF reporter") +
   ylab("KD condition") +
   theme_pubr(border = T, x.text.angle = 90) 
+```
 
+---
+
+### Explore most effective TF perturbations
+```{r}
 ### TF activity changes upon stimulation 
 cDNA_df2 <- cDNA_df %>%
   filter(reporter_id %in% optimal_reporters$reporter_id) %>%
@@ -2633,48 +2751,61 @@ stimulations <- stimulations %>%
   mutate(target = "Yes")
 
 cDNA_df3 <- cDNA_df2 %>%
-  filter(stimulation == "pathway", condition %in% c("HCT116_Calcymicin", "HepG2_CDCA", "K562_Hemin", "K562_T3", "MCF7_Hexestrol", "mES_2i", "mES_BX", "mES_HQ",
-                                                    "mES_IWP2", "mES_LIF_CH", "mES_LIF_PD", "mES_N2B27", "mES_serum_2i_LIF", "mES_vitC", "U2OS_Calcitriol", "U2OS_Heat",
-                                                    "U2OS_PMA", "U2OS_Wortmannin")) %>%
+  filter((stimulation == "pathway" & ## Define most effective pathway stimulations
+         condition %in% c("HCT116_Calcymicin", "HepG2_CDCA", "K562_Hemin", "K562_T3", "MCF7_Hexestrol", "mES_2i", "mES_BX", 
+                          "mES_HQ", "mES_IWP2", "mES_LIF_CH", "mES_LIF_PD", "mES_N2B27", "mES_serum_2i_LIF", 
+                          "mES_vitC", "U2OS_Calcitriol", "U2OS_Heat", "U2OS_PMA", "U2OS_Wortmannin", "mES_FK",
+                          "HepG2_Rif")) |
+           (stimulation == "overexpression" & 
+              condition %in% c("mES_FOSL1-OE", "mES_FOXA1-OE", "mES_GLI1-OE", "mES_NR4A2-OE-cDIM12")) |
+           (stimulation == "degron") |
+           (stimulation == "KD" &
+           condition %in% c("mES_PPARG::RXRA", "mES_PPARA::RXRA",
+                            "mES_POU5F1", "mES_SP1", "mES_ATF2", "mES_TFCP2L1",
+                            "HepG2_CEBPG", "HepG2_ATF2", "HepG2_SRF", 
+                            "HepG2_STAT3",  "HepG2_ETS2", "HepG2_CEBPB", 
+                            "HepG2_MTF1", "HepG2_NRF1",  "HepG2_SP1",  "HepG2_ATF4",
+                             "HepG2_NFKB1", "HepG2_STAT1", "HepG2_MEF2A",
+                            "HepG2_IRF2", "HepG2_IRX3", "HepG2_ATF6", "HepG2_NFYA", "HepG2_MAF::NFE2", 
+                             "HepG2_PAX6", "HepG2_NFE2L2"
+                            #"HepG2_RARA", "HepG2_FOXA1", "HepG2_GRHL1", "HepG2_TCF7", "HepG2_REL", "HepG2_RXRA", "mES_HIC2", 
+                            #"mES_EGR1","mES_NR1H2","HepG2_NR1H2","HepG2_TFCP2","HepG2_ETV4", "HepG2_ETS1", "HepG2_TP73",
+                            #"HepG2_HNF1A","HepG2_THRB"
+                            ))) %>%
   left_join(stimulations) %>%
   left_join(reference_condition) %>%
   mutate(reporter_FC = reporter_activity_neg - reference_activity) %>%
-  mutate(TF_dif = ave(reporter_FC, tf, condition, FUN = mean)) %>%
-  mutate(TF_dif = ifelse(abs(TF_dif) > 0.5, TF_dif, 0)) %>%
-  mutate(mean_activity = ave(reporter_activity_neg, tf, condition, FUN = mean)) %>%
-  mutate(mean_TF_dif = ave(TF_dif, condition, FUN = mean)) %>%
-  mutate(mean_TF_dif2 = ave(TF_dif, tf, FUN = mean)) %>%
-  filter(mean_TF_dif != 0, mean_TF_dif2 != 0)
-
-target_change <- cDNA_df3 %>%
-  filter(target == "Yes") %>%
-  filter(TF_dif != 0)
+  mutate(TF_dif = ave(reporter_FC, tf, condition, FUN = mean))
 
 cDNA_df3[is.na(cDNA_df3)] <- 0
 
 cDNA_df3 <- cDNA_df3 %>%
-  #filter(condition %in% target_change$condition) %>%
   distinct(tf, condition, TF_dif) %>%
   spread(tf, TF_dif) %>%
   column_to_rownames("condition")
 
-myBreaks <- c(seq(-2, 0, length.out=50+1), 
-              seq(0.000001, 2, length.out=50))
+myBreaks <- c(seq(-1.5, 0, length.out=50+1), 
+              seq(0.000001, 1.5, length.out=50))
 
 pheatmap(cDNA_df3 %>% 
-                 as.matrix(),
+                 t(),
          color = colorRampPalette(c("#99B2DD", "white", "#E07A5F"))(100),
-         clustering_method = "ward.D",
+         clustering_method = "ward.D2",
          border_color = F, 
-         cellwidth = 8, 
-         cellheight = 8,
+         cellwidth = 10, 
+         cellheight = 10,
          #annotation_col = tf_clusters, 
          angle_col = 90,
-         cutree_cols = 5,
-         #cutree_rows = 3,
+         cutree_cols = 10,
+         cutree_rows = 18,
          breaks = myBreaks)
 
+## Make another overview focusing on only high-confidence conditions
+
+
 ```
+
+---
 
 ## Focus on a set of mES conditions
 ```{r}
@@ -2705,7 +2836,7 @@ cDNA_df2_mES2_filt <- cDNA_df2_mES %>%
   dplyr::select(-reference_condition, -stimulation, -cell, -reporter_activity_minP, -reference_activity) %>%
   mutate(cell = "mES") %>%
   left_join(tf_rna) %>%
-  #filter(TPM_norm > 5 | tf %in% c("EGR1")) %>%
+  filter(TPM_norm > 5 | tf %in% c("EGR1", "PAX6", "ESR1", "FOSL1", "FOXA1", "GATA1", "NFIA", "PPARG::RXRA", "RUNX2", "WT1")) %>%
   dplyr::select(-TPM, - TPM_norm, -cell)
 
 ### Remove conditions that don't seem to induce any changes
@@ -2715,7 +2846,7 @@ cDNA_df2_mES2_filt2 <- cDNA_df2_mES2_filt %>%
   filter(reporter_dif_max > .75 | reporter_dif_min < -.75) %>%
   filter(!condition %in% c("mES_KLF9", "mES_GRHL1", "mES_HSF1", "mES_CREB1", "mES_RXRA", "mES_KLF4", "mES_SOX9",
                             "mES_TEAD2", "mES_POU2F1", "mES_MEF2B", "mES_TCF7", "mES_SOX2", "mES_RFX1-OE", "mES_GATA1-OE", 
-                            "mES_OTX2-OE",
+                            "mES_OTX2-OE", "mES_EGR1", "mES_MEF2A",
                            "mES_NFIA", "mES_SOX13", "mES_E2F1", "mES_HSF2", "mES_TCF7L1", "mES_TEAD1"))
 
 cDNA_df2_mES2_heatmap <- cDNA_df2_mES2_filt %>%
@@ -2744,22 +2875,22 @@ pheatmap(cDNA_df2_mES2_heatmap,
 target_tf <- data.frame("condition" = c("mES_2i", "mES_ATF2", "mES_BX", "mES_FK", "mES_FOSL1-OE", "mES_FOXA1-OE", 
                                         "mES_GRHL1", "mES_HQ", "mES_KLF4", "mES_LIF_CH", "mES_LIF_PD", "mES_MEF2A", 
                                         "mES_NFIA", "mES_NR1H2", "mES_NR4A2-OE-cDIM12", "mES_Pou5f1_AID", "mES_PPARA::RXRA", 
-                                        "mES_PPARG::RXRA", "mES_Sox2_AID", "mES_SP1", "mES_TEAD1", "mES_TFCP2L1"),
+                                        "mES_PPARG::RXRA", "mES_Sox2_AID", "mES_SP1", "mES_TEAD1", "mES_TFCP2L1", "mES_vitC"),
                         "target" = c("STAT3", "ATF2", "IRF3", "CREB1", "FOS::JUN", "FOXA1", "GRHL1", "NFE2L2",
                                      "KLF4", "EGR1", "TCF7", "MEF2A", "NFIA", "NR1H2", "NR4A2", "POU5F1::SOX2", 
-                                     "PPARA::RXRA", "PPARG::RXRA", "SOX2", "SP1", "TEAD1", "TFCP2L1"),
-                        "effect_size" = c(0, 0, 0, 1, 1, 1, 0, 1,  0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0))
+                                     "PPARA::RXRA", "PPARG::RXRA", "SOX2", "SP1", "TEAD1", "TFCP2L1", "NFE2L2"),
+                        "effect_size" = c(0, 0, 0, 1, 1, 1, 0, 1,  0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0))
 
 target_tf_all <- data.frame("condition" = c("mES_2i", "mES_ATF2", "mES_BX", "mES_FK", "mES_FOSL1-OE", "mES_FOXA1-OE", 
                                         "mES_GRHL1", "mES_HQ", "mES_KLF4", "mES_LIF_CH", "mES_LIF_PD", "mES_MEF2A", 
                                         "mES_NFIA", "mES_NR1H2", "mES_NR4A2-OE-cDIM12", "mES_Pou5f1_AID", "mES_PPARA::RXRA", 
                                         "mES_PPARG::RXRA", "mES_Sox2_AID", "mES_SP1", "mES_TEAD1", "mES_TFCP2L1",
-                                        "mES_GLI1-OE", "mES_HIC2", "mES_Nanog_AID"),
+                                        "mES_GLI1-OE", "mES_HIC2", "mES_Nanog_AID", "mES_vitC"),
                         "target" = c("STAT3", "ATF2", "IRF3", "CREB1", "FOS::JUN", "FOXA1", "GRHL1", "NFE2L2",
                                      "KLF4", "EGR1", "TCF7", "MEF2A", "NFIA", "NR1H2", "NR4A2", "POU5F1::SOX2", 
                                      "PPARA::RXRA", "PPARG::RXRA", "SOX2", "SP1", "TEAD1", "TFCP2L1",
-                                     "GLI1", "HIC2", "NANOG"),
-                        "effect_size" = c(0, 0, 0, 1, 1, 1, 0, 1,  0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0))
+                                     "GLI1", "HIC2", "NANOG", "NFE2L2"),
+                        "effect_size" = c(0, 0, 0, 1, 1, 1, 0, 1,  0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0))
 
 cDNA_df4 <- cDNA_df2_mES2_filt %>%
   left_join(target_tf) %>%
@@ -2824,7 +2955,7 @@ cDNA_df_heatmap_all <- cDNA_df2 %>%
   column_to_rownames("tf") 
 
 pheatmap(cDNA_df_heatmap_all,
-         color = colorRampPalette(c("#99B2DD", "white", "#E07A5F"))(100),
+         color = colorRampPalette(c("#99B2DD", "white", "#dd6b48"))(100),
          clustering_method = "ward.D",
          border_color = F, 
          cellwidth = 10, 
@@ -2952,6 +3083,12 @@ interaction_edges <- interaction_edges #%>%
 interaction_nodes <- interaction_nodes %>%
   #mutate(receiver = gsub("POU5F1::SOX2", "POU5F1", receiver)) %>%
   filter(receiver %in% c(unique(interaction_edges$receiver),unique(interaction_edges$signal)))
+
+interaction_nodes <- interaction_nodes %>%
+  mutate(color = ifelse(class == "repressor", "grey90", "#9AC1AE"))
+
+interaction_edges <- interaction_edges %>%
+  mutate(color = ifelse(class == "repressor", "grey90", "#9AC1AE"))
 
 routes_igraph <- graph_from_data_frame(d = interaction_edges, vertices = interaction_nodes, directed = TRUE)
 
