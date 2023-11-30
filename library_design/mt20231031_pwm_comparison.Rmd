@@ -1,0 +1,280 @@
+---
+title: "Oligo Design - TF reporter screen gen 2"
+author: "Max Trauernicht"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output: 
+  prettydoc::html_pretty:
+    theme: leonids
+  #   highlight: github
+  #   toc: true
+  #   toc_float: true
+  #   code_folding: show
+  # editor_options:
+  #   chunk_output_type: console
+---
+
+*knitr document van Steensel lab*
+
+# Oligo Design - TF reporter screen gen 2
+
+## Introduction
+In this document, an oligo library of TF reporters will be generated. These oligos contain TF binding sites of ~30 selected TFs, random inactive spacing between them, followed by minimal promoters, and a barcode in the transcription unit.
+
+```{r setup, out.width= "100%", fig.align= "center", echo=FALSE, warning= FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+StartTime <-Sys.time()
+
+# 8-digit Date tag:
+Date <- substr(gsub("-","",Sys.time()),1,8) 
+# libraries:
+library(ggplot2)
+library(seqinr)
+library(seqLogo)
+library(universalmotif)
+library(Biostrings)
+library(SimRAD)
+library(gtools)
+library(DNABarcodes)
+library(phylotools)
+library(ape)
+library(magrittr)
+library(dplyr)
+library(readr)
+library(stringr)
+library(tidyr)
+library(heatmaply)
+library(pheatmap)
+library(tibble)
+library(ggseqlogo)
+library(RColorBrewer)
+library(data.table)
+library(vwr)
+library(ggbeeswarm)
+library(ggrepel)
+library(sjmisc)
+library(RcmdrMisc)
+library(LncFinder)
+library(ENCODExplorer)
+library(biomaRt)
+library(ggpubr)
+library(MotifDb)
+library(umap)
+```
+
+
+## Analysis
+
+## Collect all motifs
+```{r out.width= "80%", fig.align= "center", echo = FALSE, warning = FALSE, message=FALSE}
+# Load Lambert et al. cluster information
+tf_clusters <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/lambert_tf_clusters.csv", header = T) %>%
+  dplyr::select("motif_id" = CIS.BP.ID, "cluster" = Cluster.., "family" = TF.Family) %>%
+  mutate(motif_id = paste(motif_id, ".txt", sep = ""))
+
+lambert_all_motifs_df <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/HumanTFs_Lambert_curated.csv", header = T)
+
+lambert_all_motifs <- lambert_all_motifs_df %>%
+  filter(best_motif == T) %>%
+  mutate(CIS.BP_ID = paste(CIS.BP_ID, ".txt", sep = "")) %>%
+  mutate(tf = gsub("(.*?)_.*", "\\1", motif_ID)) %>%
+  mutate(tf = gsub("V\\$","", tf)) %>%
+  dplyr::select("motif_id" = CIS.BP_ID, tf) %>%
+  distinct() %>%
+  group_by(tf) %>%
+  slice_head(n = 1) ## For some TFs multiple motifs were selected as best - I will just keep one of those (randomly)
+
+# Load motifs from library 1
+gen1_motifs <- read.csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/parameter_files/TF_motifs_annotated.csv", header = T) %>%
+  dplyr::select("tf" = TF, "motif_id" = `Source..CIS.BP...build.1.94.`) %>%
+  mutate(tf = toupper(tf), motif_id = paste(motif_id, ".txt", sep = "")) %>%
+  mutate(tf = ifelse(tf == "TRP53", "TP53", tf)) %>%
+  mutate(tf = ifelse(tf == "TCFCP2L1", "TFCP2L1", tf)) 
+
+gen1_motifs$tf[gen1_motifs$tf == "NR3C1(GR)"] <- "NR3C1"
+
+# Load motifs from library 2
+gen2_motifs <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/motifs_gen2.csv", header = T) %>%
+  dplyr::select("tf" = TF, motif_id) %>%
+  mutate()
+
+# Combine all motifs
+all_motifs <- rbind(lambert_all_motifs, gen1_motifs, gen2_motifs) %>%
+  distinct() %>%
+  mutate(selected = ifelse(motif_id %in% gen1_motifs$motif_id | motif_id %in% gen2_motifs$motif_id, "Yes", "No")) %>%
+  filter(!motif_id %in% c("M10257_1.94d.txt", "M10277_1.94d.txt", "M10282_1.94d.txt", "M10303_1.94d.txt", 
+                          "M00897_1.94d.txt", "M08847_1.94d.txt", "M01568_1.94d.txt", "M01343_1.94d.txt",
+                          "M01775_1.94d.txt", "M01230_1.94d.txt", "M00877_1.94d.txt", "M01240_1.94d.txt",
+                          "M01025_1.94d.txt", "M01278_1.94d.txt", "M01428_1.94d.txt", "M00497_1.94d.txt",
+                          "M02157_1.94d.txt"))
+```
+
+
+## Import all motifs as PWMs
+```{r}
+seq_logos <- list()
+for(i in 1:nrow(all_motifs)) {
+  
+  x <- all_motifs$motif_id[i]
+  file_x <- paste("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/PWMs/", x, sep = "")
+  
+  if (file.exists(file_x) == T) {
+    
+    if (str_contains(x, "txt") == TRUE) {
+    pwm <- read.table(file_x, header = T) %>% dplyr::select(-Pos) %>% t()
+    seq_logos[i] <- list(pwm)
+    }
+    
+    if (str_contains(x, "pcm") == TRUE)  {
+    pwm <- read.table(file_x, header = F) %>% column_to_rownames("V1")
+    pwm <- as.matrix(pwm)
+    seq_logos[i] <- list(pwm)
+    }
+    
+    if (str_contains(x, "jaspar") == TRUE) {
+    pwm <- read_jaspar(file_x)
+    pwm <- pwm@motif
+    # Transform to relative values
+    pwm <- colPercents(pwm)/100
+    pwm <- pwm[1:4,]
+    seq_logos[i] <- list(pwm)
+    }
+  }
+}
+
+# Rename pwms
+names(seq_logos) <- all_motifs$motif_id
+
+# Remove motifs for which pwms were not available
+seq_logos <- seq_logos[!sapply(seq_logos,is.null)]
+
+# Convert to universalmotif format
+seq_logos_motif <- list()
+for (i in names(seq_logos)) {
+  seq_logos_motif[[i]] <- universalmotif::convert_motifs(seq_logos[[i]])
+  seq_logos_motif[[i]]@name <- i
+}
+
+
+# ## Alternative motif collection
+# motifs <- convert_motifs(MotifDb)
+# motifs <- filter_motifs(motifs,organism="Hsapiens")
+```
+
+
+## Compute pairwise similarities
+```{r}
+# Compute similarities using universalmotif function
+motif_sim <- compare_motifs(seq_logos_motif, method = "PCC") ## Methods that work well: ALLR, ALLR_LL, PCC
+```
+
+
+## Visualize chosen motifs within motif clusters
+```{r}
+### UMAP analysis
+set.seed(35425) 
+motif_cor <- motif_sim %>%
+  replace(is.na(.), 0)
+
+motifs_selected <- rbind(gen1_motifs, gen2_motifs)
+
+tf_umap <- umap(motif_cor) 
+colnames(tf_umap$layout) <- c("A","B") 
+tf_umap_plot <- tf_umap$layout %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "motif_id") %>% 
+  left_join(all_motifs) %>%
+  left_join(tf_clusters) %>%
+  left_join(lambert_clusters) %>%
+  mutate(selected = ifelse(tf %in% motifs_selected$tf, "Yes", "No")) %>%
+  mutate(cluster2 = ifelse(cluster <= 10, cluster, ">10")) %>%
+  mutate(family2 = ifelse(family %in% c("bHLH", "bZIP", "Ets", "Forkhead", "GATA", "Homeodomain", "Nuclear receptor",
+                                        "T-box", "C2H2 ZF"), family, "other"))
+
+#Plot UMAP
+ggplot(,aes(x = A, y = B)) +
+  stat_density2d(data = tf_umap_plot, geom = "polygon", aes(alpha = ..level..), bins = 5) +
+  geom_point(data = tf_umap_plot %>% filter(selected == "No"), size = 1 , color = "grey") + 
+  geom_point(data = tf_umap_plot %>% filter(selected == "Yes"), size = 4 , color = "#E07858") + 
+  theme_pubr() +
+  scale_alpha(range = c(0.05,0.15)) +
+  geom_text_repel(data = tf_umap_plot %>% filter(selected == "Yes"), aes(label = tf), force = 86) + 
+  ylab("UMAP2") + 
+  xlab("UMAP1")
+
+ggplot(,aes(x = A, y = B)) +
+  geom_point(data = tf_umap_plot %>% filter(selected == "No"), size = .4 , color = "grey") + 
+  geom_point(data = tf_umap_plot %>% filter(selected == "Yes"), size = 1, color = "#E07858") + 
+  theme_pubr() +
+  ylab("UMAP2") + 
+  xlab("UMAP1")
+
+x <- ggplot(,aes(x = A, y = B, label = tf)) +
+  geom_point(data = tf_umap_plot %>% filter(selected == "No"), size = .4 , color = "grey") + 
+  geom_point(data = tf_umap_plot %>% filter(selected == "Yes"), size = 1, color = "#E07858") + 
+  theme_pubr() +
+  ylab("UMAP2") + 
+  xlab("UMAP1")
+
+ggplotly(x)
+
+ggplot(,aes(x = A, y = B)) +
+  stat_density2d(data = tf_umap_plot, geom = "polygon", aes(alpha = ..level..), bins = 5) +
+  geom_point(data = tf_umap_plot %>% filter(selected == "No"), size = 1 , aes(color = family2)) + 
+  geom_point(data = tf_umap_plot %>% filter(selected == "Yes"), size = 4 , color = "#E07858") + 
+  theme_pubr() +
+  scale_alpha(range = c(0.05,0.15)) +
+  geom_text_repel(data = tf_umap_plot %>% filter(selected == "Yes"), aes(label = tf), force = 86) + 
+  ylab("UMAP2") + 
+  xlab("UMAP1")
+```
+
+## Motif similarity heatmap
+```{r}
+motif_similarity_df <- data.frame(motif_sim) %>%
+  rownames_to_column("motif1") %>%
+  pivot_longer(cols = -motif1, names_to = "motif2", values_to = "similarity") %>%
+  mutate(similarity = as.numeric(similarity)) 
+
+motif_similarity_df_selected <- motif_similarity_df %>%
+  filter(motif1 %in% motifs_selected$motif_id & motif2 %in% motifs_selected$motif_id) %>%
+  replace(is.na(.), 0)
+
+motif_similarity_df_selected <- motif_similarity_df_selected %>%
+  left_join(motifs_selected %>% dplyr::select("motif1" = motif_id, "tf1" = tf)) %>%
+  left_join(motifs_selected %>% dplyr::select("motif2" = motif_id, "tf2" = tf)) %>%
+  distinct(tf1, tf2, similarity)
+
+motif_similarity_mat <- motif_similarity_df_selected %>%
+  spread(key = "tf2", value = "similarity") %>%
+  column_to_rownames("tf1")
+
+ord <- hclust( dist(motif_similarity_mat, method = "euclidean"), method = "ward.D2" )$order
+
+motif_similarity_df_selected <- motif_similarity_df_selected %>%
+  mutate(tf1 = factor(tf1, levels = rownames(motif_similarity_mat)[ord]),
+         tf2 = factor(tf2, levels = rownames(motif_similarity_mat)[ord]))
+
+ggplot(motif_similarity_df_selected,
+       aes(x = tf1, y = tf2, fill = similarity)) +
+  geom_tile(size = .5) +
+  coord_fixed() +
+  theme_pubr(x.text.angle = 90, border = T) +
+  scale_fill_gradient2(low = "#B7B7A4", mid = "white", high = "#E17B5C", midpoint = 0.5)
+
+ggplot(motif_similarity_df_selected,
+       aes(x = tf1, y = tf2, fill = similarity)) +
+  geom_tile(size = .5) +
+  coord_fixed() +
+  theme_pubr(x.text.angle = 90, border = T) +
+  scale_fill_gradient2(low = "white", high = "#E17B5C", midpoint = 0.4)
+```
+
+
+# Session Info
+```{r}
+paste("Run time: ",format(Sys.time()-StartTime))
+getwd()
+date()
+sessionInfo()
+```
+
