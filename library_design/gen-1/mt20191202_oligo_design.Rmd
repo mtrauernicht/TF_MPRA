@@ -287,6 +287,10 @@ nfya <- read.table("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design
 nfya <- nfya[,-1]
 nfya <- t(nfya)
 
+clock <- read.table("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/PWMs/M05596_1.94d.txt", header = T)
+clock <- clock[,-1]
+clock <- t(clock)
+
 # Combine all the pwms in a list
 seqlogos <- list(stat3, zfx, esrrb, smad4, klf4, tfcp2l1, gbx2, zfp42, trp53, rara, neurog2, pax6, rbpj, sp1, nr3c1, nfe2l2, nrf1, nfe2, nfkb1, creb1, gli1, irf3, irx3, otx1, elk1, tcf7l2, homez, nfya)
 

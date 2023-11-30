@@ -204,7 +204,7 @@ hline <- function(y = 0, color = "black") {
 
 ```{r data import, out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
 # Load metadata file that contains all required information about the sequenced samples
-metadata_df <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20230420_metadata_all.csv") %>%
+metadata_df <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20231128_metadata_all.csv") %>%
   filter(!condition %in% c("K562", "K562_T3") | (condition %in% c("K562", "K562_T3") & gcf == "gcf7264")) ## Remove old K562 data (noisy)
 
 # Load in barcode counts
@@ -479,7 +479,7 @@ bc_df_filt2 <- bc_df_filt2 %>%
   filter(cor <= 0.5 | cell == "pDNA") %>% 
   dplyr::select(-cor)
 
-# Remove samples with low quality manually
+# Remove some more samples with low quality manually
 bc_df_filt2 <- bc_df_filt2 %>%
   filter(!sample_id %in% c("mES_r1_gcf7124", "K562_r1_gcf7124", "mES_Aldosterone_r4_gcf7124", "mES_GSK4716_r2_gcf7124",
                            "mES_GSK4716_r4_gcf7124", "mES_Progesterone_r2_gcf7124", 
@@ -489,9 +489,7 @@ bc_df_filt2 <- bc_df_filt2 %>%
                            "NPC_ITE_r1_gcf7124", "NPC_ITE_r2_gcf7124", "NPC_ITE_r3_gcf7124", "NPC_SR1078_r1_gcf7124", 
                            "NPC_SR1078_r2_gcf7124", "NPC_SR1078_r3_gcf7124", "NPC_TCPOBOP_r1_gcf7124", 
                            "NPC_TCPOBOP_r2_gcf7124", "NPC_TCPOBOP_r3_gcf7124", "mES_SRI011381_r3_gcf7124", 
-                           "mES_FK_r2_gcf6139", "mES_FK_r3_gcf6139"))
-
-## NPC should be done again and the data from gcf6881/7124 should be removed
+                           "mES_FK_r2_gcf6139", "mES_FK_r3_gcf6139", "HepG2_THRA_r2_gcf7534"))
 
 # Which samples were removed in these steps?
 paste("the following sample was removed due to low quality:", setdiff(unique(bc_df_filt$sample_id), unique(bc_df_filt2$sample_id)))
@@ -520,7 +518,7 @@ bc_df_cDNA <- bc_df_filt2 %>%
 ## Calculate mean activity - filter out outlier barcodes 
 
 ```{r out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
-# First identify and remove outlier barcodes - this removes the noise created by faulty barcode clustering etc. 
+# First identify and remove outlier barcodes - this removes the noise created by faulty barcode clustering etc.
 ## Calculate median activity for each reporter and deviation of reporters from the median
 bc_df_cDNA <- bc_df_cDNA %>%
   mutate(mean_activity = ave(activity, reporter_id, sample_id, FUN = function(x) quantile(x, 0.5))) %>%
@@ -529,37 +527,37 @@ bc_df_cDNA <- bc_df_cDNA %>%
 
 
 ## Plot effect of highest outlier bc -> SNP in minP promoter
-outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "ZFP42_5bp_21bp_minP_3",] %>% 
+outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "ZFP42_5bp_21bp_minP_3",] %>%
   dplyr::select(barcode_number, activity, sample) %>%
   unique()
 
 ggplot_custom(outlier, aes(x = barcode_number, y = activity)) +
   geom_quasirandom() +
-  xlab("barcode #") + 
-  labs(title = "Zfp42 reporter - TATA-box minP mutated", 
+  xlab("barcode #") +
+  labs(title = "Zfp42 reporter - TATA-box minP mutated",
        subtitle = "bc8 AGAGGGTATATAAT -> AGAGGGGATATAAT")
 
 
 ## Plot effect of highest outlier bc -> Elk1 outlier
-outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "ELK1_5bp_21bp_mCMV_2",] %>% 
+outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "ELK1_5bp_21bp_mCMV_2",] %>%
   dplyr::select(barcode_number, activity) %>%
   unique()
 
 ggplot_custom(outlier, aes(x = barcode_number, y = activity)) +
   geom_quasirandom()+
-  xlab("barcode #") + 
+  xlab("barcode #") +
   labs(title = "Elk1 reporter - bc1 attached to Pax6 reporter")
 
 
 
 ## Plot effect of highest outlier bc -> Elk1 outlier
-outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "TCF7L2_5bp_10bp_hBGm_3",] %>% 
+outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "TCF7L2_5bp_10bp_hBGm_3",] %>%
   dplyr::select(barcode_number, activity) %>%
   unique()
 
 ggplot_custom(outlier, aes(x = barcode_number, y = activity)) +
   geom_quasirandom() +
-  xlab("barcode #") + 
+  xlab("barcode #") +
   labs(title = "Tcf3 reporter - bc1 attached to multiple (less active) reporters")
 
 
@@ -573,7 +571,7 @@ bc_df_cDNA_filt <- bc_df_cDNA %>%
   filter((deviation > 3 & activity < 2) | deviation < 3) %>% ## Remove barcodes that are 3 times more active than median AND have a high activity in general (barcodes with >3 times higher activity but activity lower than 2 can be kept as they don't distort the data that much)
   filter(n_reporters > 2) ## Remove reporters for which I have measurements from only two or less reporters left
 
-bc_df_cDNA_filt$n_reporters <- ave(bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$reporter_id, 
+bc_df_cDNA_filt$n_reporters <- ave(bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$reporter_id,
                                 bc_df_cDNA_filt$sample_id, FUN =
                                   function(x) as.numeric(length(x)))
 
@@ -581,6 +579,7 @@ bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
   filter(n_reporters >= 2)
 
 ## Recalculate mean and sd
+bc_df_cDNA_filt <- bc_df_cDNA
 bc_df_cDNA_filt$mean_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id, 
                                 bc_df_cDNA_filt$sample_id, FUN =
                                   function(x) mean(x))

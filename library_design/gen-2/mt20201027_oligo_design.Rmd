@@ -319,6 +319,8 @@ tfs_selected_filt <- tfs_selected_filt %>% dplyr::select(TF, CIS.BP.ID) %>%
   rbind(composite_motifs) %>%
   rbind(special_motifs)
 
+write_csv(tfs_selected_filt, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/motifs_gen2.csv")
+
 # tfs_selected_filt <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/HumanTFs_Lambert_curated.csv") %>%
 #   filter(best_motif == "TRUE") %>%
 #   mutate(motif_id = paste(`CIS-BP_ID`, ".txt", sep = "")) %>%
@@ -458,6 +460,32 @@ ggplot(motif_similarity_df_selected,
        aes(x = motif1, y = motif2, fill = similarity)) +
   geom_tile_rast() +
   scale_fill_gradient2(low = "#2a9d8f", mid = "white", high = "#e76f51")
+
+### UMAP analysis
+set.seed(124) 
+motif_cor <- motif_similarity_df %>%
+  replace(is.na(.), 0) %>%
+  spread(key = "motif2", value = "similarity") %>%
+  column_to_rownames("motif1")
+
+tf_umap <- umap(motif_cor) 
+colnames(tf_umap$layout) <- c("A","B") 
+tf_umap_plot <- tf_umap$layout %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "motif_id") %>% 
+  left_join(motifs_selected) %>%
+  mutate(selected = ifelse(motif_id %in% motifs_selected$motif_id, "Yes", "No"))
+
+#Plot with umap with 4-node cliques
+ggplot(,aes(x = A, y = B)) +
+  stat_density2d(data = tf_umap_plot, geom = "polygon", aes(alpha = ..level..), bins = 5) +
+  geom_point(data = tf_umap_plot %>% filter(selected == "No"), size = 1 , color = "grey") + 
+  geom_point(data = tf_umap_plot %>% filter(selected == "Yes"), size = 4 , color = "#E07858") + 
+  theme_pubr() +
+  scale_alpha(range = c(0.05,0.15)) +
+  geom_text_repel(data = tf_umap_plot, aes(label = TF), force = 40) + 
+  ylab("UMAP2") + 
+  xlab("UMAP1")
 
 ```
 
