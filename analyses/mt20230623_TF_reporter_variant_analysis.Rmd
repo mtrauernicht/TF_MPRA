@@ -184,7 +184,7 @@ ggplot_custom <- function(...) ggplot2::ggplot(...) +
 
 ```{r out.width= "80%", fig.align= "center"}
 # Import processed bc counts from the preprocessing step
-cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7124_stimulations/results/mt20231128_reporter_activity_filt_combined.csv", header = T)
+cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7124_stimulations/results/mt20231130_reporter_activity_filt_combined.csv", header = T)
 
 cDNA_df$stimulation[is.na(cDNA_df$stimulation)] <- "no"
 
@@ -817,8 +817,8 @@ rna_correlations_df <- cDNA_df3 %>%
   mutate(max_mean_tf_activity = ave(mean_tf_activity, tf, FUN = max)) %>%
   mutate(reasonable = ifelse(max_TPM > 8 & 
                                dif_TPM > 5 & 
-                               min_TPM < 1 | 
-                               #max_mean_tf_activity > 0.9 | 
+                               min_TPM < 1 & 
+                               max_mean_tf_activity > 0.75 | 
                                tf %in% c("TEAD1", "GATA1", "NFATC1", "GLI1", "STAT3", "SP1", "FOXA1", "NFKB1", "CLOCK",
                                          "ZFX", "NR4A1"), "Yes", "No")) %>%
   mutate(reasonable = ifelse(tf %in% c("TCF7L2", "TCF7", "FOS::JUN"), "No", reasonable))
@@ -846,10 +846,10 @@ ggplot(rna_correlations_df %>%
   scale_color_manual(values = c("Yes" = colors_diverse[2], "No" = colors_diverse[1]))
 
 ggplot(rna_correlations_df %>%
-                filter(reasonable == "Yes") %>%
-                distinct(reporter_id, cor_pval, cor, tf, commercial_reporter) %>%
-           mutate(sign = ifelse(cor_pval > 1, "Yes", "No")) %>%
-             mutate(mean_cor = ave(cor, tf, FUN = mean)),
+         filter(reasonable == "Yes") %>%
+         distinct(reporter_id, cor_pval, cor, tf, commercial_reporter) %>%
+         mutate(sign = ifelse(cor_pval > 1, "Yes", "No")) %>%
+         mutate(mean_cor = ave(cor, tf, FUN = mean)),
        aes(x = reorder(tf, -mean_cor), y = cor, color = sign, shape = commercial_reporter)) +
   geom_hline(yintercept = 0, lty = 2) +
   geom_quasirandom(size = 1.5) +
@@ -866,7 +866,8 @@ ggplot(cDNA_df3 %>%
   geom_vline(xintercept = 1, lty = 1) +
   geom_vline(xintercept = 0, lty = 2) +
   geom_hline(yintercept = 1, lty = 2) +
-  geom_point(alpha = .4, aes(color = cor_pval)) +
+  geom_point(size = 3, shape = 21, aes(fill = cell), color = "black") +
+  scale_fill_manual(values = cell_colors) +
   geom_smooth(method = "lm", se = F, aes(group = reporter_id, color = cor_pval)) +
   theme_pubr(border = T) +
   facet_wrap(~promoter) +
@@ -886,43 +887,33 @@ ggplot(cDNA_df3 %>%
   geom_vline(xintercept = 0, lty = 2) +
   geom_hline(yintercept = 1, lty = 2) +
   geom_smooth(method = "lm", color = "black") +
-  geom_point(size = 3, aes(color = cell)) +
-  scale_color_manual(values = cell_colors) +
+  geom_point(size = 3, shape = 21, aes(fill = cell)) +
+  scale_fill_manual(values = cell_colors) +
   facet_wrap(~reporter_id, ncol = 1) +
   theme_pubr(border = T)
 
-ggplot(rna_correlations_df %>%
-         filter(tf == "GATA4") %>%
-         distinct(reporter_id, cor_pval, background),
-       aes(x = as.factor(background), y = cor_pval)) +
-  geom_quasirandom(size = 2, aes(color = ifelse(cor_pval > 1, "Yes", "No"))) +
-  geom_boxplot(alpha = .2, outlier.shape = NA) +
-  theme_pubr() +
-  scale_color_manual(values = c("Yes" = colors_diverse[2], "No" = colors_diverse[1]))
-
-### ESR1: Impact of core promoter
 ggplot(cDNA_df3 %>%
-         filter(reporter_id %in% c("ESR1_5bp_10bp_mCMV_2", "ESR1_10bp_21bp_minP_3")) %>%
-         distinct(cell, reporter_id, reporter_activity_minP, nTPM),
+         filter(tf == "GATA4") %>%
+         distinct(cell, reporter_id, reporter_activity_minP, cor_pval, background, nTPM),
        aes(x = nTPM, y = 2^reporter_activity_minP)) +
   geom_vline(xintercept = 1, lty = 1) +
   geom_vline(xintercept = 0, lty = 2) +
   geom_hline(yintercept = 1, lty = 2) +
-  geom_smooth(method = "lm", color = "black") +
-  geom_point(size = 3, aes(color = cell)) +
-  scale_color_manual(values = cell_colors) +
-  facet_wrap(~reporter_id, ncol = 1) +
-  theme_pubr(border = T)
+  geom_smooth(method = "lm", se = F, aes(group = reporter_id, color = cor_pval)) +
+  geom_point(size = 3, shape = 21, aes(fill = cell), color = "black") +
+  scale_fill_manual(values = cell_colors) +
+  facet_wrap(~background, ncol = 1) +
+  theme_pubr(border = T) +
+  scale_color_gradient(low = "#264653", high = "#9AC1AE")
 
 ggplot(rna_correlations_df %>%
-         filter(tf == "ESR1", promoter != "Random") %>%
-         distinct(reporter_id, cor_pval, promoter),
-       aes(x = as.factor(promoter), y = cor_pval)) +
+         filter(tf == "GATA4") %>%
+         distinct(reporter_id, cor_pval, cor, background),
+       aes(x = as.factor(background), y = cor)) +
+  geom_boxplot(outlier.shape = NA) +
   geom_quasirandom(size = 2, aes(color = ifelse(cor_pval > 1, "Yes", "No"))) +
-  geom_boxplot(alpha = .2, outlier.shape = NA) +
   theme_pubr() +
   scale_color_manual(values = c("Yes" = colors_diverse[2], "No" = colors_diverse[1]))
-
 
 
 ### TFCP2L1: Impact of spacer length
@@ -934,10 +925,24 @@ ggplot(cDNA_df3 %>%
   geom_vline(xintercept = 0, lty = 2) +
   geom_hline(yintercept = 1, lty = 2) +
   geom_smooth(method = "lm", color = "black") +
-  geom_point(size = 3, aes(color = cell)) +
-  scale_color_manual(values = cell_colors) +
+  geom_point(size = 3, shape = 21, aes(fill = cell)) +
+  scale_fill_manual(values = cell_colors) +
   facet_wrap(~reporter_id, ncol = 1) +
   theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(tf == "TFCP2L1") %>%
+         distinct(cell, reporter_id, reporter_activity_minP, cor_pval, spacing, nTPM),
+       aes(x = nTPM, y = 2^reporter_activity_minP)) +
+  geom_vline(xintercept = 1, lty = 1) +
+  geom_vline(xintercept = 0, lty = 2) +
+  geom_hline(yintercept = 1, lty = 2) +
+  geom_smooth(method = "lm", se = F, aes(group = reporter_id, color = cor_pval)) +
+  geom_point(size = 3, shape = 21, aes(fill = cell), color = "black") +
+  scale_fill_manual(values = cell_colors) +
+  facet_wrap(~spacing, ncol = 1) +
+  theme_pubr(border = T) +
+  scale_color_gradient(low = "#264653", high = "#9AC1AE")
 
 ggplot(rna_correlations_df %>%
          filter(tf == "TFCP2L1") %>%
@@ -948,19 +953,62 @@ ggplot(rna_correlations_df %>%
   theme_pubr() +
   scale_color_manual(values = c("Yes" = colors_diverse[2], "No" = colors_diverse[1]))
 
+
+tfcp2l1_grhl1_cor <- cDNA_df3 %>%
+  filter(tf %in% c("TFCP2L1", "GRHL1")) %>%
+  distinct(tf, cell, reporter_id, nTPM, reporter_activity_minP, spacing)
+
+tfcp2l1_grhl1_tpm <- tfcp2l1_grhl1_cor %>%
+  distinct(tf, cell, nTPM) %>%
+  spread(key = "tf", value = "nTPM")
+
+tfcp2l1_grhl1_cor2 <- tfcp2l1_grhl1_cor %>%
+  dplyr::select(-nTPM) %>%
+  left_join(tfcp2l1_grhl1_tpm) %>%
+  group_by(reporter_id) %>%
+  mutate(cor_tfcp2l1 = -log10(cor.test(reporter_activity_minP, TFCP2L1)$p.value)) %>%
+  mutate(cor_grhl1 = -log10(cor.test(reporter_activity_minP, GRHL1)$p.value)) %>%
+  ungroup() %>%
+  mutate(mean_activity = ave(reporter_activity_minP, reporter_id, FUN = mean))
+
+ggplot(tfcp2l1_grhl1_cor2,
+       aes(x = cor_tfcp2l1, y = cor_grhl1, color = spacing)) +
+  geom_vline(xintercept = 0, lty = 2) +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_abline() +
+  geom_point(aes(size = mean_activity)) +
+  theme_pubr() +
+  scale_color_manual(values = c("10bp" = "#7C9EB2", "5bp" = "#BFD0D9")) +
+  facet_wrap(~tf)
+
+
 ### GATA1: Impact of distance
 ggplot(cDNA_df3 %>%
            filter(reporter_id %in% c("GATA1_5bp_10bp_minP_3", "GATA1_5bp_21bp_minP_3")) %>%
            distinct(cell, reporter_id, reporter_activity_minP, nTPM),
        aes(x = nTPM, y = 2^reporter_activity_minP)) +
-    geom_vline(xintercept = 1, lty = 1) +
-    geom_vline(xintercept = 0, lty = 2) +
-    geom_hline(yintercept = 1, lty = 2) +
-    geom_smooth(method = "lm", color = "black") +
-    geom_point(size = 3, aes(color = cell)) +
-    scale_color_manual(values = cell_colors) +
-    facet_wrap(~reporter_id, ncol = 1) +
-    theme_pubr(border = T)
+  geom_vline(xintercept = 1, lty = 1) +
+  geom_vline(xintercept = 0, lty = 2) +
+  geom_hline(yintercept = 1, lty = 2) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_point(size = 3, shape = 21, aes(fill = cell)) +
+  scale_fill_manual(values = cell_colors) +
+  facet_wrap(~reporter_id, ncol = 1) +
+  theme_pubr(border = T)
+
+ggplot(cDNA_df3 %>%
+         filter(tf == "GATA1") %>%
+         distinct(cell, reporter_id, reporter_activity_minP, cor_pval, distance, nTPM),
+       aes(x = nTPM, y = 2^reporter_activity_minP)) +
+  geom_vline(xintercept = 1, lty = 1) +
+  geom_vline(xintercept = 0, lty = 2) +
+  geom_hline(yintercept = 1, lty = 2) +
+  geom_smooth(method = "lm", se = F, aes(group = reporter_id, color = cor_pval)) +
+  geom_point(size = 3, shape = 21, aes(fill = cell), color = "black") +
+  scale_fill_manual(values = cell_colors) +
+  facet_wrap(~distance, ncol = 1) +
+  theme_pubr(border = T) +
+  scale_color_gradient(low = "#264653", high = "#9AC1AE")
 
 ggplot(rna_correlations_df %>%
          filter(tf == "GATA1") %>%
@@ -971,6 +1019,32 @@ ggplot(rna_correlations_df %>%
   theme_pubr() +
   scale_color_manual(values = c("Yes" = colors_diverse[2], "No" = colors_diverse[1]))
 
+gata_cor <- cDNA_df3 %>%
+  filter(tf %in% c("GATA1", "GATA4")) %>%
+  distinct(tf, cell, reporter_id, nTPM, reporter_activity_minP, spacing, background, distance, promoter)
+
+gata_tpm <- gata_cor %>%
+  distinct(tf, cell, nTPM) %>%
+  spread(key = "tf", value = "nTPM")
+
+gata_cor2 <- gata_cor %>%
+  dplyr::select(-nTPM) %>%
+  left_join(gata_tpm) %>%
+  group_by(reporter_id) %>%
+  mutate(cor_gata1 = -log10(cor.test(reporter_activity_minP, GATA1)$p.value)) %>%
+  mutate(cor_gata4 = -log10(cor.test(reporter_activity_minP, GATA4)$p.value)) %>%
+  ungroup() %>%
+  mutate(mean_activity = ave(reporter_activity_minP, reporter_id, FUN = mean))
+
+ggplot(gata_cor2,
+       aes(x = cor_gata1, y = cor_gata4, color = as.factor(background))) +
+    geom_vline(xintercept = 0, lty = 2) +
+    geom_hline(yintercept = 0, lty = 2) +
+    geom_abline() +
+    geom_point(aes(shape = distance, size = mean_activity)) +
+    theme_pubr(legend ="none") +
+    facet_wrap(~tf)
+
 
 ### NR5A2: Impact of spacer length - repressive role?
 ggplot(rna_correlations_df %>%
@@ -980,22 +1054,6 @@ ggplot(rna_correlations_df %>%
     geom_quasirandom(size = 2) +
     geom_boxplot(alpha = .2, outlier.shape = NA) +
     theme_pubr()
-
-### GATA1: Impact of distance
-ggplot(cDNA_df3 %>%
-           filter(reporter_id %in% c("KLF4_5bp_10bp_minP_1", "KLF4_5bp_10bp_minP_1")) %>%
-           distinct(cell, reporter_id, reporter_activity_minP, nTPM),
-       aes(x = nTPM, y = 2^reporter_activity_minP)) +
-    geom_vline(xintercept = 1, lty = 1) +
-    geom_vline(xintercept = 0, lty = 2) +
-    geom_hline(yintercept = 1, lty = 2) +
-    geom_smooth(method = "lm", color = "black") +
-    geom_point(size = 3, aes(color = cell)) +
-    scale_color_manual(values = cell_colors) +
-    facet_wrap(~reporter_id, ncol = 1) +
-    theme_pubr(border = T)
-
-
 ```
 
 ---
