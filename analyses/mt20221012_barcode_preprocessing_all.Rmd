@@ -204,7 +204,7 @@ hline <- function(y = 0, color = "black") {
 
 ```{r data import, out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
 # Load metadata file that contains all required information about the sequenced samples
-metadata_df <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20231128_metadata_all.csv") %>%
+metadata_df <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20231211_metadata_all.csv") %>%
   filter(!condition %in% c("K562", "K562_T3") | (condition %in% c("K562", "K562_T3") & gcf == "gcf7264")) ## Remove old K562 data (noisy)
 
 # Load in barcode counts
@@ -579,93 +579,12 @@ bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
   filter(n_reporters >= 2)
 
 ## Recalculate mean and sd
-bc_df_cDNA_filt <- bc_df_cDNA
+#bc_df_cDNA_filt <- bc_df_cDNA
 bc_df_cDNA_filt$mean_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id, 
                                 bc_df_cDNA_filt$sample_id, FUN =
                                   function(x) mean(x))
 ```
 
-
-## Apply MPRAnalyze framework to normalize counts and compute transcription rates
-```{r}
-# ## Prepare data
-# barcode_numbers <- bc_df_cDNA_filt %>%
-#   filter(pDNA == "pDNA_r1_gcf7027") %>%
-#   distinct(reporter_id, barcode) %>%
-#   mutate(barcode_number = as.numeric(ave(reporter_id, reporter_id, FUN = function(x) rank(x, ties.method = "random"))))
-#   
-# 
-# bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
-#   dplyr::select(-barcode_number)
-# 
-# bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
-#   left_join(barcode_numbers) %>%
-#   filter(barcode_number <= 8)
-# 
-# ## Generate matrix containing cDNA counts
-# cDNA_counts_matrix <- bc_df_cDNA_filt %>%
-#   filter(pDNA == "pDNA_r1_gcf7027", gcf == "gcf7264") %>%
-#   mutate(sample_id = gsub("_gcf.*", "", sample_id)) %>%
-#   mutate(sample_id = paste(sample_id, barcode_number, sep = "_")) %>%
-#   distinct(reporter_id, sample_id, rpm) %>%
-#   mutate(rpm = round(rpm)) %>%
-#   spread(key = "sample_id", value = "rpm") %>%
-#   column_to_rownames("reporter_id") %>%
-#   replace(is.na(.), 0) %>%
-#   as.matrix()
-# 
-# ## Generate matrix containing pDNA counts
-# pDNA_starcode_counts <- bc_df_filt %>%
-#   filter(sample_id == "pDNA_r1_gcf7027") %>%
-#   dplyr::select(reporter_id, barcode, "pDNA_counts" = rpm) %>%
-#   distinct() %>%
-#   mutate(pDNA_counts = round(pDNA_counts)) %>%
-#   left_join(barcode_numbers) %>%
-#   filter(barcode_number <= 8) %>%
-#   dplyr::select(-barcode_number)
-# 
-# pDNA_counts_matrix <- bc_df_cDNA_filt %>%
-#   filter(pDNA == "pDNA_r1_gcf7027", gcf == "gcf7264") %>%
-#   left_join(pDNA_starcode_counts) %>%
-#   mutate(sample_id = gsub("_gcf.*", "", sample_id)) %>%
-#   mutate(sample_id = paste(sample_id, barcode_number, sep = "_")) %>%
-#   distinct(reporter_id, sample_id, pDNA_counts) %>%
-#   spread(key = "sample_id", value = "pDNA_counts") %>%
-#   column_to_rownames("reporter_id") %>%
-#   replace(is.na(.), 0) %>%
-#   as.matrix()
-#   
-# ## Extract data frame containing column information
-# col_annotation <- bc_df_cDNA_filt %>%
-#   mutate(sample_id = gsub("_gcf.*", "", sample_id)) %>%
-#   mutate(sample_id = paste(sample_id, barcode_number, sep = "_")) %>%
-#   filter(sample_id %in% colnames(cDNA_counts_matrix)) %>%
-#   distinct(sample_id, condition, replicate, barcode_number) %>%
-#   arrange(sample_id) %>%
-#   column_to_rownames("sample_id") %>%
-#   mutate(condition = as.factor(condition), replicate = as.factor(replicate), barcode_number = as.factor(barcode_number))
-# 
-# ## Take random reporters as negative controls
-# random_controls <- str_detect(rownames(cDNA_counts_matrix), "RANDOM")
-# 
-# ## Generate MPRAnalyze object
-# obj <- MpraObject(dnaCounts = pDNA_counts_matrix, rnaCounts = cDNA_counts_matrix, 
-#                   dnaAnnot = col_annotation, rnaAnnot = col_annotation, 
-#                   controls = random_controls,
-#                   BPPARAM = BatchtoolsParam(workers = 50))
-# 
-# # ## library depth normalization
-# # obj <- estimateDepthFactors(obj, lib.factor = c("replicate", "condition"),
-# #                             which.lib = "both")
-# 
-# ## Fit transcription rates
-# obj <- analyzeQuantification(obj = obj, 
-#                               dnaDesign = ~ condition,
-#                               rnaDesign = ~ condition)
-# 
-# ## Extract transcription rates
-# alpha <- getAlpha(obj, by.factor = "condition")
-```
 
 
 ---
@@ -710,66 +629,11 @@ bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, bc_df_cDNA_filt_neg2, by = c("sample_i
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
   mutate(minP_activity = activity / tf_activity)
 
-
-# ### Compute a p-value for each reporter with respect to the background minimal promoter activity
-# bc_df_cDNA_filt$library[is.na(bc_df_cDNA_filt$library)] <- "1+2"
-# bc_df_cDNA_filt_neg2 <- bc_df_cDNA_filt %>%
-#   dplyr::select(sample_id, reporter_id, tf, promoter, neg_ctrls, mean_activity, condition, library) %>%
-#   filter(neg_ctrls == "Yes") %>%
-#   unique() %>%
-#   group_by(sample_id, promoter) %>%
-#   dplyr::top_frac(-0.75, mean_activity) %>%
-#   mutate(id = paste(condition, promoter, library, sep = "_"))
-# 
-# bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
-#   mutate(reporter_id2 = gsub("(.*)_.*(_[1-3]{1}$)", "\\1\\2", reporter_id),
-#          id = paste(condition, promoter, library, sep = "_"))
-# 
-# 
-# pval_list <- list()
-# for (i in unique(bc_df_cDNA_filt$reporter_id2)) {
-#   print(i)
-#   test_x <- bc_df_cDNA_filt[bc_df_cDNA_filt$reporter_id2 == i,]
-#   ids <- unique(bc_df_cDNA_filt$id[bc_df_cDNA_filt$reporter_id2 == i])
-#   pval_list[[i]] <- lapply(ids, function(x) t.test(test_x$activity[test_x$id == x], 
-#                                                    bc_df_cDNA_filt_neg2$mean_activity[bc_df_cDNA_filt_neg2$id == x])$p.value)
-#   names(pval_list[[i]]) <- ids
-# }
-# 
-# pval_df <- data.frame(bind_rows(pval_list))
-# rownames(pval_df) <- names(pval_list)
-# pval_df <- pval_df %>%
-#   rownames_to_column("reporter_id2") %>%
-#   pivot_longer(-reporter_id2, names_to = "id", values_to = "pval") %>%
-#   mutate(id = gsub("1[.]2", "1+2", id)) %>%
-#   na.omit()
-# 
-# bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, pval_df, by = c("reporter_id2", "id"), all = T)
-# bc_df_cDNA_filt <- bc_df_cDNA_filt[!is.na(bc_df_cDNA_filt$sample_id),]
-
-## Compute activity relative to NFYA reporter
-bc_df_cDNA_filt_nfya <- bc_df_cDNA_filt %>%
-  dplyr::select(sample_id, activity, reporter_id, tf, promoter) %>%
-  filter(str_detect(tf, "NFYA"), promoter == "minP") %>%
-  unique() %>%
-  mutate(activity = ave(activity, sample_id, FUN = function(x) mean(x))) %>%
-  dplyr::select(-reporter_id) %>%
-  unique() %>%
-  dplyr::select("nfya_activity" = activity, sample_id) %>%
-  unique()
-
-bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, bc_df_cDNA_filt_nfya, by = "sample_id")
-bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
-  mutate(nfya_activity = activity / nfya_activity)
-
 # Compute mean of technical replicates
 bc_df_cDNA_filt$mean_activity_sample_minP <- ave(bc_df_cDNA_filt$minP_activity, bc_df_cDNA_filt$reporter_id,
                                 bc_df_cDNA_filt$sample_id, FUN =
                                   function(x) mean(x, na.rm = T))
 
-bc_df_cDNA_filt$mean_activity_sample_nfya <- ave(bc_df_cDNA_filt$nfya_activity, bc_df_cDNA_filt$reporter_id,
-                                bc_df_cDNA_filt$sample_id, FUN =
-                                  function(x) mean(x, na.rm = T))
 bc_df_cDNA_filt$mean_activity_sample <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id,
                                 bc_df_cDNA_filt$sample_id, FUN =
                                   function(x) mean(x, na.rm = T))
@@ -788,104 +652,9 @@ bc_df_cDNA_filt <- bc_df_cDNA_filt[!is.na(bc_df_cDNA_filt$barcode),]
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
   mutate(mean_activity_sample_neg = mean_activity / mutated_activity)
 
-## Statistical significance of reporters vs negative control
+
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
   mutate(reporter_id2 = gsub("_neg", "", reporter_id))
-
-# my.t.test.p.value <- function(x,y) {
-#   obj<-try(t.test(x,y), silent=TRUE)
-#   if (is(obj, "try-error")) return(1) else return(obj$p.value)
-# }
-# pval_list <- list()
-# for (i in unique(bc_df_cDNA_filt$reporter_id2)) {
-#   print(i)
-#   test_x <- bc_df_cDNA_filt[bc_df_cDNA_filt$reporter_id2 == i,]
-#   ids <- intersect(unique(bc_df_cDNA_filt$id[bc_df_cDNA_filt$reporter_id2 == i & bc_df_cDNA_filt$neg_ctrls == "Yes"]),
-#                      unique(bc_df_cDNA_filt$id[bc_df_cDNA_filt$reporter_id2 == i & bc_df_cDNA_filt$neg_ctrls == "No"]))
-#   p <- lapply(ids, function(x) my.t.test.p.value(test_x$activity[test_x$id == x & test_x$neg_ctrls == "No"], 
-#                                                    test_x$activity[test_x$id == x & test_x$neg_ctrls == "Yes"]))
-#   pval_list[[i]] <- p
-#   names(pval_list[[i]]) <- ids
-# }
-# 
-# pval_list <- pval_list[lengths(pval_list) > 0]
-# pval_df <- data.frame(bind_rows(pval_list))
-# rownames(pval_df) <- names(pval_list)
-# pval_df <- as.data.frame(pval_df)
-# pval_df <- pval_df %>%
-#   rownames_to_column("reporter_id2") %>%
-#   pivot_longer(-reporter_id2, names_to = "id", values_to = "pval_neg") %>%
-#   mutate(id = gsub("1[.]2", "1+2", id)) %>%
-#   na.omit()
-# 
-# bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, pval_df, by = c("reporter_id2", "id"), all = T)
-
-
-# ## Compute z-scores instead of reporter activities
-# ### z-score = (activity reporter - mean activity identical negative control) / SD activity identical negative control
-# zscore_mutated <- bc_df_cDNA_filt %>%
-#   filter(neg_ctrls == "Yes", !tf %in% c("POU5F1::SOX2", "NR1H4::RXRA")) %>%
-#   dplyr::select(reporter_id, 'mutated_activity' = activity, sample_id, barcode, condition) %>%
-#   unique() %>%
-#   mutate(reporter_id = gsub("_neg", "", reporter_id)) %>%
-#   filter(str_detect(reporter_id, "MAFA_", negate = T), str_detect(reporter_id, "NR2E3_", negate = T), str_detect(reporter_id, "^T_", negate = T)) %>%
-#   mutate(mean_mutated_activity = ave(mutated_activity, condition, reporter_id, barcode, FUN = mean)) %>%
-#   mutate(sd_mutated_activity = ave(mutated_activity, condition, reporter_id, barcode, FUN = sd)) %>%
-#   dplyr::select(-mutated_activity, -sample_id) %>%
-#   distinct()
-# 
-# bc_df_cDNA_filt2 <- merge(bc_df_cDNA_filt, zscore_mutated, by = c("reporter_id", "condition"), all = T) %>%
-#   mutate(zscore_activity = (activity - mean_mutated_activity) / sd_mutated_activity) %>%
-#   mutate(reporter_activity_zscore = ave(zscore_activity, reporter_id, condition, FUN = function(x) sum(x)/sqrt(length(x)))) %>%
-#   filter(!tf %in% c("POU5F1::SOX2", "NR1H4::RXRA"), commercial_reporter == "No")
-# 
-# 
-# ### Calculate z-scores for high-background reporters
-# zscore_mutated_background <- bc_df_cDNA_filt %>%
-#   filter(neg_ctrls == "Yes", tf %in% c("POU5F1_neg", "NR1H2_neg")) %>%
-#   dplyr::select(reporter_id, 'mutated_activity' = activity, sample_id, barcode, condition) %>%
-#   unique() %>%
-#   mutate(reporter_id = gsub("_neg", "", reporter_id)) %>%
-#   mutate(mean_mutated_activity = ave(mutated_activity, condition, reporter_id, FUN = mean)) %>%
-#   mutate(sd_mutated_activity = ave(mutated_activity, condition, reporter_id, FUN = sd)) %>%
-#   mutate(reporter_id = gsub("POU5F1", "POU5F1::SOX2", reporter_id)) %>%
-#   mutate(reporter_id = gsub("NR1H2", "NR1H4::RXRA", reporter_id)) %>%
-#   dplyr::select(-mutated_activity, -barcode, -sample_id) %>%
-#   distinct()
-# 
-# bc_df_cDNA_filt3 <- merge(bc_df_cDNA_filt, zscore_mutated_background, by = c("reporter_id", "condition"), all = T) %>%
-#   mutate(zscore_activity = (mean_activity_sample - mean_mutated_activity) / sd_mutated_activity) %>%
-#   mutate(reporter_activity_zscore = ave(zscore_activity, reporter_id, condition, FUN = function(x) sum(x)/sqrt(length(x)))) %>%
-#   filter(tf %in% c("POU5F1::SOX2", "NR1H4::RXRA"), commercial_reporter == "No")
-# 
-# ### Calculate z-scores for commercial reporters - normalize to average reporter per TF
-# bc_df_cDNA_filt4 <- bc_df_cDNA_filt %>%
-#   filter(commercial_reporter == "Yes") %>%
-#   mutate(tf = gsub("_.*", "", tf))
-# 
-# zscore_mutated_commercials <- bc_df_cDNA_filt %>%
-#   filter(neg_ctrls == "Yes") %>%
-#   mutate(reporter_id = gsub("_neg", "", reporter_id)) %>%
-#   mutate(tf = gsub("_neg", "", tf)) %>%
-#   filter(tf %in% unique(bc_df_cDNA_filt4$tf)) %>%
-#   dplyr::select(reporter_id, 'mutated_activity' = activity, sample_id, barcode, condition, tf, commercial_reporter) %>%
-#   unique() %>%
-#   filter(str_detect(reporter_id, "MAFA_", negate = T), str_detect(reporter_id, "NR2E3_", negate = T), str_detect(reporter_id, "^T_", negate = T)) %>%
-#   mutate(mean_mutated_activity = ave(mutated_activity, condition, reporter_id, FUN = mean)) %>%
-#   mutate(sd_mutated_activity = ave(mutated_activity, condition, reporter_id, FUN = sd)) %>%
-#   mutate(mean_mutated_activity_tf = ave(mutated_activity, condition, tf, FUN = mean)) %>%
-#   group_by(tf, condition) %>%
-#   filter(abs(mean_mutated_activity-mean_mutated_activity_tf)==min(abs(mean_mutated_activity-mean_mutated_activity_tf))) %>%
-#   ungroup() %>%
-#   distinct(condition, tf, mean_mutated_activity, sd_mutated_activity)
-# 
-# 
-# bc_df_cDNA_filt4 <- merge(bc_df_cDNA_filt4, zscore_mutated_commercials, by = c("tf", "condition"), all = T) %>%
-#   mutate(zscore_activity = (mean_activity_sample - mean_mutated_activity) / sd_mutated_activity) %>%
-#   mutate(reporter_activity_zscore = ave(zscore_activity, reporter_id, condition, FUN = function(x) sum(x)/sqrt(length(x)))) %>%
-#   filter(commercial_reporter == "Yes")
-# 
-# bc_df_cDNA_filt <- rbind(bc_df_cDNA_filt2, bc_df_cDNA_filt3, bc_df_cDNA_filt4)
 ```
 
 
@@ -1010,10 +779,10 @@ dens1 + plot_spacer() + scatter_rep + dens2 +
 
 ---
 
-## Review which conditions to include - compute correlations between replicates of the same samples
+## Review which conditions to include - compute correlations between replicates of the same samples - only unstimulated
 ```{r sample correlations}
 bc_df_sample <- bc_df_cDNA_filt %>%
-  filter(is.na(stimulation) | stimulation != "KD") %>%
+  filter(is.na(stimulation)) %>%
   mutate(unique_sample = gsub(".*_(r[1-7]{1}_gcf.*)", "\\1", sample_id)) %>%
   distinct(mean_activity_sample_minP, reporter_id, condition, unique_sample) %>% 
   mutate(mean_activity_sample_minP = log2(mean_activity_sample_minP)) %>%
@@ -1057,55 +826,30 @@ bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
 
 ---
 
+## Calculate fold-changes of perturbations - keep only perturbations that change activities robustly
+```{r}
+
+```
+
+
+---
+
 ```{r data export, out.width= "80%", fig.align= "center",  warning= FALSE}
 # Mean of the three replicates
 bc_df_cDNA_filt$reporter_activity <- ave(bc_df_cDNA_filt$mean_activity_sample, bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$condition, FUN = function(x) mean(x))
 bc_df_cDNA_filt$reporter_activity_minP <- ave(bc_df_cDNA_filt$mean_activity_sample_minP, bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$condition, FUN = function(x) mean(x))
 bc_df_cDNA_filt$reporter_activity_nfya <- ave(bc_df_cDNA_filt$mean_activity_sample_nfya, bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$condition, FUN = function(x) mean(x))
 bc_df_cDNA_filt$reporter_activity_neg <- ave(bc_df_cDNA_filt$mean_activity_sample_neg, bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$condition, FUN = function(x) mean(x))
+bc_df_cDNA_filt$reporter_activity_minP_gcf <- ave(bc_df_cDNA_filt$mean_activity_sample_minP, bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$condition,
+                                                 bc_df_cDNA_filt$gcf, FUN = function(x) mean(x))
 
 # Polish export dataframe
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
-  dplyr::select(-pDNA_rpm, -mean_activity, -deviation, -n_reporters, -path, -file, -gcf, -labguru_experiment)
+  dplyr::select(-pDNA_rpm, -mean_activity, -deviation, -n_reporters, -path, -file, -labguru_experiment)
 
-# # Critical step: for reporters that have a high negative control value - change to minP values instead
-# bc_df_cDNA_filt2 <- bc_df_cDNA_filt %>%
-#   dplyr::filter(neg_ctrls == "No", native_enhancer == "No", hPGK == "No", commercial_reporter == "No") %>%
-#   distinct(reporter_id, condition, tf, reporter_activity_minP, reporter_activity_neg) %>%
-#   mutate(reporter_activity_minP_mean = ave(reporter_activity_minP, tf, condition, FUN = function(x) mean(x, na.rm = T))) %>%
-#   mutate(reporter_activity_neg_mean = ave(reporter_activity_neg, tf, condition, FUN = function(x) mean(x, na.rm = T))) %>%
-#   mutate(dif = reporter_activity_minP_mean / reporter_activity_neg_mean) %>%
-#   group_by(tf, condition) %>%
-#   mutate(cor = cor(reporter_activity_minP, reporter_activity_neg, use = "pairwise.complete.obs")) %>%
-#   ungroup() %>%
-#   mutate(neg_active = ifelse(dif > 3 | cor < 0.5, "yes", "no")) %>%
-#   distinct(tf, condition, neg_active) 
-
-
-# bc_df_cDNA_filt3 <- bc_df_cDNA_filt %>%
-#   filter(neg_ctrls == "Yes", native_enhancer == "No", hPGK == "No", commercial_reporter == "No") %>%
-#   distinct(reporter_id, condition, tf, reporter_activity_minP) %>%
-#   mutate(tf = gsub("_neg", "", tf)) %>%
-#   mutate(neg_activity = ave(reporter_activity_minP, tf, condition, FUN = mean)) %>%
-#   distinct(tf, condition, neg_activity)
-
-# bc_df_cDNA_filt4 <- merge(bc_df_cDNA_filt3, bc_df_cDNA_filt2)
-
-
-
-# bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, bc_df_cDNA_filt2, by = c("tf", "condition"), all = T) %>%
-#   mutate(reporter_activity_neg = ifelse(neg_active == "yes" | is.na(reporter_activity_neg), reporter_activity_minP, reporter_activity_neg)) %>%
-#   mutate(pval_neg = ifelse(neg_active == "yes" | is.na(pval_neg), pval, pval_neg)) 
 
 ## p-value adjustment
 bc_df_cDNA_filt$reporter_rpm <- ave(bc_df_cDNA_filt$rpm, bc_df_cDNA_filt$reporter_id, FUN = mean)
-#bc_df_cDNA_filt$pval_adj_minP <- adj_pvalues(ihw(pval ~ reporter_rpm,  data = bc_df_cDNA_filt, alpha = 0.1))
-#bc_df_cDNA_filt$pval_adj_neg <- adj_pvalues(ihw(pval_neg ~ reporter_rpm,  data = bc_df_cDNA_filt, alpha = 0.1))
-
-## Figure 1D: Correlation between replicates
-correlation_df <- bc_df_cDNA_filt %>% 
-  filter(condition == "U2OS") %>%
-  distinct(reporter_activity_neg, reporter_id, sample_id)
 
 ## Export condensed version of the data frame
 bc_df_cDNA_filt_short <- bc_df_cDNA_filt %>%
@@ -1122,25 +866,6 @@ write.csv(bc_df_cDNA_filt_short, file = paste(filename,".csv", sep = ""), row.na
 filename <- SetFileName("_reporter_activity_filt_combined_complete", "mt")
 setwd("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7124_stimulations/results/")
 write.csv(bc_df_cDNA_filt, file = paste(filename,".csv", sep = ""), row.names = F)
-```
-
-
-
-```{r}
-# ## Compare MPRAnalyze with reporter activities
-# mpranalyze_df <- alpha %>%
-#   rownames_to_column("reporter_id") %>%
-#   pivot_longer(contains("K562"), names_to = "condition", values_to = "mpra_activity") 
-# 
-# bc_df_cDNA_filt_compare <- bc_df_cDNA_filt %>%
-#   filter(gcf == "gcf7264", condition %in% mpranalyze_df$condition, reporter_id %in% mpranalyze_df$reporter_id) %>%
-#   distinct(reporter_activity_minP, reporter_activity_neg, reporter_id, condition, neg_ctrls) %>%
-#   left_join(mpranalyze_df)
-#   
-# 
-# ggplot(bc_df_cDNA_filt_compare,
-#        aes(x = reporter_activity_minP, y = mpra_activity)) +
-#   geom_point()
 ```
 
 
