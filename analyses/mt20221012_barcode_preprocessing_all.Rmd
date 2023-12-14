@@ -81,7 +81,8 @@ library(IHW)
 library(MPRAnalyze)
 library(batchtools)
 library(BiocParallel)
-
+library(patchwork)
+library(ggrastr)
 ```
 
 
@@ -213,8 +214,7 @@ bc_files <- lapply(bc_files, fread, header = FALSE)
 names(bc_files) <- metadata_df$sample_id
 
 # Import barcode annotation of both libraries
-bc_annotation <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf6578_gen2_stimulation-2/mt20211021_bc_annotation_combined.csv") %>%
-  dplyr::select(-library)
+bc_annotation <- read_csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/bc_annotation_combined.csv")
 ```
 
 
@@ -225,12 +225,6 @@ bc_annotation <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf657
 bc_df <- bind_rows(bc_files, .id = "sample_id") %>%
   dplyr::select(sample_id, "barcode" = V1, "starcode_counts" = V2)
 
-# Add barcode annotation to the data (also include barcodes that have 0 counts)
-bc_annotation <- merge(bc_annotation, unique(bc_df$sample_id), all = T) %>%
-  setnames("y", "sample_id")
-
-bc_df <- merge(bc_df, bc_annotation, all = T, by = c("barcode", "sample_id"))
-
 # Library 1 has barcodes of length 12 while library 2 has barcodes of length 13
 # For sequencing samples that have library 1 and 2 mixed I extracted barcodes of length >=12
 # So, I will now filter out all barcodes with length >13, because those are not relevant
@@ -240,8 +234,13 @@ bc_df <- bc_df %>%
 
 # Add experiment annotation to the data
 bc_df <- bc_df[!is.na(bc_df$sample_id),]
-bc_df <- merge(bc_df, metadata_df, all = T, by = "sample_id")
+bc_df <- bc_df %>%
+  left_join(metadata_df)
 
+# Add barcode annotation (this will make the data table bigger - all barcodes that are not seen will have NA starcode counts)
+bc_df <- merge(bc_df, bc_annotation, all = T, by = c("barcode", "library"))
+
+# Assign 0 to NA counts and remove barcodes with wrong lengths
 bc_df$starcode_counts[is.na(bc_df$starcode_counts)] <- 0
 bc_df_remove <- bc_df %>%
   filter(nchar == 13 & bc_df$library == "1")
@@ -255,7 +254,7 @@ bc_df <- bc_df[bc_df$starcode_counts > 0,]
 
 # Compute reads per million to estimate the relative counts in the respective sample
 bc_df <- bc_df %>%
-  mutate(rpm = ave(starcode_counts, sample_id, FUN = function(x) (x+1) / sum(x) *1e6 ))
+  mutate(rpm = ave(starcode_counts, sample_id, FUN = function(x) (x) / sum(x) *1e6 ))
 
 bc_df_filt <- bc_df[!is.na(bc_df$tf),]
 
@@ -469,31 +468,32 @@ bc_df_filt <- merge(bc_df_filt, cor, by = c("sample_id"), all = T)
 ### Sample filtering
 
 ```{r out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
-# Remove samples with low dynamic range (this most likely is due to unhappy cells, pDNA contamination or some other mistake in the sample prep)
-bc_df_filt2 <- bc_df_filt %>%
-  filter(n_bc > 75 | cell == "pDNA") %>% 
-  dplyr::select(-n_bc)
+# # Remove samples with low dynamic range (this most likely is due to unhappy cells, pDNA contamination or some other mistake in the sample prep)
+# bc_df_filt2 <- bc_df_filt %>%
+#   filter(n_bc > 75 | cell == "pDNA") %>% 
+#   dplyr::select(-n_bc)
 
 # Remove samples with high pDNA contamination (most likely those samples were already removed in the previous step as this is a bit redundant)
 bc_df_filt2 <- bc_df_filt2 %>%
-  filter(cor <= 0.5 | cell == "pDNA") %>% 
+  filter(cor <= 0.75 | cell == "pDNA") %>% 
   dplyr::select(-cor)
 
-# Remove some more samples with low quality manually
-bc_df_filt2 <- bc_df_filt2 %>%
-  filter(!sample_id %in% c("mES_r1_gcf7124", "K562_r1_gcf7124", "mES_Aldosterone_r4_gcf7124", "mES_GSK4716_r2_gcf7124",
-                           "mES_GSK4716_r4_gcf7124", "mES_Progesterone_r2_gcf7124", 
-                           "mES_Progesterone_r3_gcf7124", "mES_Progesterone_r4_gcf7124", "mES_r3_gcf7124", 
-                           "mES_r4_gcf7124", "mES_r5_gcf7124", "mES_r6_gcf7124", "mES_SRI011381_r2_gcf7124", 
-                           "mES_SRI011381_r4_gcf7124", "NPC_5aDHT_r1_gcf7124", "NPC_5aDHT_r3_gcf7124", 
-                           "NPC_ITE_r1_gcf7124", "NPC_ITE_r2_gcf7124", "NPC_ITE_r3_gcf7124", "NPC_SR1078_r1_gcf7124", 
-                           "NPC_SR1078_r2_gcf7124", "NPC_SR1078_r3_gcf7124", "NPC_TCPOBOP_r1_gcf7124", 
-                           "NPC_TCPOBOP_r2_gcf7124", "NPC_TCPOBOP_r3_gcf7124", "mES_SRI011381_r3_gcf7124", 
-                           "mES_FK_r2_gcf6139", "mES_FK_r3_gcf6139", "HepG2_THRA_r2_gcf7534"))
+# # Remove some more samples with low quality manually
+# bc_df_filt2 <- bc_df_filt2 %>%
+#   filter(!sample_id %in% c("mES_r1_gcf7124", "K562_r1_gcf7124", "mES_Aldosterone_r4_gcf7124", "mES_GSK4716_r2_gcf7124",
+#                            "mES_GSK4716_r4_gcf7124", "mES_Progesterone_r2_gcf7124", 
+#                            "mES_Progesterone_r3_gcf7124", "mES_Progesterone_r4_gcf7124", "mES_r3_gcf7124", 
+#                            "mES_r4_gcf7124", "mES_r5_gcf7124", "mES_r6_gcf7124", "mES_SRI011381_r2_gcf7124", 
+#                            "mES_SRI011381_r4_gcf7124", "NPC_5aDHT_r1_gcf7124", "NPC_5aDHT_r3_gcf7124", 
+#                            "NPC_ITE_r1_gcf7124", "NPC_ITE_r2_gcf7124", "NPC_ITE_r3_gcf7124", "NPC_SR1078_r1_gcf7124", 
+#                            "NPC_SR1078_r2_gcf7124", "NPC_SR1078_r3_gcf7124", "NPC_TCPOBOP_r1_gcf7124", 
+#                            "NPC_TCPOBOP_r2_gcf7124", "NPC_TCPOBOP_r3_gcf7124", "mES_SRI011381_r3_gcf7124", 
+#                            "mES_FK_r2_gcf6139", "mES_FK_r3_gcf6139", "HepG2_THRA_r2_gcf7534"))
 
 # Which samples were removed in these steps?
 paste("the following sample was removed due to low quality:", setdiff(unique(bc_df_filt$sample_id), unique(bc_df_filt2$sample_id)))
 ```
+
 
 ---
 
@@ -514,7 +514,6 @@ bc_df_cDNA <- bc_df_filt2 %>%
 ---
 
 
-
 ## Calculate mean activity - filter out outlier barcodes 
 
 ```{r out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
@@ -525,52 +524,16 @@ bc_df_cDNA <- bc_df_cDNA %>%
   mutate(deviation = activity / mean_activity) %>%
   mutate(n_reporters = ave(reporter_id, reporter_id, sample_id, FUN = function(x) as.numeric(length(x))))
 
-
-## Plot effect of highest outlier bc -> SNP in minP promoter
-outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "ZFP42_5bp_21bp_minP_3",] %>%
-  dplyr::select(barcode_number, activity, sample) %>%
-  unique()
-
-ggplot_custom(outlier, aes(x = barcode_number, y = activity)) +
-  geom_quasirandom() +
-  xlab("barcode #") +
-  labs(title = "Zfp42 reporter - TATA-box minP mutated",
-       subtitle = "bc8 AGAGGGTATATAAT -> AGAGGGGATATAAT")
-
-
-## Plot effect of highest outlier bc -> Elk1 outlier
-outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "ELK1_5bp_21bp_mCMV_2",] %>%
-  dplyr::select(barcode_number, activity) %>%
-  unique()
-
-ggplot_custom(outlier, aes(x = barcode_number, y = activity)) +
-  geom_quasirandom()+
-  xlab("barcode #") +
-  labs(title = "Elk1 reporter - bc1 attached to Pax6 reporter")
-
-
-
-## Plot effect of highest outlier bc -> Elk1 outlier
-outlier <- bc_df_cDNA[bc_df_cDNA$reporter_id == "TCF7L2_5bp_10bp_hBGm_3",] %>%
-  dplyr::select(barcode_number, activity) %>%
-  unique()
-
-ggplot_custom(outlier, aes(x = barcode_number, y = activity)) +
-  geom_quasirandom() +
-  xlab("barcode #") +
-  labs(title = "Tcf3 reporter - bc1 attached to multiple (less active) reporters")
-
-
-
 ## Choose arbitrary cutoff to get rid of most extreme outliers
 ### There can be two cases:
 #### 1) low-activity reporters with a wrongly assigned active barcode -> remove barcodes with high deviation and high counts (high deviation alone is not enough)
 #### 2) high-activity reporters with a wrongly assigned inactive barcode -> remove barcodes with low deviation (low deviation is enough)
 bc_df_cDNA_filt <- bc_df_cDNA %>%
-  filter(deviation > .2) %>% ## Remove barcodes that are 5 times more active than median
+  filter(deviation > .2) %>% ## Remove barcodes that are 5 times less active than median
   filter((deviation > 3 & activity < 2) | deviation < 3) %>% ## Remove barcodes that are 3 times more active than median AND have a high activity in general (barcodes with >3 times higher activity but activity lower than 2 can be kept as they don't distort the data that much)
-  filter(n_reporters > 2) ## Remove reporters for which I have measurements from only two or less reporters left
+  filter(n_reporters > 2) ## Remove reporters for which I have measurements from only two or less barcodes left
 
+## Re-compute amount of barcodes per reporter after deviation filtering and remove those with 2 or less barcodes 
 bc_df_cDNA_filt$n_reporters <- ave(bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$reporter_id,
                                 bc_df_cDNA_filt$sample_id, FUN =
                                   function(x) as.numeric(length(x)))
@@ -578,7 +541,7 @@ bc_df_cDNA_filt$n_reporters <- ave(bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
   filter(n_reporters >= 2)
 
-## Recalculate mean and sd
+## Recalculate mean of reporter activity
 #bc_df_cDNA_filt <- bc_df_cDNA
 bc_df_cDNA_filt$mean_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$reporter_id, 
                                 bc_df_cDNA_filt$sample_id, FUN =
@@ -586,25 +549,13 @@ bc_df_cDNA_filt$mean_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$r
 ```
 
 
-
 ---
 
 ### Scaling data 
 
 ```{r out.width= "80%", fig.align= "center",  warning= FALSE}
-## Compute activity relative to minimal promoter background
-bc_df_cDNA_filt_neg <- bc_df_cDNA_filt %>%
-  dplyr::select(sample_id, activity, reporter_id, tf, promoter) %>%
-  filter(str_detect(tf, "RANDOM")) %>%
-  unique() %>%
-  mutate(activity = ave(activity, promoter, sample_id, FUN = function(x) mean(x))) %>%
-  dplyr::select(-reporter_id) %>%
-  unique() %>%
-  dplyr::select("tf_activity2" = activity, promoter, sample_id) %>%
-  unique()
-
-
-### For library 2 I don't have random motifs, so I will take the mean of the mutated motifs instead (get rid of the 2% highest active mutated controls)
+### Normalize activities per minimal promoter - use the mean of the lowest active 75% of the mutated TFBS reporters for this
+#### I tried different things as well (see below) - but this way seems to get rid of "background" activity most robustly
 bc_df_cDNA_filt_neg2 <- bc_df_cDNA_filt %>%
   dplyr::select(sample_id, reporter_id, tf, promoter, neg_ctrls, mean_activity) %>%
   filter(neg_ctrls == "Yes") %>%
@@ -619,11 +570,32 @@ bc_df_cDNA_filt_neg2 <- bc_df_cDNA_filt %>%
 
 bc_df_cDNA_filt$promoter[bc_df_cDNA_filt$hPGK == "Yes"] <- "minP"
 
+### Other methods to normalize:
+# bc_df_cDNA_filt_neg <- bc_df_cDNA_filt %>%
+#   dplyr::select(sample_id, activity, reporter_id, tf, promoter) %>%
+#   filter(str_detect(tf, "RANDOM")) %>%
+#   unique() %>%
+#   mutate(activity = ave(activity, promoter, sample_id, FUN = function(x) mean(x))) %>%
+#   dplyr::select(-reporter_id) %>%
+#   unique() %>%
+#   dplyr::select("tf_activity2" = activity, promoter, sample_id) %>%
+#   unique()
 
-x <- merge(bc_df_cDNA_filt_neg, bc_df_cDNA_filt_neg2)
-plot(x$tf_activity, x$tf_activity2)
-### Normalization by random has some outliers (gcf6502) -> I can better for now normalize by mutated motifs since I also have data for all samples from that
 
+# bc_df_cDNA_filt_neg3 <- bc_df_cDNA_filt %>%
+#   dplyr::select(sample_id, reporter_id, tf, promoter, neg_ctrls, mean_activity, hPGK) %>%
+#   filter(neg_ctrls == "Yes", hPGK == "No") %>%
+#   unique() %>%
+#   #group_by(sample_id, promoter) %>%
+#   #dplyr::top_frac(-0.75, mean_activity) %>%
+#   mutate(activity = ave(mean_activity, promoter, sample_id, FUN = function(x) median(x))) %>%
+#   dplyr::select(-reporter_id) %>%
+#   unique() %>%
+#   dplyr::select("tf_activity" = activity, promoter, sample_id) %>%
+#   unique()
+# 
+# x <- merge(bc_df_cDNA_filt_neg2, bc_df_cDNA_filt_neg3)
+# plot(x$tf_activity, x$tf_activity2)
 
 bc_df_cDNA_filt <- merge(bc_df_cDNA_filt, bc_df_cDNA_filt_neg2, by = c("sample_id", "promoter"))
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
@@ -660,6 +632,249 @@ bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
 
 ---
 
+## Review which conditions to include - compute correlations between replicates of the same samples - only unperturbed conditions
+```{r sample correlations}
+bc_df_sample <- bc_df_cDNA_filt %>%
+  filter(is.na(stimulation)) %>%
+  mutate(unique_sample = gsub(".*_(r[1-7]{1}_gcf.*)", "\\1", sample_id)) %>%
+  mutate(unique_sample = paste(unique_sample, condition, sep = "_")) %>%
+  distinct(mean_activity_sample_minP, reporter_id, cell, unique_sample) %>% 
+  mutate(mean_activity_sample_minP = log2(mean_activity_sample_minP)) %>%
+  spread(unique_sample, mean_activity_sample_minP)
+
+for (i in unique(bc_df_sample$cell)) {
+  
+  print(i)
+  
+  bc_df_sample_i <- bc_df_sample %>% filter(cell == i)
+  bc_df_sample_i <- bc_df_sample_i[,colSums(is.na(bc_df_sample_i))<nrow(bc_df_sample_i)]
+  
+  n <- sample(1:nrow(bc_df_sample_i), 5000)
+
+  
+  p <- ggpairs(bc_df_sample_i %>% dplyr::select(-reporter_id, -cell),
+               upper = list(continuous = corColor),
+               lower = list(continuous = function(data, mapping, ...) {
+                   ggally_points(data = data[n, ], mapping = mapping, alpha = 0.1, size = 0.5) +
+                   geom_abline(slope = 1, lty = "dashed", col = "red") +
+                   theme_pubr(border = T)}),
+               diag = list(continuous = function(data, mapping, ...) {
+                   ggally_densityDiag(data = data, mapping = mapping, alpha = 0.3, fill = "red") +
+                   theme_pubr(border = T)})) +
+  ggtitle(i) +
+  xlab("Reporter activity") +
+  ylab("Reporter activity")
+  
+  print(p)
+  
+}
+```
+
+
+---
+
+## Calculate fold-changes of perturbations - keep only perturbations that change activities robustly & consistently (across replicates)
+```{r}
+## Isolate all perturbation conditions
+bc_df_pert <- bc_df_cDNA_filt %>%
+  filter(!is.na(stimulation), neg_ctrls == "No", hPGK == "No", native_enhancer == "No") %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  mutate(reference_condition_gcf = paste(reference_condition, replicate, gcf, sep = "_")) %>%
+  mutate(unique_sample = gsub(".*_(r[1-7]{1}_gcf.*)", "\\1", sample_id)) %>%
+  mutate(unique_sample = paste(condition, unique_sample, sep = "_")) %>%
+  distinct(mean_activity_sample_minP, reporter_id, condition, unique_sample, reference_condition_gcf, tf, target, off_target) %>% 
+  mutate(mean_activity_sample_minP = log2(mean_activity_sample_minP)) %>%
+  mutate(reference_condition_gcf = ifelse(condition %in% c("mES_N2B27_Shh", "mES_N2B27_Bmp4", "mES_N2B27_RA"), 
+                                          "mES_N2B27_r1_gcf5927", reference_condition_gcf)) %>%
+  mutate(reference_condition_gcf = ifelse(unique_sample == "mES_HQ_r2_gcf6139", "mES_2i_LIF_r3_gcf6139", reference_condition_gcf))
+
+### Isolate activities of control conditions
+bc_df_pert_ref <- bc_df_cDNA_filt %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  filter(is.na(stimulation) | condition == "mES_Dox", neg_ctrls == "No") %>%
+  filter(condition %in% unique(bc_df_cDNA_filt$reference_condition)) %>%
+  mutate(reference_condition_gcf = paste(condition, replicate, gcf, sep = "_")) %>%
+  distinct(mean_activity_sample_minP, reporter_id, reference_condition_gcf, tf, replicate, gcf, condition) %>%
+  mutate(ref_activity = log2(ave(mean_activity_sample_minP, reporter_id, reference_condition_gcf, FUN = mean))) %>%
+  dplyr::select(-mean_activity_sample_minP) %>%
+  distinct()
+
+### Merge activities of technical replicates
+bc_df_pert_ref_kd <- bc_df_pert_ref %>%
+  filter(condition %in% c("mES_NT", "HepG2_NT")) %>% 
+  distinct(reporter_id, condition, reference_condition_gcf, ref_activity) %>% 
+  spread(reference_condition_gcf, ref_activity) %>%
+  mutate(HepG2_NT_r1_gcf6952 = (HepG2_NT_r1_gcf6952 + HepG2_NT_r2_gcf6952) / 2) %>%
+  mutate(HepG2_NT_r2_gcf7534 = (HepG2_NT_r3_gcf7534 + HepG2_NT_r4_gcf7534 + HepG2_NT_r5_gcf7534 + HepG2_NT_r6_gcf7534) / 4) %>%
+  mutate(mES_NT_r1_gcf7027 = (mES_NT_r1_gcf7027 + mES_NT_r2_gcf7027) / 2) %>%
+  mutate(mES_NT_r2_gcf7027 = mES_NT_r4_gcf7027) %>%
+  distinct(reporter_id, condition, HepG2_NT_r1_gcf6952, HepG2_NT_r2_gcf7534, mES_NT_r1_gcf7027, mES_NT_r2_gcf7027) %>%
+  dplyr::select(-condition) %>%
+  distinct() %>%
+  pivot_longer(c(-reporter_id), names_to = "reference_condition_gcf", values_to = "ref_activity") %>%
+  na.omit()
+
+bc_df_pert_ref_pou <- bc_df_pert_ref %>%
+  filter(condition %in% c("mES_Pou5f1_ctrl")) %>% 
+  mutate(reference_condition_gcf = "mES_Pou5f1_ctrl_r1_gcf6881") %>%
+  distinct(reporter_id, reference_condition_gcf, ref_activity)
+
+bc_df_pert_ref_n2b27 <- bc_df_pert %>%
+  filter(unique_sample %in% c("mES_N2B27_r1_gcf5927", "mES_N2B27_r2_gcf5927", "mES_N2B27_r3_gcf5927")) %>%
+  distinct(reporter_id, reference_condition_gcf, "ref_activity" = mean_activity_sample_minP) %>%
+  mutate(reference_condition_gcf = "mES_N2B27_r1_gcf5927") %>%
+  mutate(ref_activity = ave(ref_activity, reporter_id, FUN = mean)) %>% 
+  distinct()
+
+bc_df_pert_ref <- bc_df_pert_ref %>%
+  filter(!condition %in% c("mES_NT", "HepG2_NT")) %>% 
+  distinct(reporter_id, reference_condition_gcf, ref_activity) %>%
+  bind_rows(bc_df_pert_ref_kd, bc_df_pert_ref_pou, bc_df_pert_ref_n2b27)
+
+
+### Compute fold-changes
+bc_df_pert_dif <- bc_df_pert %>%
+  left_join(bc_df_pert_ref) %>%
+  mutate(activity_dif = mean_activity_sample_minP - ref_activity) %>%
+  #mutate(activity_dif = ifelse((mean_activity_sample_minP < 0.5 | ref_activity < 0.5) & activity_dif < 1, 0, activity_dif)) %>%
+  dplyr::select(-mean_activity_sample_minP, -ref_activity, -reference_condition_gcf) %>%
+  spread(unique_sample, activity_dif)
+
+## Keep conditions where replicates have the same effect in general on TF reporters
+cor_all <- data.frame("condition" = unique(bc_df_pert_dif$condition),
+                      "cor_all" = "")
+
+for (i in unique(bc_df_pert_dif$condition)) {
+  
+  print(i)
+  
+  bc_df_pert_dif_i <- bc_df_pert_dif %>% filter(condition == i)
+  bc_df_pert_dif_i <- bc_df_pert_dif_i[,colSums(is.na(bc_df_pert_dif_i))<nrow(bc_df_pert_dif_i)]
+  
+  if (ncol(bc_df_pert_dif_i) > 3) {
+      
+    cor_all$cor_all[cor_all$condition == i] <- cor.test(bc_df_pert_dif_i[,6], bc_df_pert_dif_i[,7], na.rm = T)$estimate
+    
+    p <- ggpairs(bc_df_pert_dif_i %>% dplyr::select(-),
+               upper = list(continuous = corColor),
+               lower = list(continuous = function(data, mapping, ...) {
+                   ggally_points(data = data, mapping = mapping, alpha = 0.1, size = 0.5) +
+                   geom_abline(slope = 1, lty = "dashed", col = "red") +
+                   theme_pubr(border = T)}),
+               diag = list(continuous = function(data, mapping, ...) {
+                   ggally_densityDiag(data = data, mapping = mapping, alpha = 0.3, fill = "red") +
+                   theme_pubr(border = T)})) +
+      ggtitle(i) +
+      xlab("Reporter activity") +
+      ylab("Reporter activity")
+    
+    print(p)
+
+  }
+}
+
+## Plot effect of perturbations on TFs - keep conditions with robust effects
+bc_df_pert_dif_long <- bc_df_pert %>%
+  left_join(bc_df_pert_ref) %>%
+  mutate(activity_dif = mean_activity_sample_minP - ref_activity) %>%
+  #mutate(activity_dif = ifelse((mean_activity_sample_minP < 0.5 | ref_activity < 0.5) & activity_dif < 1, 0, activity_dif)) %>%
+  dplyr::select(-mean_activity_sample_minP, -ref_activity, -reference_condition_gcf) %>%
+  mutate(dif_mean = ave(activity_dif, tf, unique_sample, FUN = function(x) mean(x, na.rm = T))) %>%
+  mutate(tf_target = as.numeric(str_detect(target, paste0("\\b", tf, "\\b")))) %>%
+  mutate(tf_target2 = as.numeric(str_detect(target, paste0("\\b", tf, "\\b")))) %>%
+  arrange(condition)
+
+
+for (i in unique(bc_df_pert_dif_long$unique_sample)) {
+  
+  print(i)
+  
+  p <- ggplot(bc_df_pert_dif_long %>% 
+                filter(unique_sample == i),
+              aes(x = reorder(tf, dif_mean), y = activity_dif, color = as.character(tf_target))) +
+    geom_hline(yintercept = 0, lty = 1) +
+    geom_hline(yintercept = 1, lty = 2) +
+    geom_hline(yintercept = -1, lty = 2) +
+    geom_quasirandom() +
+    scale_color_manual(values = c("0" = "black", "1" = "red")) +
+    ggtitle(i) +
+    theme_pubr(x.text.angle = 90)
+    
+  print(p)
+}
+
+
+
+```
+
+## Remove conditions based on poor correlations
+```{r}
+### Remove conditions based on correlation scores - for some cell types I have more than enough data so I can afford to lose noisier replicates
+remove_conditions <- c("U2OS_r1_gcf6881", "U2OS_r2_gcf6881", "U2OS_r1_gcf6210", "mES_2i_LIF_r2_gcf7218", "mES_2i_LIF_r1_gcf7218", "NPC_r1_gcf7218", "mES_2i_LIF_r3_gcf7218", "mES_2i_LIF_r2_gcf6578", "MCF7_r1_gcf6881", "HCT116_r1_gcf6881", "A549_r2_gcf7218")
+
+bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
+  filter(!sample_id %in% remove_conditions)
+
+### Remove perturbation conditions that don't correlate with other replicates
+remove_conditions_pert <- c("mES_N2B27_r2_gcf5927", "mES_LIF_PD_r1_gcf6578", "K562_T3_r1_gcf7264", "mES_vitA_r2_gcf5927",
+                            "A549_Nutlin_r2_gcf6210")
+
+
+### Remove perturbations for which I don't have any evidence of effectiveness
+remove_weak <- c("mES_POU5F1_r1", "mES_Nutlin_r2_gcf7447", "mES_Nutlin_r1_gcf7447", "mES_MEF2A_r1_gcf7027", "mES_GATA1-OE_r2_gcf7447", "mES_FOS::JUN_r1_gcf7027", "HepG2_HNF1A_r2_gcf7534", "HepG2_CEBPB_r1_gcf6952")
+
+remove_conditions_pert <- c("mES_GSK4716_r1_gcf7218", "mES_GSK4716_r3_gcf7218")
+
+
+## Print number of replicates per condition
+
+```
+
+---
+
+## Correlation between biological replicates
+
+```{r correlations_3, out.width= "80%", fig.align= "center",  warning= FALSE}
+# Correlation plots of the replicates
+## Combine replicates of normalized data in 3 different columns
+bc_df_rep <- bc_df_cDNA_filt %>%
+  filter(is.na(stimulation)) %>%
+  dplyr::select(replicate, mean_activity_sample_minP, reporter_id, condition, neg_ctrls, library, gcf) %>% 
+  unique() %>%
+  mutate(mean_activity_sample_minP = log2(mean_activity_sample_minP)) %>%
+  spread(replicate, mean_activity_sample_minP) %>%
+  dplyr::select(-r3, -r4, -r5, -r6) %>%
+  filter(!condition %in% c("HepG2_FBS", "HepG2_NT", "mES_Nanog_ctrl", "mES_NT", "mES_Pou5f1_ctrl", "mES_Sox2_ctrl")) %>%
+  na.omit()
+
+scatter_rep <- ggplot(bc_df_rep, 
+       aes(x = r1, y = r2)) +
+  geom_abline(lty = 1) +
+  geom_point_rast(raster.dpi = 600, aes(color = neg_ctrls), size = .4, alpha = .2, stroke = NA) +
+  stat_cor(method = "pearson", label.x = -1, label.y = 10) + 
+  xlim(-3,12) + ylim(-3,12) +
+  scale_color_manual(values = c("Yes" = "grey70", "No" = "#DD6B48")) +
+  theme_pubr(border = T) +
+  theme(legend.position = "none")
+
+dens1 <- ggplot(bc_df_rep, aes(x = r1, fill = neg_ctrls)) + 
+  geom_density(alpha = 0.4) + 
+  theme_void() + 
+  scale_fill_manual(values = c("Yes" = "grey70", "No" = "#DD6B48")) +
+  theme(legend.position = "none")
+
+dens2 <- ggplot(bc_df_rep, aes(x = r2, fill = neg_ctrls)) + 
+  geom_density(alpha = 0.4) + 
+  theme_void() + 
+  scale_fill_manual(values = c("Yes" = "grey70", "No" = "#DD6B48")) +
+  theme(legend.position = "none") + 
+  coord_flip()
+
+dens1 + plot_spacer() + scatter_rep + dens2 + 
+  plot_layout(ncol = 2, nrow = 2, widths = c(4, 1), heights = c(1, 4))
+```
+
+---
 
 ## Calculate correlations between technical replicates
 
@@ -690,7 +905,7 @@ bc_df_cDNA_filt <- rbind(bc_df_cDNA_filt, double_reporters_df)
 
 ## Combine replicates in 8 different columns
 bc_df_rep <- bc_df_cDNA_filt %>% 
-  filter(commercial_reporter == "No", rand_promoter == "No", native_enhancer == "No", hPGK == "No") %>%
+  filter(commercial_reporter == "No", rand_promoter == "No", native_enhancer == "No", hPGK == "No", is.na(stimulation)) %>%
   dplyr::select(barcode_number, activity, sample_id, reporter_id, neg_ctrls, library) %>%
   mutate(activity = log2(activity)) %>%
   spread(barcode_number, activity)
@@ -721,8 +936,8 @@ boundaries <- seq(from = 0.8, by = 0.05, length.out = 4)
 plt <- ggpairs(bc_df_rep2 %>% filter(library == "1+2") %>% dplyr::select('Barcode 1', 'Barcode 2', 'Barcode 3', 'Barcode 4', 'Barcode 5', 'Barcode 6', 'Barcode 7', 'Barcode 8'),
                upper = list(continuous = corColor),
                lower = list(continuous = function(data, mapping, ...) {
-                   ggally_points(data = data[n, ], mapping = mapping, alpha = 0.1, size = 0.5) +
-                   geom_abline(slope = 1, lty = "dashed", col = "red") +
+                 geom_abline(slope = 1, lty = "dashed", col = "red") +
+                   ggally_points(data = data[n, ], mapping = mapping, stroke = NA, alpha = 0.1, size = 0.5) +
                    theme_pubr(border = T)}),
                diag = list(continuous = function(data, mapping, ...) {
                    ggally_densityDiag(data = data, mapping = mapping, alpha = 0.3, fill = "red") +
@@ -733,104 +948,6 @@ plt <- ggpairs(bc_df_rep2 %>% filter(library == "1+2") %>% dplyr::select('Barcod
 
 print(plt)
 ```
-
-
----
-
-## Correlation between replicates
-
-```{r correlations_3, out.width= "80%", fig.align= "center",  warning= FALSE}
-# Correlation plots of the replicates
-## Combine replicates of normalized data in 3 different columns
-bc_df_rep <- bc_df_cDNA_filt %>% 
-  filter(is.na(stimulation), library == "1+2") %>%
-  dplyr::select(replicate, mean_activity_sample_minP, reporter_id, condition, neg_ctrls, library, gcf) %>% 
-  unique() %>%
-  mutate(mean_activity_sample_minP = log2(mean_activity_sample_minP)) %>%
-  spread(replicate, mean_activity_sample_minP)
-
-scatter_rep <- ggplot(bc_df_rep, 
-       aes(x = r1, y = r2)) +
-  geom_abline(lty = 1) +
-  geom_point_rast(raster.dpi = 600, aes(color = neg_ctrls), size = .5, alpha = .2) +
-  stat_cor(method = "pearson", label.x = -1, label.y = 10) + 
-  xlim(-3,12) + ylim(-3,12) +
-  scale_color_manual(values = c("Yes" = "grey70", "No" = "#DD6B48")) +
-  theme_pubr(border = T) +
-  theme(legend.position = "none")
-
-dens1 <- ggplot(bc_df_rep, aes(x = r1, fill = neg_ctrls)) + 
-  geom_density(alpha = 0.4) + 
-  theme_void() + 
-  scale_fill_manual(values = c("Yes" = "grey70", "No" = "#DD6B48")) +
-  theme(legend.position = "none")
-
-dens2 <- ggplot(bc_df_rep, aes(x = r2, fill = neg_ctrls)) + 
-  geom_density(alpha = 0.4) + 
-  theme_void() + 
-  scale_fill_manual(values = c("Yes" = "grey70", "No" = "#DD6B48")) +
-  theme(legend.position = "none") + 
-  coord_flip()
-
-library(patchwork)
-dens1 + plot_spacer() + scatter_rep + dens2 + 
-  plot_layout(ncol = 2, nrow = 2, widths = c(4, 1), heights = c(1, 4))
-```
-
----
-
-## Review which conditions to include - compute correlations between replicates of the same samples - only unstimulated
-```{r sample correlations}
-bc_df_sample <- bc_df_cDNA_filt %>%
-  filter(is.na(stimulation)) %>%
-  mutate(unique_sample = gsub(".*_(r[1-7]{1}_gcf.*)", "\\1", sample_id)) %>%
-  distinct(mean_activity_sample_minP, reporter_id, condition, unique_sample) %>% 
-  mutate(mean_activity_sample_minP = log2(mean_activity_sample_minP)) %>%
-  spread(unique_sample, mean_activity_sample_minP)
-
-for (i in unique(bc_df_sample$condition)) {
-  
-  print(i)
-  
-  bc_df_sample_i <- bc_df_sample %>% filter(condition == i)
-  bc_df_sample_i <- bc_df_sample_i[,colSums(is.na(bc_df_sample_i))<nrow(bc_df_sample_i)]
-  
-  if (nrow(bc_df_sample_i) > 300) {
-  
-  n <- sample(1:nrow(bc_df_sample_i), 300)
-
-  
-  p <- ggpairs(bc_df_sample_i %>% dplyr::select(-reporter_id, -condition),
-               upper = list(continuous = corColor),
-               lower = list(continuous = function(data, mapping, ...) {
-                   ggally_points(data = data[n, ], mapping = mapping, alpha = 0.1, size = 0.5) +
-                   geom_abline(slope = 1, lty = "dashed", col = "red") +
-                   theme_pubr(border = T)}),
-               diag = list(continuous = function(data, mapping, ...) {
-                   ggally_densityDiag(data = data, mapping = mapping, alpha = 0.3, fill = "red") +
-                   theme_pubr(border = T)})) +
-  ggtitle(i) +
-  xlab("Reporter activity") +
-  ylab("Reporter activity")
-  
-  print(p)
-  }
-}
-
-### Remove conditions based on low correlation scores
-remove_conditions <- c("U2OS_r1_gcf6881", "U2OS_r2_gcf6881", "U2OS_r1_gcf6210", "mES_2i_LIF_r2_gcf7218", "mES_2i_LIF_r1_gcf7218")
-
-bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
-  filter(!sample_id %in% remove_conditions)
-```
-
----
-
-## Calculate fold-changes of perturbations - keep only perturbations that change activities robustly
-```{r}
-
-```
-
 
 ---
 
