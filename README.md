@@ -1,4 +1,4 @@
-# SuRE_TF
+# TF reporter MPRA
 
 **Introduction:**\
 Transcriptional reporters for 86 TFs were systematically designed and probed in 9 cell types and dozens of TF perturbation conditions with the aim to identify the most sensitive reporters per TF.
@@ -15,16 +15,17 @@ The designed first library contains:
 
 All TF reporters were designed using FIMO. This way, the spacings were designed to be inactive, while the TF binding sites were ensured to be intact.
 
-**Experimental setting stimulation 1:**\
+**Experimental setup:**\
 The library was transfected into:
 - 9 different cell types
 - 75 TF perturbation conditions
--   TF knockdown
--   TF overexpression
--   Signaling pathway perturbation
--   TF degradation
+- TF knockdown
+- TF overexpression
+- Signaling pathway perturbation
+- TF degradation
 
-The cells were grown in these condition for 24h after transfection before RNA isolation.
+The cells were grown in these condition for 24h after transfection before RNA isolation. Barcoded transcripts were then reverse transcribed and amplified before sequencing.
 
 **Sequencing data analysis:**
-- Raw sequencing data were processed by counting the barcodes and clustering the barcodes using starcode (levenshtein distance = 1)
+- Raw sequencing data were processed by counting the barcodes and clustering the barcodes using starcode.
+- Barcode counts in the cDNA were normalized by the counts in the plasmid library.
