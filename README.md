@@ -18,11 +18,11 @@ All TF reporters were designed using FIMO. This way, the spacings were designed 
 **Experimental setting stimulation 1:**\
 The library was transfected into:
 - 9 different cell types
-- >75 TF perturbation conditions
-  >TF knockdown
-  >TF overexpression
-  >Signaling pathway perturbation
-  >TF degradation
+- 75 TF perturbation conditions
+-   TF knockdown
+-   TF overexpression
+-   Signaling pathway perturbation
+-   TF degradation
 
 The cells were grown in these condition for 24h after transfection before RNA isolation.
 
