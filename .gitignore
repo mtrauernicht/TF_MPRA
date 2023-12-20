@@ -41,6 +41,8 @@ docs/
 pDNA_insert_seq_gen-1/
 pDNA_insert_seq_gen-2/
 RNAseq_hepg2/
+analyses/
+analyses/*
 
 # Output files from R CMD build
 /*.tar.gz
