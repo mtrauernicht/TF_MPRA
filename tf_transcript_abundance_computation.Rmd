@@ -1,0 +1,223 @@
+---
+title: "mt20230626_tf_abundances"
+output: html_document
+date: "2023-06-26"
+---
+
+Here I will load and pre-process all public RNA-seq and proteomics data for all TFs that I probed. 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Load libraries
+```{r}
+library(edgeR)
+```
+
+
+## Process data
+
+```{r cars}
+# Load tf reporter data
+# Import processed bc counts from the preprocessing step
+cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7124_stimulations/results/mt20230901_reporter_activity_filt_combined.csv", header = T)
+
+cDNA_df$stimulation[is.na(cDNA_df$stimulation)] <- "no"
+
+## Rename some TFs
+cDNA_df <- cDNA_df %>%
+  mutate(reporter_activity_neg = ifelse(tf %in% c("POU5F1::SOX2", "NR1H4::RXRA", "CEBPB", "STAT1::STAT2", "THRA") | 
+                                          commercial_reporter == "Yes" | is.na(reporter_activity_neg), 
+                                        reporter_activity_minP, reporter_activity_neg)) %>%
+  mutate(tf = gsub("^SOX9", "SOXE", tf)) %>%
+  mutate(reporter_id = gsub("^SOX9(.*)", "SOXE\\1", reporter_id)) %>%
+  mutate(tf = gsub("^SOX2", "SOX9", tf)) %>%
+  mutate(reporter_id = gsub("^SOX2(.*)", "SOX9\\1", reporter_id)) %>%
+  mutate(tf = gsub("^SOXE", "SOX2", tf)) %>%
+  mutate(reporter_id = gsub("^SOXE(.*)", "SOX2\\1", reporter_id)) %>%
+  mutate(tf = gsub("^NFATc1", "NFATC1", tf)) %>%
+  mutate(reporter_id = gsub("^NFATc1(.*)", "NFATC1\\1", reporter_id)) %>%
+  mutate(tf = gsub("^Myc", "MYC", tf)) %>%
+  mutate(reporter_id = gsub("^Myc(.*)", "MYC\\1", reporter_id))
+
+# Load in RNA-seq data
+## Set the names of the TFs for which I want to retrieve the data
+tfs <- cDNA_df %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  filter(neg_ctrls == "No", hPGK == "No", str_detect(tf, "RANDOM", negate = T)) %>%
+  distinct(tf)
+
+tfs <- tfs %>%
+  mutate(tf2 = gsub(".*(::.*)", "\\1", tf)) %>%
+  mutate(tf2 = gsub("::*", "", tf2)) %>%
+  mutate(tf = gsub("::.*", "", tf)) %>%
+  pivot_longer(cols = everything(.), names_to = "id", values_to = "tf") %>%
+  distinct(tf) %>%
+  mutate(tf = gsub(".[49|50]{2}", "", tf))
+
+## Load mES data from Miguel
+load('/DATA/usr/m.martinez.ara/GitLab/gurten/gurten/data/fc181121_epsure_tadec_rnaseq_expr_joshi.RData')
+
+mES_rna <- tib_fpkm_joshi %>%
+  mutate(twoi = (twoi_1 + twoi_2) / 2) %>%
+  dplyr::select(symbol, twoi) %>%
+  mutate(twoi = (twoi / sum(twoi))*10^6) %>% ## Transform from FPKM to TPM
+  group_by(symbol) %>%
+  arrange(desc(twoi)) %>%
+  top_n(1) %>%
+  ungroup()
+
+mES_rna$symbol[mES_rna$symbol == "TRP53"] <- "TP53"
+
+mES_rna <- mES_rna %>%
+  setnames(c("symbol", "twoi"), c("tf", "TPM")) %>%
+  #filter(mES_rna$tf %in% tfs$tf) %>%
+  mutate(cell = "mES")
+
+## Load data from protein atlas (TPM)
+proteinatlas_rna <- read_tsv("/DATA/usr/m.trauernicht/data/RNA_seq/HPA_rna_celline_20230711.tsv") %>%
+  dplyr::select('tf' = `Gene name`, TPM, "cell" = `Cell line`) %>%
+  filter(cell %in% c("A-549", "U2OS", "Hep-G2", "HEK293", "K-562", "MCF-7", "HCT 116")) %>%
+  mutate(cell = gsub(" ", "", cell)) %>%
+  mutate(cell = gsub("-", "", cell)) %>%
+  #filter(tf %in% tfs$tf)
+  mutate(tf_cell = paste(tf, cell)) %>%
+  group_by(tf_cell) %>%
+  slice_max(n = 1, order_by = TPM) %>%
+  ungroup() %>%
+  dplyr::select(-tf_cell)
+
+## diffTF-compatible output
+library("org.Hs.eg.db")
+proteinatlas_rna_export <- proteinatlas_rna %>%
+  mutate(ENSEMBL = mapIds(org.Hs.eg.db, keys = proteinatlas_rna$tf, keytype = "SYMBOL", column="ENSEMBL")) %>%
+  filter(!tf %in% c("BORCS8-MEF2B", "GAGE12J")) %>%
+  dplyr::select(-tf) %>%
+  na.omit() %>%
+  distinct() %>%
+  filter(ENSEMBL != "ENSG00000211689") %>%
+  spread(key = "cell", value = "TPM")
+  
+
+npc_rna <- read_delim("/shared/gcf/m.trauernicht/7086/genecounts.txt") %>%
+  dplyr::select("tf" = external_gene_id, "NPC_r1" = `1_NPC_r1`, "NPC_r2" = `2_NPC_r2`, start_position, end_position) %>%
+  mutate(length = end_position - start_position) %>%
+  mutate(NPC_counts = (NPC_r1 + NPC_r2) / 2) %>%
+  mutate(NPC_rpk = NPC_counts / (length / 1000)) %>%
+  mutate(pm = sum(NPC_rpk / 1e6)) %>%
+  mutate(TPM = NPC_rpk / pm) %>%
+  mutate(cell = "NPC") %>%
+  distinct(tf, TPM, cell) %>%
+  mutate(tf = toupper(tf))  %>%
+  group_by(tf) %>%
+  slice_max(n = 1, order_by = TPM) %>%
+  ungroup()
+
+
+## Combine data from all cell types and change names back to original TF names
+tf_rna <- rbind(mES_rna, proteinatlas_rna, npc_rna)
+tf_rna$tf[tf_rna$tf == "AHR"] <- "AHR::ARNT"
+tf_rna$tf[tf_rna$tf == "ARNT"] <- "AHR::ARNT"
+tf_rna$tf[tf_rna$tf == "FOS"] <- "FOS::JUN"
+tf_rna$tf[tf_rna$tf == "JUN"] <- "FOS::JUN"
+tf_rna$tf[tf_rna$tf == "NFE2"] <- "MAF::NFE2"
+tf_rna$tf[tf_rna$tf == "MAF"] <- "MAF::NFE2"
+tf_rna$tf[tf_rna$tf == "NR1H4"] <- "NR1H4::RXRA"
+tf_rna$tf[tf_rna$tf == "NR4A2"] <- "NR4A2::RXRA"
+tf_rna$tf[tf_rna$tf == "PPARA"] <- "PPARA::RXRA"
+tf_rna$tf[tf_rna$tf == "PPARG"] <- "PPARG::RXRA"
+tf_rna$tf[tf_rna$tf == "SMAD2"] <- "SMAD2::SMAD3::SMAD4"
+tf_rna$tf[tf_rna$tf == "SMAD3"] <- "SMAD2::SMAD3::SMAD4"
+tf_rna$tf[tf_rna$tf == "SMAD4"] <- "SMAD2::SMAD3::SMAD4"
+tf_rna$tf[tf_rna$tf == "STAT1"] <- "STAT1::STAT2"
+tf_rna$tf[tf_rna$tf == "STAT2"] <- "STAT1::STAT2"
+tf_rna$tf[tf_rna$tf == "VDR"] <- "VDR::RXRA"
+
+tf_rna2 <- tf_rna %>% filter(tf == "POU5F1")
+tf_rna2$tf[tf_rna2$tf == "POU5F1"] <- "POU5F1::SOX2"
+tf_rna <- rbind(tf_rna, tf_rna2)
+
+tf_rna2 <- tf_rna %>% filter(tf == "SOX2")
+tf_rna2$tf[tf_rna2$tf == "SOX2"] <- "POU5F1::SOX2"
+tf_rna <- rbind(tf_rna, tf_rna2)
+
+tf_rna2 <- tf_rna %>% filter(tf == "RARA")
+tf_rna2$tf[tf_rna2$tf == "RARA"] <- "RARA:RXRA"
+tf_rna <- rbind(tf_rna, tf_rna2)
+
+tf_rna <- tf_rna %>%
+  mutate(TPM = ave(TPM, cell, tf, FUN = min)) %>% ## For some heterodimeric TFs I set the TPM to the lowest of the two
+  distinct()
+
+tf_rna$TPM[is.na(tf_rna$TPM)] <- 0
+
+ggplot(tf_rna2,
+       aes(x = cell, y = TPM)) +
+  geom_quasirandom_rast()
+
+## TPM normalization
+tf_rna2 <- tf_rna %>%
+  mutate(median_tpm = ave(TPM, cell, FUN = median)) %>%
+  mutate(max_median_tpm = max(median_tpm)) %>%
+  mutate(tpm_norm_factor = median_tpm/max_median_tpm) %>%
+  mutate(TPM_norm = TPM/tpm_norm_factor)
+  
+tf_rna <- tf_rna2 %>%
+  distinct(tf, cell, TPM, TPM_norm)
+
+## TMM on TPM values
+tf_rna_mat <- tf_rna %>%
+  distinct(tf, cell, TPM) %>%
+  spread(key = "cell", value = "TPM") %>%
+  column_to_rownames("tf") %>%
+  replace(is.na(.), 0)
+
+normfact <- data.frame(calcNormFactors(tf_rna_mat)) %>% 
+  rownames_to_column("cell") %>% 
+  dplyr::select(cell, "norm_factor" = calcNormFactors.tf_rna_mat.)
+
+tf_rna <- tf_rna %>%
+  left_join(normfact) %>%
+  mutate(nTPM = TPM * norm_factor) %>%
+  distinct(tf, cell, TPM, TPM_norm, nTPM)
+
+write_tsv(tf_rna, "/DATA/usr/m.trauernicht/data/RNA_seq/rna_tpm_all_tfs.tsv")
+```
+
+## Process protein abundance data
+```{r}
+## Import proteomics data from depmap
+proteomics_df <- read_csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/Proteomics_subsetted_NAsdropped.csv") %>%
+  dplyr::select(-depmap_id, -lineage_1, -lineage_2, -lineage_3, -lineage_4, -lineage_5, -lineage_6) %>%
+  pivot_longer(cols = -cell_line_display_name, names_to = "gene", values_to = "protein_abundance")
+
+proteomics_df_long <- proteomics_df %>%
+  mutate(gene = gsub(" (.*)", "", gene)) %>%
+  filter(gene %in% tfs$tf) %>%
+  mutate(min_abundance = min(protein_abundance, na.rm = T))
+
+proteomics_df_long$cell_line_display_name[proteomics_df_long$cell_line_display_name == "HEPG2"] <- "HepG2"
+
+proteomics_df_long$protein_abundance[is.na(proteomics_df_long$protein_abundance)] <- unique(proteomics_df_long$min_abundance)
+  
+proteomics_df_long <- proteomics_df_long %>%
+  mutate(protein_abundance = ave(protein_abundance, gene, cell_line_display_name, FUN = function(x) mean(x, na.rm = T))) %>%
+  dplyr::select(protein_abundance, "tf" = gene, "cell" = cell_line_display_name) %>%
+  distinct() 
+
+proteomics_df_long$tf[proteomics_df_long$tf == "AHR"] <- "AHR::ARNT"
+proteomics_df_long$tf[proteomics_df_long$tf == "FOS"] <- "FOS::JUN"
+proteomics_df_long$tf[proteomics_df_long$tf == "NFE2"] <- "MAF::NFE2"
+proteomics_df_long$tf[proteomics_df_long$tf == "NR1H4"] <- "NR1H4::RXRA"
+proteomics_df_long$tf[proteomics_df_long$tf == "NR4A2"] <- "NR4A2::RXRA"
+proteomics_df_long$tf[proteomics_df_long$tf == "PPARA"] <- "PPARA::RXRA"
+proteomics_df_long$tf[proteomics_df_long$tf == "PPARG"] <- "PPARG::RXRA"
+proteomics_df_long$tf[proteomics_df_long$tf == "SMAD2"] <- "SMAD2::SMAD3::SMAD4"
+proteomics_df_long$tf[proteomics_df_long$tf == "STAT1"] <- "STAT1::STAT2"
+proteomics_df_long$tf[proteomics_df_long$tf == "VDR"] <- "VDR::RXRA"
+
+write_tsv(proteomics_df_long, "/DATA/usr/m.trauernicht/data/RNA_seq/protein_abundance_all_tfs.tsv")
+```
+

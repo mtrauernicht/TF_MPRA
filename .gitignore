@@ -36,6 +36,11 @@ data/
 /docs/
 /docs/*
 /files_scrip
+ATAC_seq_hepg2/
+docs/
+pDNA_insert_seq_gen-1/
+pDNA_insert_seq_gen-2/
+RNAseq_hepg2/
 
 # Output files from R CMD build
 /*.tar.gz
