@@ -32,3 +32,10 @@ The cells were grown in these condition for 24h after transfection before RNA is
 - Raw sequencing data were processed by counting the barcodes and clustering the barcodes using starcode.
 - Barcode counts in the cDNA were normalized by the counts in the plasmid library.
 - Activities were normalized to promoter-only reporter activities
+
+---
+**Repository guide:**
+- barcode_preprocessing.Rmd contains all quality checks and reporter activity computation steps
+- TF_reporter_variant_analysis.Rmd contains all further analyses and generation of figures
+- library_design folder contains all code used to generate the TF reporter sequences and an analysis of the selected motifs
+- tf_transcript_abundance_computation.Rmd contains code to compute the transcript abundances (from RNA-seq) of all TFs in all cell types
