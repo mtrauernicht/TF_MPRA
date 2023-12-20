@@ -28,7 +28,7 @@ The library was transfected into:
 
 The cells were grown in these condition for 24h after transfection before RNA isolation. Barcoded transcripts were then reverse transcribed and amplified before sequencing.
 
-**Sequencing data analysis:**\
+**Sequencing data analysis:**
 - Raw sequencing data were processed by counting the barcodes and clustering the barcodes using starcode.
 - Barcode counts in the cDNA were normalized by the counts in the plasmid library.
 - Activities were normalized to promoter-only reporter activities
