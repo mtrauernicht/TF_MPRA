@@ -205,7 +205,7 @@ hline <- function(y = 0, color = "black") {
 
 ```{r data import, out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
 # Load metadata file that contains all required information about the sequenced samples
-metadata_df <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20231218_metadata_all.csv") %>%
+metadata_df <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20231220_metadata_all.csv") %>%
   filter(!condition %in% c("K562", "K562_T3") | (condition %in% c("K562", "K562_T3") & gcf == "gcf7264")) ## Remove old K562 data (noisy)
 
 # Load in barcode counts
@@ -694,7 +694,7 @@ bc_df_pert <- bc_df_cDNA_filt %>%
 ### Isolate activities of control conditions
 bc_df_pert_ref <- bc_df_cDNA_filt %>%
   mutate(tf = gsub("_.*", "", tf)) %>%
-  filter(is.na(stimulation) | condition == "mES_Dox", neg_ctrls == "No") %>%
+  filter(is.na(stimulation) | condition %in% c("mES_Dox", "mES_NR4A2-OE"), neg_ctrls == "No") %>%
   filter(condition %in% unique(bc_df_cDNA_filt$reference_condition)) %>%
   mutate(reference_condition_gcf = paste(condition, replicate, gcf, sep = "_")) %>%
   distinct(mean_activity_sample_minP, reporter_id, reference_condition_gcf, tf, replicate, gcf, condition) %>%
@@ -738,15 +738,16 @@ bc_df_pert_ref <- bc_df_pert_ref %>%
 bc_df_pert_dif_long <- bc_df_pert %>%
   left_join(bc_df_pert_ref) %>%
   mutate(activity_dif = mean_activity_sample_minP - ref_activity) %>%
-  mutate(activity_dif = ifelse((effect_size == 0) & (!is.na(effect_size)), -activity_dif, activity_dif)) %>%
-  #mutate(activity_dif = ifelse((mean_activity_sample_minP < 0.5 | ref_activity < 0.5) & activity_dif < 1, 0, activity_dif)) %>%
-  dplyr::select(-mean_activity_sample_minP, -ref_activity, -reference_condition_gcf) %>%
+  #mutate(activity_dif = ifelse((effect_size == 0) & (!is.na(effect_size)), -activity_dif, activity_dif)) %>%
+  dplyr::select(-mean_activity_sample_minP, -reference_condition_gcf) %>%
   mutate(dif_mean = ave(activity_dif, tf, unique_sample, FUN = function(x) mean(x, na.rm = T))) %>%
   mutate(tf_target = as.numeric(str_detect(target, paste0("\\b", tf, "\\b")))) %>%
   mutate(tf_target2 = as.numeric(str_detect(off_target, paste0("\\b", tf, "\\b")))) %>%
   mutate(tf_target = replace_na(tf_target, 0)) %>%
   mutate(tf_target2 = replace_na(tf_target2, 0)) %>%
   mutate(tf_target = ifelse(tf_target2 == 1, 2, tf_target)) %>%
+  mutate(tf_target = ifelse((tf == "SOX2" & condition %in% c("mES_POU5F1", "mES_Pou5f1_AID")), 0, tf_target)) %>%
+  mutate(tf_target = ifelse((tf == "POU5F1" & condition %in% c("mES_SOX2", "mES_Sox2_AID")), 0, tf_target)) %>%
   arrange(condition)
 
 
@@ -770,7 +771,7 @@ for (i in unique(bc_df_pert_dif_long$unique_sample)) {
 
 ## Add perturbation fold-change to data frame
 bc_df_pert_dif <- bc_df_pert_dif_long %>%
-  dplyr::select(reporter_id, "sample_id" = unique_sample, "reporter_activity_dif_sample" = activity_dif, tf_target) %>%
+  dplyr::select(reporter_id, "sample_id" = unique_sample, "reporter_activity_dif_sample" = activity_dif, tf_target, "reference_activity" = ref_activity) %>%
   distinct()
 
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
@@ -800,9 +801,9 @@ remove_pert_conditions <- c("A549_5aDHT", "A549_TCPOBOP", "HCT116_cDIM12", "HCT1
                             "HepG2_KLF4", "HepG2_NR1H2", "HepG2_RXRA", "HepG2_T09", "HepG2_TCF3", "HepG2_TP53", "HepG2_Wy", "K562_T3", 
                             "MCF7_DIMc", "mES_Aldosterone", "mES_Bmp4", "mES_N2B27_Bmp4", "mES_Dex", "mES_EGR1", "mES_GATA1", "mES_GLI1-OE",
                             "mES_KLF4", "mES_LPS", "mES_NFIA", "mES_NR5A2", "mES_OTX1-OE", "mES_PPARA::RXRA", "mES_PPARG::RXRA", "mES_Progesterone",
-                            "mES_RARA", "mES_RA", "mES_N2B27_RA", "mES_RXRA", "mES_Shh", "mES_N2B27_Shh", "mES_Sox2", "mES_Sox9", "mES_SRI011381",
-                            "mES_vitA", "NPC_5aDHT", "NPC_ITE", "NPC_SR1078", "NPC_TCPOBOP", "U2OS_AICAR", "U2OS_Aldosteone", "U2OS_Cytosporone",
-                            "U2OS_FK", "U2OS_LPS", "mES_4OHT", "mES_Dox")
+                            "mES_RARA", "mES_RA", "mES_N2B27_RA", "mES_RXRA", "mES_Shh", "mES_N2B27_Shh", "mES_Sox9", "mES_SRI011381",
+                            "mES_vitA", "NPC_5aDHT", "NPC_ITE", "NPC_SR1078", "NPC_TCPOBOP", "U2OS_AICAR", "U2OS_Aldosterone", "U2OS_Cytosporone",
+                            "U2OS_FK", "U2OS_LPS", "mES_4OHT")
 
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
   filter(!condition %in% remove_pert_conditions)
@@ -953,25 +954,22 @@ print(plt)
 
 ```{r data export, out.width= "80%", fig.align= "center",  warning= FALSE}
 # Mean of the three replicates
-bc_df_cDNA_filt$reporter_activity <- ave(bc_df_cDNA_filt$mean_activity_sample, bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$condition, FUN = function(x, na.rm = T) mean(x))
 bc_df_cDNA_filt$reporter_activity_minP <- ave(bc_df_cDNA_filt$mean_activity_sample_minP, bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$condition, FUN = function(x) mean(x, na.rm = T))
 bc_df_cDNA_filt$reporter_dif_minP <- ave(bc_df_cDNA_filt$reporter_activity_dif_sample, bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$condition, FUN = function(x) mean(x, na.rm = T))
 bc_df_cDNA_filt$reporter_activity_minP_gcf <- ave(bc_df_cDNA_filt$mean_activity_sample_minP, bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$gcf, bc_df_cDNA_filt$condition, FUN = function(x) mean(x, na.rm = T))
 bc_df_cDNA_filt$reporter_activity_neg <- ave(bc_df_cDNA_filt$mean_activity_sample_neg, bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$condition, FUN = function(x) mean(x, na.rm = T))
+bc_df_cDNA_filt$reference_activity_gcf <- ave(bc_df_cDNA_filt$reference_activity, bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$condition, bc_df_cDNA_filt$gcf, FUN = function(x) mean(x, na.rm = T))
+bc_df_cDNA_filt$reference_activity_minP <- ave(bc_df_cDNA_filt$reference_activity, bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$condition, FUN = function(x) mean(x, na.rm = T))
 
 # Polish export dataframe
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
   dplyr::select(-pDNA_rpm, -mean_activity, -deviation, -n_reporters, -path, -file, -labguru_experiment)
 
-
-## p-value adjustment
-bc_df_cDNA_filt$reporter_rpm <- ave(bc_df_cDNA_filt$rpm, bc_df_cDNA_filt$reporter_id, FUN = mean)
-
 ## Export condensed version of the data frame
 bc_df_cDNA_filt_short <- bc_df_cDNA_filt %>%
-  dplyr::select(-tf_activity, -reporter_id2, -mutated_activity, -pDNA, -starcode_counts, -nchar, -transfection, -rpm, -reporter_rpm,
+  dplyr::select(-tf_activity, -reporter_id2, -mutated_activity, -pDNA, -starcode_counts, -nchar, -transfection, -rpm,
                 -barcode_number, -barcode, -activity, -minP_activity, -mean_activity_sample, -mean_activity_sample_neg, -mean_activity_sample_minP,
-                -sample_id, -sample, -replicate)  %>%
+                -sample_id, -sample, -replicate, -reporter_activity_dif_sample, -reference_activity, -n_bc)  %>%
   distinct()
 
 # Export bc_df for cDNA analysis
@@ -979,9 +977,9 @@ filename <- SetFileName("_reporter_activity_filt_combined", "mt")
 setwd("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7124_stimulations/results/")
 write.csv(bc_df_cDNA_filt_short, file = paste(filename,".csv", sep = ""), row.names = F)
 
-filename <- SetFileName("_reporter_activity_filt_combined_complete", "mt")
-setwd("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7124_stimulations/results/")
-write.csv(bc_df_cDNA_filt, file = paste(filename,".csv", sep = ""), row.names = F)
+# filename <- SetFileName("_reporter_activity_filt_combined_complete", "mt")
+# setwd("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7124_stimulations/results/")
+# write.csv(bc_df_cDNA_filt, file = paste(filename,".csv", sep = ""), row.names = F)
 ```
 
 

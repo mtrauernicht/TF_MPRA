@@ -135,28 +135,28 @@ lmp <- function (modelobject) {
 # Set custom ggplot2 theme and custom colors
 theme_classic_lines <- function() {
   theme_pubr(border = F, legend = "top") +
-            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.25),
+            theme(panel.grid.major = element_line(colour = "#adb5bd", linewidth = 0.25),
                   strip.background = element_rect(fill = "#ced4da")
             )
 }
 
 theme_classic_lines_45 <- function() {
   theme_pubr(border = T, legend = "top", x.text.angle = 45) +
-            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.25),
+            theme(panel.grid.major = element_line(colour = "#adb5bd", linewidth = 0.25),
                   strip.background = element_rect(fill = "#ced4da")
             )
 }
 
 theme_classic_lines_90 <- function() {
   theme_pubr(border = T, legend = "top", x.text.angle = 90) +
-            theme(panel.grid.major = element_line(colour = "#adb5bd", size = 0.25),
+            theme(panel.grid.major = element_line(colour = "#adb5bd", linewidth = 0.25),
                   strip.background = element_rect(fill = "#ced4da")
             )
 }
 
 theme_barplot <- function() {
   theme_pubr(border = T, legend = "none") +
-            theme(panel.grid.major.x = element_line(colour = "black", size = 0.25),
+            theme(panel.grid.major.x = element_line(colour = "black", linewidth = 0.25),
                   strip.background = element_blank(),
                   strip.text = element_text(face="bold", hjust=0)
             )
@@ -184,7 +184,7 @@ ggplot_custom <- function(...) ggplot2::ggplot(...) +
 
 ```{r out.width= "80%", fig.align= "center"}
 # Import processed bc counts from the preprocessing step
-cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7124_stimulations/results/mt20231219_reporter_activity_filt_combined.csv", header = T)
+cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7124_stimulations/results/mt20231220_reporter_activity_filt_combined.csv", header = T)
 
 cDNA_df$stimulation[is.na(cDNA_df$stimulation)] <- "no"
 
@@ -246,7 +246,7 @@ ref_conditions <- rbind(ref_conditions1, ref_conditions2) %>%
 ## Data frame with off-target activities
 off_target_activities <- cDNA_df2 %>% 
   filter(tf_target == 2) %>%
-  mutate(reporter_dif_mean = ave(reporter_dif_minP, tf, cell, off_target, FUN = mean)) %>% 
+  mutate(reporter_dif_mean = ave(reporter_dif_minP, tf, condition, off_target, FUN = function(x) mean(x, na.rm = T))) %>% 
   ## For some TFs I have multiple off-target perturbations: keep strongest effect only
   group_by(tf) %>%
   arrange(desc(reporter_dif_mean)) %>% 
@@ -258,7 +258,7 @@ off_target_activities <- cDNA_df2 %>%
 
 on_target_activities <- cDNA_df2 %>% 
   filter(tf_target == 1) %>%
-  mutate(reporter_dif_mean = ave(reporter_dif_minP, tf, cell, FUN = mean)) %>% 
+  mutate(reporter_dif_mean = ave(reporter_dif_minP, tf, condition, FUN = function(x) mean(x, na.rm = T))) %>% 
   ## Some TFs have multiple perturbations: keep strongest effect only
   group_by(tf) %>%
   arrange(desc(reporter_dif_mean)) %>% 
@@ -355,6 +355,30 @@ ggplot(tf_activities_median,
 
 ---
 
+## Explore reporter fold-changes upon perturbations per TF 
+```{r}
+fc_df <- cDNA_df %>%
+  filter(stimulation != "no", neg_ctrls == "No", native_enhancer == "No", hPGK == "No") %>%
+  mutate(tf = gsub("_.*", "", tf)) %>%
+  distinct(reporter_id, tf, reporter_dif_minP, condition, tf_target) %>%
+  mutate(mean_dif = ave(reporter_dif_minP, tf, condition, FUN = function(x) mean(x, na.rm = T)))
+
+for (i in unique(fc_df$tf)) {
+  p <- ggplot(fc_df %>% filter(tf == i),
+         aes(x = reorder(condition, -mean_dif), y = reporter_dif_minP, color = as.character(tf_target))) +
+    geom_hline(yintercept = 0, lty = 2) +
+    geom_hline(yintercept = 1) +
+    geom_hline(yintercept = -1) +
+    geom_point() +
+    scale_color_manual(values = c("0" = "black", "1" = "red", "2" = "blue")) +
+    theme_pubr(x.text.angle = 90) +
+    ggtitle(i)
+
+  print(p)
+}
+```
+
+---
 
 ## Correlate with RNA-seq data
 
@@ -432,7 +456,7 @@ rna_correlations_df <- cDNA_df3 %>%
                                max_mean_tf_activity > 0.75 | 
                                tf %in% c("TEAD1", "GATA1", "NFATC1", "GLI1", "STAT3", "SP1", "FOXA1", "NFKB1",
                                          "ZFX", "NR4A1"), "Yes", "No")) %>%
-  mutate(reasonable = ifelse(tf %in% c("TCF7L2", "TCF7", "FOS::JUN", "TFEB", "TP53", "GATA3"), "No", reasonable))
+  mutate(reasonable = ifelse(tf %in% c("TCF7L2", "TCF7", "TFEB", "TP53", "GATA3"), "No", reasonable))
 
 reasonable_corr <- rna_correlations_df %>%
   filter(reasonable == "No")
@@ -1155,8 +1179,7 @@ cDNA_df6 <- reference_activities %>%
   mutate(off_target_activity = ifelse(is.na(off_target_activity), 0, off_target_activity)) %>%
   mutate(off_target_activity = -off_target_activity) %>%
   mutate(Sensitivity = reporter_dif_minP + reporter_activity_minP + cor_pval + off_target_activity) %>%
-  mutate(Specificity = reporter_dif_minP + off_target_activity + cor_pval) %>%
-  pivot_longer(cols = c("Sensitivity", "Specificity"), names_to = "quality", values_to = "quality_score") %>%
+  pivot_longer(cols = c("Sensitivity"), names_to = "quality", values_to = "quality_score") %>%
   mutate(quality_score = ifelse(quality_score < 0, 0, quality_score))
 
 lm_pval <- cDNA_df_TF4 %>%
@@ -1167,9 +1190,16 @@ lm_pval <- cDNA_df_TF4 %>%
 
 ## Compute confidence levels based on thresholds
 cDNA_df_confidence2 <- cDNA_df6 %>%
+  group_by(tf) %>%
+  mutate(active = ifelse(reporter_activity_minP > 1, "Yes", "No")) %>%
+  ungroup() %>%
+  mutate(n_active = as.numeric(ave(tf, tf, active, FUN = function(x) length(x)))) %>%
+  mutate(n_active = ifelse(active == "No", 0, n_active)) %>%
+  mutate(n_active = ave(n_active, tf, FUN = max)) %>%
   left_join(lm_pval) %>%
   ## Add a level if reporter activities can be predicted by log-linear model
   mutate(conf_level = ifelse((commercial_reporter == "No" & pval_adj < 0.05 & reporter_activity_minP > 1) |
+                               (commercial_reporter == "No" & n_active > 12 & reporter_activity_minP > 1) |
                                (commercial_reporter == "Yes" & reporter_activity_minP > 1), 1, 0)) %>% 
   ## Add a level if reporter activity follows transcript/protein levels
   mutate(conf_level = ifelse(cor_pval > 1, conf_level + 1, conf_level)) %>% 
@@ -1369,7 +1399,7 @@ cDNA_df_plot <- cDNA_df %>%
   mutate(reporter_activity_minP = log2(ave(reporter_activity_minP, reporter_id, cell, FUN = mean))) %>%
   distinct(tf, reporter_id, reporter_activity_minP, cell) %>%
   mutate(n_tf = as.numeric(ave(tf, tf, cell, FUN = length))) %>%
-  #filter(n_tf >= 20) %>%
+  filter(n_tf >= 20) %>%
   filter(cell %in% c("NPC", "mES"))
 
 cDNA_df_plot2 <- cDNA_df_plot %>%
@@ -1403,57 +1433,9 @@ ggplot(cDNA_df_plot %>%
     theme_classic_lines_90() +
     scale_fill_manual(values = c("black", "grey70")) +
     facet_wrap(~cell, nrow = 2)
-
-
-## Investigate neg ctrls better
-cDNA_df_ctrl <- cDNA_df %>%  
-  filter(hPGK == "No", 
-         str_detect(tf, "RANDOM", negate = T), 
-         native_enhancer == "No") %>%
-  distinct(tf, reporter_id, reporter_activity_minP, condition, neg_ctrls) %>%
-  mutate(tf = gsub("_.*", "", tf)) %>%
-  mutate(cell = gsub("_.*", "", condition)) %>%
-  mutate(reporter_activity_minP = log2(ave(reporter_activity_minP, reporter_id, cell, FUN = mean))) %>%
-  distinct(tf, reporter_id, reporter_activity_minP, cell, neg_ctrls) %>%
-  mutate(n_tf = as.numeric(ave(tf, tf, cell, FUN = length))) %>%
-  filter(n_tf >= 20) %>%
-  filter(cell %in% c("mES")) %>%
-  mutate(reporter_id = gsub("_neg", "", reporter_id)) %>%
-  pivot_wider(names_from = neg_ctrls, values_from = reporter_activity_minP)
-
-ggplot(cDNA_df_ctrl,
-       aes(x = Yes, y = No)) +
-  geom_abline() +
-  geom_point(aes(color = ifelse(Yes > 2 | (Yes - No) > 1, "Yes", "No"))) +
-  scale_color_manual(values = c("Yes"= "red", "No" = "black")) +
-  facet_wrap(~tf)
-
-cDNA_df_ctrl2 <- cDNA_df %>%  
-  filter(condition %in% c("HepG2_CEBPB", "HepG2_NT"),
-         hPGK == "No", 
-         str_detect(tf, "RANDOM", negate = T), 
-         native_enhancer == "No") %>%
-  distinct(tf, reporter_id, reporter_activity_minP, condition, neg_ctrls) %>%
-  mutate(tf = gsub("_.*", "", tf)) %>%
-  filter(tf == "CEBPB") %>%
-  mutate(reporter_activity_minP = log2(ave(reporter_activity_minP, reporter_id, condition, FUN = mean))) %>%
-  distinct(tf, reporter_id, reporter_activity_minP, condition, neg_ctrls) %>%
-  mutate(n_tf = as.numeric(ave(tf, tf, condition, FUN = length))) %>%
-  filter(n_tf >= 20) %>%
-  mutate(reporter_id = gsub("_neg", "", reporter_id)) %>%
-  pivot_wider(names_from = neg_ctrls, values_from = reporter_activity_minP) %>%
-  mutate(dif = No - Yes) %>%
-  dplyr::select(-Yes, -No) %>%
-  distinct() %>%
-  pivot_wider(names_from = condition, values_from = dif)
-
-ggplot(cDNA_df_ctrl2,
-       aes(x = Yes, y = No)) +
-  geom_abline() +
-  geom_point(aes(color = ifelse(Yes > 2 | (Yes - No) > 1, "Yes", "No"))) +
-  scale_color_manual(values = c("Yes"= "red", "No" = "black")) +
-  facet_wrap(~condition)
 ```
+
+
 
 ## Figure 4: Showcase how reporter activities change in different conditions
 ```{r}
@@ -1566,6 +1548,25 @@ ggplot(cDNA_df %>%
          spread(key = "condition", value = "reporter_activity_minP"),
        aes(x = log2(mES_2i_LIF),
            y = log2(mES_HQ), 
+           shape = commercial_reporter,
+           color = as.factor(spacing))) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_abline(lty = 2) +
+  geom_point(size = 2.5) +
+  xlim(-0.75, 7) +
+  ylim(-0.75, 7) +
+  xlab("Activity (log2)") +
+  ylab(paste("Perturbation activity (log2)")) +
+  theme_pubr(legend = "none") +
+  scale_color_manual(values = c("#7C9EB2", "#BFD0D9"))
+
+#### TP53
+ggplot(cDNA_df %>% 
+         filter(str_detect(tf, "TP53"), gcf == "gcf6210", condition %in% c("A549_Nutlin"), neg_ctrls == "No") %>%
+         distinct(reporter_id, commercial_reporter, spacing, condition, background, reporter_activity_minP, reference_activity_gcf),
+       aes(x = reference_activity_gcf,
+           y = log2(reporter_activity_minP), 
            shape = commercial_reporter,
            color = as.factor(spacing))) +
   geom_hline(yintercept = 0) +
@@ -1729,9 +1730,9 @@ ggplot(cDNA_df %>%
 
 #### TFCP2L1
 ggplot(cDNA_df %>% 
-         filter(str_detect(tf, "TFCP2L1"), condition %in% c("HepG2_NT", "HepG2_UBP1"), neg_ctrls == "No") %>%
-         distinct(reporter_id, commercial_reporter, spacing, condition, reporter_activity_minP) %>%
-         spread(key = "condition", value = "reporter_activity_minP"),
+         filter(str_detect(tf, "TFCP2L1"), gcf == "gcf6952", condition %in% c("HepG2_NT", "HepG2_UBP1"), neg_ctrls == "No") %>%
+         distinct(reporter_id, commercial_reporter, spacing, condition, reporter_activity_minP_gcf) %>%
+         spread(key = "condition", value = "reporter_activity_minP_gcf"),
        aes(x = log2(HepG2_NT),
            y = log2(HepG2_UBP1), 
            shape = commercial_reporter,
