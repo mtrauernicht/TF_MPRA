@@ -101,12 +101,46 @@ proteinatlas_rna_export <- proteinatlas_rna %>%
   spread(key = "cell", value = "TPM")
   
 
+## Load NPC RNA-seq data and calculate TPM
+
+# # Load the transcript database
+# txdb <- TxDb.Mmusculus.UCSC.mm10.knownGene
+# 
+# # Extract gene information with gene_id
+# gene_info <- genes(txdb, columns = c("gene_id"))
+# 
+# # Extract exons grouped by genes
+# exons_by_gene <- exonsBy(txdb, by="gene")
+# 
+# # Calculate total exon length per gene
+# total_exon_length_per_gene <- sapply(exons_by_gene, function(exon_list) {
+#   sum(width(exon_list))
+# })
+# 
+# # Create a data frame with gene symbols and total exon lengths
+# summary_data <- data.frame(gene_id = names(total_exon_length_per_gene),
+#                             total_exon_length = total_exon_length_per_gene)
+# 
+# # Map Ensembl gene IDs using org.Mm.eg.db
+# gene_info_ensembl <- AnnotationDbi::select(org.Mm.eg.db, keys=gene_info$gene_id, columns="ENSEMBL")
+# 
+# # Merge the data frames based on gene symbols
+# summary_data <- merge(summary_data, gene_info_ensembl, by.x = "gene_id", by.y = "ENTREZID", all.x = TRUE)
+# 
+# summary_data <- summary_data %>%
+#   dplyr::select("exon_length" = total_exon_length, "ensembl_gene_id" = "ENSEMBL")
+
+
+transcript_lengths <- read_csv("/DATA/usr/m.trauernicht/data/RNA_seq/mm10_transcript_lengths.csv") %>%
+  distinct() %>%
+  na.omit()
+
 npc_rna <- read_delim("/shared/gcf/m.trauernicht/7086/genecounts.txt") %>%
-  dplyr::select("tf" = external_gene_id, "NPC_r1" = `1_NPC_r1`, "NPC_r2" = `2_NPC_r2`, start_position, end_position) %>%
-  mutate(length = end_position - start_position) %>%
+  dplyr::select("tf" = external_gene_id, "NPC_r1" = `1_NPC_r1`, "NPC_r2" = `2_NPC_r2`, ensembl_gene_id) %>%
+  left_join(transcript_lengths) %>%
   mutate(NPC_counts = (NPC_r1 + NPC_r2) / 2) %>%
-  mutate(NPC_rpk = NPC_counts / (length / 1000)) %>%
-  mutate(pm = sum(NPC_rpk / 1e6)) %>%
+  mutate(NPC_rpk = NPC_counts / (exon_length / 1000)) %>%
+  mutate(pm = sum(NPC_rpk / 1e6, na.rm = T)) %>%
   mutate(TPM = NPC_rpk / pm) %>%
   mutate(cell = "NPC") %>%
   distinct(tf, TPM, cell) %>%
