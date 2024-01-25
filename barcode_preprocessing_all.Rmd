@@ -205,7 +205,7 @@ hline <- function(y = 0, color = "black") {
 
 ```{r data import, out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
 # Load metadata file that contains all required information about the sequenced samples
-metadata_df <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20231220_metadata_all.csv") %>%
+metadata_df <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20240123_metadata_all.csv") %>%
   filter(!condition %in% c("K562", "K562_T3") | (condition %in% c("K562", "K562_T3") & gcf == "gcf7264")) ## Remove old K562 data (noisy)
 
 # Load in barcode counts
@@ -642,6 +642,7 @@ bc_df_sample <- bc_df_cDNA_filt %>%
   mutate(mean_activity_sample_minP = log2(mean_activity_sample_minP)) %>%
   spread(unique_sample, mean_activity_sample_minP)
 
+boundaries <- seq(from = 0.8, by = 0.05, length.out = 4)
 for (i in unique(bc_df_sample$cell)) {
   
   print(i)
@@ -689,7 +690,9 @@ bc_df_pert <- bc_df_cDNA_filt %>%
                                           "mES_N2B27_r1_gcf5927", reference_condition_gcf)) %>%
   mutate(reference_condition_gcf = ifelse(unique_sample == "mES_HQ_r2_gcf6139", "mES_2i_LIF_r3_gcf6139", reference_condition_gcf)) %>%
   mutate(reference_condition_gcf = ifelse(unique_sample == "HepG2_FOS::JUN_r2_gcf6952", "HepG2_NT_r1_gcf6952", reference_condition_gcf)) %>%
-  mutate(reference_condition_gcf = ifelse(unique_sample == "A549_Nutlin_r2_gcf6210", "A549_r1_gcf6210", reference_condition_gcf))
+  mutate(reference_condition_gcf = ifelse(unique_sample == "A549_Nutlin_r2_gcf6210", "A549_r1_gcf6210", reference_condition_gcf)) %>%
+  mutate(reference_condition_gcf = ifelse(unique_sample == "mES_2i_r1_gcf7607", "mES_2i_LIF_r2_gcf7607", reference_condition_gcf)) %>%
+  mutate(reference_condition_gcf = ifelse(unique_sample == "mES_LIF_CH_r1_gcf7607", "mES_2i_LIF_r2_gcf7607", reference_condition_gcf))
 
 ### Isolate activities of control conditions
 bc_df_pert_ref <- bc_df_cDNA_filt %>%
@@ -711,7 +714,7 @@ bc_df_pert_ref_kd <- bc_df_pert_ref %>%
   mutate(HepG2_NT_r2_gcf7534 = (HepG2_NT_r3_gcf7534 + HepG2_NT_r4_gcf7534 + HepG2_NT_r5_gcf7534 + HepG2_NT_r6_gcf7534) / 4) %>%
   mutate(mES_NT_r1_gcf7027 = (mES_NT_r1_gcf7027 + mES_NT_r2_gcf7027) / 2) %>%
   mutate(mES_NT_r2_gcf7027 = mES_NT_r4_gcf7027) %>%
-  distinct(reporter_id, condition, HepG2_NT_r1_gcf6952, HepG2_NT_r2_gcf7534, mES_NT_r1_gcf7027, mES_NT_r2_gcf7027) %>%
+  distinct(reporter_id, condition, HepG2_NT_r1_gcf6952, HepG2_NT_r2_gcf7534, mES_NT_r1_gcf7027, mES_NT_r2_gcf7027, mES_NT_r1_gcf7607) %>%
   dplyr::select(-condition) %>%
   distinct() %>%
   pivot_longer(c(-reporter_id), names_to = "reference_condition_gcf", values_to = "ref_activity") %>%
@@ -782,7 +785,7 @@ bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
 ```{r}
 ### Remove replicates of unperturbed conditions that don't correlate well with other replicates
 remove_ref_samples <- c("U2OS_r1_gcf6881", "U2OS_r2_gcf6881", "U2OS_r3_gcf6210", "U2OS_r1_gcf6210", "U2OS_r2_gcf7218",
-                        "NPC_r1_gcf7218", "NPC_r1_gcf6881",
+                        "NPC_r1_gcf7218", "NPC_r1_gcf6881", "NPC_r2_gcf7607",
                         "mES_2i_LIF_r2_gcf7218", "mES_2i_LIF_r1_gcf7218",  "mES_2i_LIF_r3_gcf7218", "mES_2i_LIF_r1_gcf6578",
                         "mES_2i_LIF_r2_gcf7124", "mES_2i_LIF_r1_gcf7124", "mES_2i_LIF_r3_gcf7124", "mES_2i_LIF_r4_gcf7124",
                         "mES_2i_LIF_r5_gcf7124", "mES_2i_LIF_r6_gcf7124",
@@ -790,7 +793,7 @@ remove_ref_samples <- c("U2OS_r1_gcf6881", "U2OS_r2_gcf6881", "U2OS_r3_gcf6210",
                         "mES_r5_gcf7124", "mES_r6_gcf7124",
                         "HCT116_r1_gcf6881",
                         "HEK293_r2_gcf6881",
-                        "A549_r1_gcf6210", "A549_r2_gcf7218")
+                        "A549_r1_gcf6210", "A549_r2_gcf7218", "mES_2i_LIF_r1_gcf7607")
 
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
   filter(!sample_id %in% remove_ref_samples)
@@ -801,21 +804,22 @@ remove_pert_conditions <- c("A549_5aDHT", "A549_TCPOBOP", "HCT116_cDIM12", "HCT1
                             "HepG2_KLF4", "HepG2_NR1H2", "HepG2_RXRA", "HepG2_T09", "HepG2_TCF3", "HepG2_TP53", "HepG2_Wy", "K562_T3", 
                             "MCF7_DIMc", "mES_Aldosterone", "mES_Bmp4", "mES_N2B27_Bmp4", "mES_Dex", "mES_EGR1", "mES_GATA1", "mES_GLI1-OE",
                             "mES_KLF4", "mES_LPS", "mES_NFIA", "mES_NR5A2", "mES_OTX1-OE", "mES_PPARA::RXRA", "mES_PPARG::RXRA", "mES_Progesterone",
-                            "mES_RARA", "mES_RA", "mES_N2B27_RA", "mES_RXRA", "mES_Shh", "mES_N2B27_Shh", "mES_Sox9", "mES_SRI011381",
+                            "mES_RARA", "mES_RA", "mES_N2B27_RA", "mES_RXRA", "mES_Shh", "mES_N2B27_Shh", "mES_SOX9", "mES_SRI011381",
                             "mES_vitA", "NPC_5aDHT", "NPC_ITE", "NPC_SR1078", "NPC_TCPOBOP", "U2OS_AICAR", "U2OS_Aldosterone", "U2OS_Cytosporone",
-                            "U2OS_FK", "U2OS_LPS", "mES_4OHT")
+                            "U2OS_FK", "U2OS_LPS", "mES_4OHT", "mES_RFX1-OE", "mES_GSK4716", "HepG2_CEBPB")
 
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
   filter(!condition %in% remove_pert_conditions)
 
 ### Remove individual replicates of perturbations that did not effectively work
-remove_pert_samples <- c("U2OS_Wortmannin_r1_gcf7218", "mES_vitC_r1_gcf6881", "mES_TCF7L2_r1_gcf7027", "mES_TCF7_r1_gcf7027", "mES_RFX1-OE_r2_gcf7447",
+remove_pert_samples <- c("U2OS_Wortmannin_r1_gcf7218", "mES_vitC_r1_gcf6881", "mES_TCF7L2_r1_gcf7027", "mES_TCF7_r1_gcf7027",
                          "mES_POU5F1_r1_gcf7027", "mES_POU2F1_r1_gcf7027", "mES_Nutlin_r1_gcf7447", "mES_Nutlin_r2_gcf7447", "mES_N2B27_r2_gcf5927",
-                         "mES_MEF2A_r1_gcf7027", "mES_LIF_PD_r2_gcf5927", "mES_LIF_CH_r2_gcf5927", "mES_HSF1_r1_gcf7027", "mES_HQ_r1_gcf6578",
-                         "mES_GSK4716_r3_gcf7218", "mES_GSK4716_r2_gcf7218", "mES_GSK4716_r1_gcf7218", "mES_GSK4716_r1_gcf7124", "mES_GSK4716_r4_gcf7124",
-                         "mES_GSK4716_r2_gcf7124", "mES_GRHL1_r1_gcf7027", "mES_FOS::JUN_r1_gcf7027", "mES_FK_r3_gcf6139", "mES_FK_r2_gcf6139",
+                         "mES_MEF2A_r1_gcf7027", "mES_LIF_PD_r2_gcf5927", "mES_LIF_CH_r2_gcf5927", "mES_LIF_CH_r3_gcf5927", 
+                         "mES_HSF1_r1_gcf7027", "mES_HQ_r1_gcf6578", "mES_GRHL1_r1_gcf7607",
+                         "mES_GRHL1_r1_gcf7027", "mES_FOS::JUN_r1_gcf7027", "mES_FK_r3_gcf6139", "mES_FK_r2_gcf6139",
                          "mES_E2F1_r1_gcf7027", "mES_CREB1_r1_gcf7027", "HepG2_STAT3_r2_gcf7534", "HepG2_FOS::JUN_r2_gcf7534", 
-                         "HepG2_FOS::JUN_r1_gcf6952", "HepG2_CEBPB_r1_gcf6952", "A549_Nutlin_r2_gcf6210")
+                         "HepG2_FOS::JUN_r1_gcf6952", "HepG2_CEBPB_r1_gcf6952", "A549_Nutlin_r2_gcf6210", "mES_LIF_CH_r1_gcf7607",
+                         "mES_2i_r1_gcf6578", "mES_2i_r2_gcf5927", "mES_GATA1-OE_r2_gcf7447")
 
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
   filter(!sample_id %in% remove_pert_samples)
@@ -835,7 +839,7 @@ bc_df_rep <- bc_df_cDNA_filt %>%
   mutate(mean_activity_sample_minP = log2(mean_activity_sample_minP)) %>%
   spread(replicate, mean_activity_sample_minP) %>%
   dplyr::select(-r3, -r4, -r5, -r6) %>%
-  filter(!condition %in% c("HepG2_FBS", "HepG2_NT", "mES_Nanog_ctrl", "mES_NT", "mES_Pou5f1_ctrl", "mES_Sox2_ctrl")) %>%
+  filter(!condition %in% c("HepG2_FBS", "HepG2_NT", "mES_Nanog_ctrl", "mES_NT", "mES_Pou5f1_ctrl", "mES_Sox2_ctrl", "mES_Dox")) %>%
   na.omit()
 
 scatter_rep <- ggplot(bc_df_rep, 
@@ -874,6 +878,49 @@ ggplot(bc_df_rep,
   theme_pubr(border = T) +
   theme(legend.position = "none") +
   facet_wrap(~condition)
+
+cor(bc_df_rep$r1[bc_df_rep$neg_ctrls == "No"], bc_df_rep$r2[bc_df_rep$neg_ctrls == "No"], method = "pearson")
+
+## Compute mean correlations between all replicates per cell type
+bc_df_rep2 <- bc_df_cDNA_filt %>%
+  filter(is.na(stimulation), neg_ctrls == "No", !replicate %in% c("r5", "r6")) %>%
+  dplyr::select(replicate, mean_activity_sample_minP, reporter_id, condition, gcf) %>% 
+  distinct() %>%
+  mutate(mean_activity_sample_minP = log2(mean_activity_sample_minP)) %>%
+  mutate(replicate_gcf = paste(replicate, gcf, sep = "_")) %>%
+  dplyr::select(-replicate, -gcf) %>%
+  filter(!condition %in% c("HepG2_FBS", "HepG2_NT", "mES_Nanog_ctrl", "mES_NT", "mES_Pou5f1_ctrl", "mES_Sox2_ctrl", "mES_Dox"))
+  
+  
+cor_df <- bc_df_rep2 %>%
+  distinct(condition) %>%
+  mutate(cor = "")
+
+bc_df_rep3 <- bc_df_rep2 %>%
+  spread(replicate_gcf, mean_activity_sample_minP)
+  
+
+for (i in unique(cor_df$condition)) {
+  
+  cor_df_i <- bc_df_rep3 %>%
+    filter(condition == i) %>%
+    dplyr::select(-condition) %>% 
+    column_to_rownames("reporter_id")
+  
+  
+  cor_df_i2 <- cor(cor_df_i, use = "pairwise.complete.obs")
+  
+  cor_df$cor[cor_df$condition == i] <- mean(cor_df_i2[upper.tri(cor_df_i2, diag = FALSE)], na.rm = TRUE)
+}
+  
+
+ggplot(cor_df %>%
+         filter(condition != "NIH3T3"),
+       aes(x = reorder(condition, -as.numeric(cor)), y = as.numeric(cor))) +
+  geom_bar(stat = "identity", fill = "grey90", width = .9) +
+  ## Set axis limits to 0,1
+  ylim(0,1) +
+  theme_pubr()
 ```
 
 ---

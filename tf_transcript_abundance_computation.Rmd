@@ -14,6 +14,19 @@ knitr::opts_chunk$set(echo = TRUE)
 ## Load libraries
 ```{r}
 library(edgeR)
+library (EDASeq)
+
+ExonLength <- function(genes) {
+  # Get the combined exon length for the genes
+  tib <- as_tibble(genes) %>%
+    filter(type == "exon") %>%
+    mutate(gene_id = factor(gene_id, levels = unique(gene_id))) %>%
+    group_by(gene_id) %>%
+    dplyr::summarise(exon_number = n(),
+              exon_length = sum(width))
+  
+  tib
+}
 ```
 
 
@@ -22,25 +35,9 @@ library(edgeR)
 ```{r cars}
 # Load tf reporter data
 # Import processed bc counts from the preprocessing step
-cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7124_stimulations/results/mt20230901_reporter_activity_filt_combined.csv", header = T)
+cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7124_stimulations/results/mt20231220_reporter_activity_filt_combined.csv", header = T)
 
 cDNA_df$stimulation[is.na(cDNA_df$stimulation)] <- "no"
-
-## Rename some TFs
-cDNA_df <- cDNA_df %>%
-  mutate(reporter_activity_neg = ifelse(tf %in% c("POU5F1::SOX2", "NR1H4::RXRA", "CEBPB", "STAT1::STAT2", "THRA") | 
-                                          commercial_reporter == "Yes" | is.na(reporter_activity_neg), 
-                                        reporter_activity_minP, reporter_activity_neg)) %>%
-  mutate(tf = gsub("^SOX9", "SOXE", tf)) %>%
-  mutate(reporter_id = gsub("^SOX9(.*)", "SOXE\\1", reporter_id)) %>%
-  mutate(tf = gsub("^SOX2", "SOX9", tf)) %>%
-  mutate(reporter_id = gsub("^SOX2(.*)", "SOX9\\1", reporter_id)) %>%
-  mutate(tf = gsub("^SOXE", "SOX2", tf)) %>%
-  mutate(reporter_id = gsub("^SOXE(.*)", "SOX2\\1", reporter_id)) %>%
-  mutate(tf = gsub("^NFATc1", "NFATC1", tf)) %>%
-  mutate(reporter_id = gsub("^NFATc1(.*)", "NFATC1\\1", reporter_id)) %>%
-  mutate(tf = gsub("^Myc", "MYC", tf)) %>%
-  mutate(reporter_id = gsub("^Myc(.*)", "MYC\\1", reporter_id))
 
 # Load in RNA-seq data
 ## Set the names of the TFs for which I want to retrieve the data
@@ -102,45 +99,23 @@ proteinatlas_rna_export <- proteinatlas_rna %>%
   
 
 ## Load NPC RNA-seq data and calculate TPM
+npc_rna <- read_delim("/shared/gcf/m.trauernicht/7086/genecounts.txt") 
 
-# # Load the transcript database
-# txdb <- TxDb.Mmusculus.UCSC.mm10.knownGene
-# 
-# # Extract gene information with gene_id
-# gene_info <- genes(txdb, columns = c("gene_id"))
-# 
-# # Extract exons grouped by genes
-# exons_by_gene <- exonsBy(txdb, by="gene")
-# 
-# # Calculate total exon length per gene
-# total_exon_length_per_gene <- sapply(exons_by_gene, function(exon_list) {
-#   sum(width(exon_list))
-# })
-# 
-# # Create a data frame with gene symbols and total exon lengths
-# summary_data <- data.frame(gene_id = names(total_exon_length_per_gene),
-#                             total_exon_length = total_exon_length_per_gene)
-# 
-# # Map Ensembl gene IDs using org.Mm.eg.db
-# gene_info_ensembl <- AnnotationDbi::select(org.Mm.eg.db, keys=gene_info$gene_id, columns="ENSEMBL")
-# 
-# # Merge the data frames based on gene symbols
-# summary_data <- merge(summary_data, gene_info_ensembl, by.x = "gene_id", by.y = "ENTREZID", all.x = TRUE)
-# 
-# summary_data <- summary_data %>%
-#   dplyr::select("exon_length" = total_exon_length, "ensembl_gene_id" = "ENSEMBL")
+### Get gene lengths of all mm10 genes
+genes <- import("/DATA/usr/m.trauernicht/data/genomes/mm10/gencode.vM10.annotation.gtf")
+gene_length <- ExonLength(genes)
+gene_length <- gene_length %>%
+  mutate(gene_id = gsub("\\.[0-9]{1,2}$", "", gene_id)) %>%
+  dplyr::select("ensembl_gene_id" = gene_id, exon_length)
 
-
-transcript_lengths <- read_csv("/DATA/usr/m.trauernicht/data/RNA_seq/mm10_transcript_lengths.csv") %>%
-  distinct() %>%
-  na.omit()
-
-npc_rna <- read_delim("/shared/gcf/m.trauernicht/7086/genecounts.txt") %>%
-  dplyr::select("tf" = external_gene_id, "NPC_r1" = `1_NPC_r1`, "NPC_r2" = `2_NPC_r2`, ensembl_gene_id) %>%
-  left_join(transcript_lengths) %>%
+npc_rna <- npc_rna %>%
+  mutate(gene_length = end_position - start_position) %>%
+  dplyr::select("tf" = external_gene_id, "NPC_r1" = `1_NPC_r1`, "NPC_r2" = `2_NPC_r2`, ensembl_gene_id, gene_length) %>%
+  left_join(gene_length) %>%
+  #left_join(transcript_lengths) %>%
   mutate(NPC_counts = (NPC_r1 + NPC_r2) / 2) %>%
   mutate(NPC_rpk = NPC_counts / (exon_length / 1000)) %>%
-  mutate(pm = sum(NPC_rpk / 1e6, na.rm = T)) %>%
+  mutate(pm = sum(NPC_rpk, na.rm = T) / 1e6) %>%
   mutate(TPM = NPC_rpk / pm) %>%
   mutate(cell = "NPC") %>%
   distinct(tf, TPM, cell) %>%
@@ -148,6 +123,15 @@ npc_rna <- read_delim("/shared/gcf/m.trauernicht/7086/genecounts.txt") %>%
   group_by(tf) %>%
   slice_max(n = 1, order_by = TPM) %>%
   ungroup()
+
+### Attach genes not found in NPC RNA-seq
+npc_rna_add <- mES_rna %>%
+  mutate(TPM = 0) %>%
+  distinct(tf, TPM) %>%
+  filter(!tf %in% npc_rna$tf) %>%
+  mutate(cell = "NPC")
+
+npc_rna <- rbind(npc_rna, npc_rna_add)
 
 
 ## Combine data from all cell types and change names back to original TF names
@@ -181,15 +165,13 @@ tf_rna2 <- tf_rna %>% filter(tf == "RARA")
 tf_rna2$tf[tf_rna2$tf == "RARA"] <- "RARA:RXRA"
 tf_rna <- rbind(tf_rna, tf_rna2)
 
+
+## For some heterodimeric TFs I set the TPM to the lowest of the two
 tf_rna <- tf_rna %>%
-  mutate(TPM = ave(TPM, cell, tf, FUN = min)) %>% ## For some heterodimeric TFs I set the TPM to the lowest of the two
+  mutate(TPM = ave(TPM, cell, tf, FUN = min)) %>% 
   distinct()
 
 tf_rna$TPM[is.na(tf_rna$TPM)] <- 0
-
-ggplot(tf_rna2,
-       aes(x = cell, y = TPM)) +
-  geom_quasirandom_rast()
 
 ## TPM normalization
 tf_rna2 <- tf_rna %>%
@@ -197,6 +179,10 @@ tf_rna2 <- tf_rna %>%
   mutate(max_median_tpm = max(median_tpm)) %>%
   mutate(tpm_norm_factor = median_tpm/max_median_tpm) %>%
   mutate(TPM_norm = TPM/tpm_norm_factor)
+
+# ggplot(tf_rna2,
+#        aes(x = cell, y = log10(TPM))) +
+#   geom_quasirandom()
   
 tf_rna <- tf_rna2 %>%
   distinct(tf, cell, TPM, TPM_norm)
