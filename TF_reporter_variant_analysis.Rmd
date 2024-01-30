@@ -369,33 +369,33 @@ fc_df <- cDNA_df %>%
   mutate(tf_length = ave(tf, tf, FUN = length)) %>%
   filter(tf_length > 10)
 
-for (i in unique(fc_df$tf)) {
-  p <- ggplot(fc_df %>% filter(tf == i),
-         aes(x = reorder(condition, -mean_dif), y = reporter_dif_minP, color = as.character(tf_target))) +
-    geom_hline(yintercept = 0, lty = 2) +
-    geom_hline(yintercept = 1) +
-    geom_hline(yintercept = -1) +
-    geom_point() +
-    scale_color_manual(values = c("0" = "black", "1" = "red", "2" = "blue")) +
-    theme_pubr(x.text.angle = 90) +
-    ggtitle(i)
-
-  print(p)
-}
-
-for (i in unique(fc_df$condition)) {
-  p <- ggplot(fc_df %>% filter(condition == i),
-         aes(x = reorder(tf, -mean_dif), y = reporter_dif_minP, color = as.character(tf_target))) +
-    geom_hline(yintercept = 0, lty = 2) +
-    geom_hline(yintercept = 1) +
-    geom_hline(yintercept = -1) +
-    geom_point() +
-    scale_color_manual(values = c("0" = "black", "1" = "red", "2" = "blue")) +
-    theme_pubr(x.text.angle = 90) +
-    ggtitle(i)
-
-  print(p)
-}
+# for (i in unique(fc_df$tf)) {
+#   p <- ggplot(fc_df %>% filter(tf == i),
+#          aes(x = reorder(condition, -mean_dif), y = reporter_dif_minP, color = as.character(tf_target))) +
+#     geom_hline(yintercept = 0, lty = 2) +
+#     geom_hline(yintercept = 1) +
+#     geom_hline(yintercept = -1) +
+#     geom_point() +
+#     scale_color_manual(values = c("0" = "black", "1" = "red", "2" = "blue")) +
+#     theme_pubr(x.text.angle = 90) +
+#     ggtitle(i)
+# 
+#   print(p)
+# }
+# 
+# for (i in unique(fc_df$condition)) {
+#   p <- ggplot(fc_df %>% filter(condition == i),
+#          aes(x = reorder(tf, -mean_dif), y = reporter_dif_minP, color = as.character(tf_target))) +
+#     geom_hline(yintercept = 0, lty = 2) +
+#     geom_hline(yintercept = 1) +
+#     geom_hline(yintercept = -1) +
+#     geom_point() +
+#     scale_color_manual(values = c("0" = "black", "1" = "red", "2" = "blue")) +
+#     theme_pubr(x.text.angle = 90) +
+#     ggtitle(i)
+# 
+#   print(p)
+# }
 ```
 
 ---
@@ -489,24 +489,13 @@ rna_correlations <- cDNA_df3 %>%
 
 ## Plot correlation p-values per TF (export 3x6.5)
 ggplot(rna_correlations_df %>%
-                filter(reasonable == "Yes") %>%
-                distinct(reporter_id, cor_pval, tf, commercial_reporter) %>%
-           mutate(sign = ifelse(cor_pval > 1, "Yes", "No")) %>%
-             mutate(mean_cor_pval = ave(cor_pval, tf, FUN = mean)),
-       aes(x = reorder(tf, -mean_cor_pval), y = cor_pval, color = sign, shape = commercial_reporter)) +
-  geom_quasirandom(size = 1.5) +
-  geom_hline(yintercept = 1, lty = 2) +
-  theme_pubr(border = T, x.text.angle = 90) +
-  scale_color_manual(values = c("Yes" = colors_diverse[2], "No" = colors_diverse[1]))
-
-ggplot(rna_correlations_df %>%
          filter(reasonable == "Yes") %>%
          distinct(reporter_id, cor_pval, cor, tf, commercial_reporter) %>%
          mutate(sign = ifelse(cor_pval > 1, "Yes", "No")) %>%
          mutate(mean_cor = ave(cor, tf, FUN = mean)),
        aes(x = reorder(tf, -mean_cor), y = cor)) +
   geom_hline(yintercept = 0, lty = 2) +
-  geom_quasirandom(size = 1, aes(color = sign, shape = commercial_reporter)) +
+  geom_quasirandom(size = 1.5, aes(color = sign, shape = commercial_reporter)) +
   ylim(-1,1) +
   theme_pubr(border = T, x.text.angle = 90, legend = "none") +
   stat_summary(fun = median, fun.min = median, fun.max = median, geom = "crossbar", color = "red", width = 0.25, lwd = 0.4) +
@@ -528,7 +517,7 @@ ggplot(cDNA_df3 %>%
   facet_wrap(~promoter) +
   scale_color_gradient(low = "#264653", high = "#9AC1AE")
 
-### GATA4: Impact of spacer sequence
+### GATA4: Impact of spacer sequence (export 3x5.5)
 ggplot(cDNA_df3 %>%
          filter(reporter_id %in% c("GATA4_10bp_10bp_minP_3", "GATA4_10bp_10bp_minP_1")) %>%
          distinct(cell, reporter_id, reporter_activity_minP, nTPM),
@@ -542,29 +531,21 @@ ggplot(cDNA_df3 %>%
   facet_wrap(~reporter_id, ncol = 1) +
   theme_pubr(border = T)
 
-ggplot(cDNA_df3 %>%
-         filter(tf == "GATA4") %>%
-         distinct(cell, reporter_id, reporter_activity_minP, cor_pval, background, nTPM),
-       aes(x = nTPM, y = 2^reporter_activity_minP)) +
-  geom_vline(xintercept = 1, lty = 1) +
-  geom_vline(xintercept = 0, lty = 2) +
+gata4_plot <- rna_correlations_df %>%
+  filter(tf == "GATA4") %>%
+  distinct(reporter_id, cor_pval, spacing, background) %>%
+  mutate(mean_cor_pval = ave(cor_pval, spacing, background, FUN = mean))
+
+ggplot() +
   geom_hline(yintercept = 1, lty = 2) +
-  geom_smooth(method = "lm", se = F, aes(group = reporter_id, color = cor_pval)) +
-  geom_point(size = 3, shape = 21, aes(fill = cell), color = "black") +
-  scale_fill_manual(values = cell_colors) +
-  facet_wrap(~background, ncol = 1) +
-  theme_pubr(border = T) +
-  scale_color_gradient(low = "#264653", high = "#9AC1AE")
-
-ggplot(rna_correlations_df %>%
-         filter(tf == "GATA4") %>%
-         distinct(reporter_id, cor_pval, cor, background),
-       aes(x = as.factor(background), y = cor)) +
-  geom_boxplot(outlier.shape = NA) +
-  geom_quasirandom(size = 2, aes(color = ifelse(cor_pval > 1, "Yes", "No"))) +
-  theme_pubr() +
-  scale_color_manual(values = c("Yes" = colors_diverse[2], "No" = colors_diverse[1]))
-
+  geom_bar(data = gata4_plot %>% distinct(mean_cor_pval, spacing, background),
+           aes(x = as.factor(background), y = mean_cor_pval), stat = "identity", fill = "grey80") +
+  geom_point(data = gata4_plot, size = 2, 
+              aes(color = ifelse(cor_pval > 1, "Yes", "No"),
+                  x = as.factor(background), y = cor_pval)) +
+  theme_pubr(legend = "none") +
+  scale_color_manual(values = c("Yes" = colors_diverse[2], "No" = colors_diverse[1])) +
+  facet_wrap(~spacing)
 
 ### TFCP2L1: Impact of spacer length
 ggplot(cDNA_df3 %>%
@@ -580,57 +561,22 @@ ggplot(cDNA_df3 %>%
   facet_wrap(~reporter_id, ncol = 1) +
   theme_pubr(border = T)
 
-ggplot(cDNA_df3 %>%
-         filter(tf == "TFCP2L1") %>%
-         distinct(cell, reporter_id, reporter_activity_minP, cor_pval, spacing, nTPM),
-       aes(x = nTPM, y = 2^reporter_activity_minP)) +
-  geom_vline(xintercept = 1, lty = 1) +
-  geom_vline(xintercept = 0, lty = 2) +
+tfcp2l1_plot <- rna_correlations_df %>%
+  filter(tf == "TFCP2L1") %>%
+  distinct(reporter_id, cor_pval, spacing, background) %>%
+  mutate(mean_cor_pval = ave(cor_pval, spacing, background, FUN = mean))
+
+## Export 3x4
+ggplot() +
   geom_hline(yintercept = 1, lty = 2) +
-  geom_smooth(method = "lm", se = F, aes(group = reporter_id, color = cor_pval)) +
-  geom_point(size = 3, shape = 21, aes(fill = cell), color = "black") +
-  scale_fill_manual(values = cell_colors) +
-  facet_wrap(~spacing, ncol = 1) +
-  theme_pubr(border = T) +
-  scale_color_gradient(low = "#264653", high = "#9AC1AE")
-
-ggplot(rna_correlations_df %>%
-         filter(tf == "TFCP2L1") %>%
-         distinct(reporter_id, cor_pval, spacing),
-       aes(x = as.factor(spacing), y = cor_pval)) +
-  geom_quasirandom(size = 2, aes(color = ifelse(cor_pval > 1, "Yes", "No"))) +
-  geom_boxplot(alpha = .2, outlier.shape = NA) +
-  theme_pubr() +
-  scale_color_manual(values = c("Yes" = colors_diverse[2], "No" = colors_diverse[1]))
-
-
-tfcp2l1_grhl1_cor <- cDNA_df3 %>%
-  filter(tf %in% c("TFCP2L1", "GRHL1")) %>%
-  distinct(tf, cell, reporter_id, nTPM, reporter_activity_minP, spacing)
-
-tfcp2l1_grhl1_tpm <- tfcp2l1_grhl1_cor %>%
-  distinct(tf, cell, nTPM) %>%
-  spread(key = "tf", value = "nTPM")
-
-tfcp2l1_grhl1_cor2 <- tfcp2l1_grhl1_cor %>%
-  dplyr::select(-nTPM) %>%
-  left_join(tfcp2l1_grhl1_tpm) %>%
-  group_by(reporter_id) %>%
-  mutate(cor_tfcp2l1 = -log10(cor.test(reporter_activity_minP, TFCP2L1)$p.value)) %>%
-  mutate(cor_grhl1 = -log10(cor.test(reporter_activity_minP, GRHL1)$p.value)) %>%
-  ungroup() %>%
-  mutate(mean_activity = ave(reporter_activity_minP, reporter_id, FUN = mean))
-
-ggplot(tfcp2l1_grhl1_cor2,
-       aes(x = cor_tfcp2l1, y = cor_grhl1, fill = spacing)) +
-  geom_vline(xintercept = 0, lty = 2) +
-  geom_hline(yintercept = 0, lty = 2) +
-  geom_abline() +
-  geom_point(shape = 21, color = "black", size = 3) +
+  geom_bar(data = tfcp2l1_plot %>% distinct(mean_cor_pval, spacing, background),
+           aes(x = as.factor(background), y = mean_cor_pval), stat = "identity", fill = "grey80") +
+  geom_point(data = tfcp2l1_plot, size = 2, 
+              aes(color = ifelse(cor_pval > 1, "Yes", "No"),
+                  x = as.factor(background), y = cor_pval)) +
   theme_pubr(legend = "none") +
-  scale_fill_manual(values = c("10bp" = "#7C9EB2", "5bp" = "#BFD0D9")) +
-  facet_wrap(~tf)
-
+  scale_color_manual(values = c("Yes" = colors_diverse[2], "No" = colors_diverse[1])) +
+  facet_wrap(~spacing)
 
 ### GATA1: Impact of distance
 ggplot(cDNA_df3 %>%
@@ -646,57 +592,24 @@ ggplot(cDNA_df3 %>%
   facet_wrap(~reporter_id, ncol = 1) +
   theme_pubr(border = T)
 
-ggplot(cDNA_df3 %>%
-         filter(tf == "GATA1") %>%
-         distinct(cell, reporter_id, reporter_activity_minP, cor_pval, distance, nTPM),
-       aes(x = nTPM, y = 2^reporter_activity_minP)) +
-  geom_vline(xintercept = 1, lty = 1) +
-  geom_vline(xintercept = 0, lty = 2) +
-  geom_hline(yintercept = 1, lty = 2) +
-  geom_smooth(method = "lm", se = F, aes(group = reporter_id, color = cor_pval)) +
-  geom_point(size = 3, shape = 21, aes(fill = cell), color = "black") +
-  scale_fill_manual(values = cell_colors) +
-  facet_wrap(~distance, ncol = 1) +
-  theme_pubr(border = T) +
-  scale_color_gradient(low = "#264653", high = "#9AC1AE")
+gata1_plot <- rna_correlations_df %>%
+  filter(tf == "GATA1") %>%
+  distinct(reporter_id, cor_pval, distance) %>%
+  mutate(mean_cor_pval = ave(cor_pval, distance, FUN = mean))
 
-ggplot(rna_correlations_df %>%
-         filter(tf == "GATA1") %>%
-         distinct(reporter_id, cor_pval, distance),
-       aes(x = as.factor(distance), y = cor_pval)) +
-  geom_quasirandom(size = 2, aes(color = ifelse(cor_pval > 1, "Yes", "No"))) +
-  geom_boxplot(alpha = .2, outlier.shape = NA) +
-  theme_pubr() +
+ggplot() +
+  geom_hline(yintercept = 1, lty = 2) +
+  geom_bar(data = gata1_plot %>% distinct(mean_cor_pval, distance),
+           aes(x = as.factor(distance), y = mean_cor_pval), stat = "identity", fill = "grey80") +
+  geom_point(data = gata1_plot, size = 2, 
+              aes(color = ifelse(cor_pval > 1, "Yes", "No"),
+                  x = as.factor(distance), y = cor_pval)) +
+  theme_pubr(legend = "none") +
   scale_color_manual(values = c("Yes" = colors_diverse[2], "No" = colors_diverse[1]))
 
-gata_cor <- cDNA_df3 %>%
-  filter(tf %in% c("GATA1", "GATA4")) %>%
-  distinct(tf, cell, reporter_id, nTPM, reporter_activity_minP, spacing, background, distance, promoter)
-
-gata_tpm <- gata_cor %>%
-  distinct(tf, cell, nTPM) %>%
-  spread(key = "tf", value = "nTPM")
-
-gata_cor2 <- gata_cor %>%
-  dplyr::select(-nTPM) %>%
-  left_join(gata_tpm) %>%
-  group_by(reporter_id) %>%
-  mutate(cor_gata1 = -log10(cor.test(reporter_activity_minP, GATA1)$p.value)) %>%
-  mutate(cor_gata4 = -log10(cor.test(reporter_activity_minP, GATA4)$p.value)) %>%
-  ungroup() %>%
-  mutate(mean_activity = ave(reporter_activity_minP, reporter_id, FUN = mean))
 
 
-## (export 3x5)
-ggplot(gata_cor2,
-       aes(x = cor_gata1, y = cor_gata4, fill = as.factor(background))) +
-  geom_vline(xintercept = 0, lty = 2) +
-  geom_hline(yintercept = 0, lty = 2) +
-  geom_abline() +
-  geom_point(aes(shape = distance, size = 3), color = "black") +
-  scale_shape_manual(values = c(21, 22)) +
-  theme_pubr(legend ="none") +
-  facet_wrap(~tf)
+
 
 
 ### NR5A2: Impact of spacer length - repressive role?
@@ -830,26 +743,31 @@ ref_conditions_sel <- ref_conditions %>%
   mutate(tf_condition = paste(tf, condition, sep = "_"))
 
 cDNA_df_TF <- cDNA_df %>%
-  filter(neg_ctrls == "No", commercial_reporter == "No", hPGK == "No", native_enhancer == "No", stimulation %in% c("no", "pathway", "overexpression"), promoter != "Random") %>%
+  filter(neg_ctrls == "No", commercial_reporter == "No", hPGK == "No", native_enhancer == "No", 
+         stimulation %in% c("no", "pathway", "overexpression"), promoter != "Random") %>%
   distinct(reporter_activity_minP, promoter, spacing, distance, background, tf, condition, reporter_id, stimulation) %>%
   mutate(tf_condition = paste(tf, condition, sep = "_")) %>%
   filter(tf_condition %in% ref_conditions_sel$tf_condition) %>%
   mutate(reporter_activity_minP = log2(reporter_activity_minP)) %>%
   mutate(background = as.character(background)) %>%
   mutate(promoter = as.factor(promoter)) %>%
-  mutate(spacing = ifelse(spacing == "10bp", "10bps", "5bp")) %>%
+  #mutate(spacing = ifelse(spacing == "10bp", "10bps", "5bp")) %>%
   mutate(spacing = as.factor(spacing)) %>%
-  distinct(reporter_activity_minP, promoter, spacing, distance, background, condition, tf, tf_condition, reporter_id) %>%
+  mutate(spacing_background = as.factor(paste(spacing, background, sep = ":"))) %>%
+  distinct(reporter_activity_minP, promoter, spacing_background, distance, condition, tf, tf_condition, reporter_id) %>%
   mutate(reporter_activity_minP_random = ave(reporter_activity_minP, tf, condition, FUN = function(x) sample(x)))
 
 
 ## Fit linear model with design features for actual data
-exp_variance <- data.frame("feature" = c("promoter", "spacing", "distance", "background", "Residuals"))
+exp_variance <- data.frame("feature" = c("promoter", "spacing_background", "distance", "Residuals"))
 weight <- data.frame("feature" = c("(Intercept)", "promoterminP", "promoterhBGm", "promotermCMV",
-                  "spacing10bps","spacing5bp", "distance10bp","distance21bp", "background1","background2", "background3"))
+                  "spacing_background10bp:1","spacing_background10bp:2","spacing_background10bp:3",
+                  "spacing_background5bp:1","spacing_background5bp:2","spacing_background5bp:3",
+                  "distance10bp","distance21bp"))
 
 cDNA_df_TF$promoter <- relevel(cDNA_df_TF$promoter, ref = "minP")
-cDNA_df_TF$spacing <- relevel(cDNA_df_TF$spacing, ref = "5bp")
+#cDNA_df_TF$spacing <- relevel(cDNA_df_TF$spacing, ref = "5bp")
+cDNA_df_TF$spacing_background <- relevel(cDNA_df_TF$spacing_background, ref = "5bp:1")
 cDNA_df_TF$row <- rownames(cDNA_df_TF)
 cDNA_df_TF3 <- data.frame()
 
@@ -858,7 +776,7 @@ for (i in unique(cDNA_df_TF$tf_condition)) {
   if (nrow(cDNA_df_TF[cDNA_df_TF$tf_condition == i,]) > 9) {
   print(i)
   lm_list[[i]] <- lm(reporter_activity_minP ~
-                       distance + promoter + spacing + background,
+                       distance + promoter + spacing_background,
                 cDNA_df_TF[cDNA_df_TF$tf_condition == i,])
   }
 }
@@ -881,7 +799,7 @@ mean(cDNA_df_TF3$pval)
 
 w <- lapply(names(lm_list), function(x) 
   if (length(lm_list[[x]]$coefficients) == length(summary(lm_list[[x]])$coefficients[,4])) {
-  data.frame('weight' = lm_list[[x]]$coefficients, 'pval' = summary(lm_list[[x]])$coefficients[,4]) %>% mutate(tf = x) %>% rownames_to_column('feature')
+  data.frame('weight' = lm_list[[x]]$coefficients %>% na.omit(), 'pval' = summary(lm_list[[x]])$coefficients[,4]) %>% mutate(tf = x) %>% rownames_to_column('feature')
   }
 )
 
@@ -915,7 +833,7 @@ prediction <- cDNA_df_TF3 %>%
   na.omit()
 weight <- weight %>%
   filter(feature != "(Intercept)")
-categorie <- c("promoter", "spacing", "distance", "background")
+categorie <- c("promoter", "spacing_background", "distance")
 weight$features <- gsub(paste(categorie, collapse="|"), "",weight$feature)
 ml <- length(unique(weight$features))
 feature <- unique(weight$features)
@@ -932,9 +850,8 @@ for (i in unique(cDNA_df_TF$tf_condition)) {
     if (nrow(cDNA_df_TF[cDNA_df_TF$tf_condition == i,]) > 9) {
   lm_list_random[[i]] <- lm(reporter_activity_minP_random ~ 
                        promoter + 
-                       spacing + 
-                       distance + 
-                       background,
+                       spacing_background +
+                       distance,
                 cDNA_df_TF[cDNA_df_TF$tf_condition == i,])
     }
 }
@@ -1004,22 +921,14 @@ chosen_conditions <- ref_conditions %>%
 ```{r log-linear-model-5, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 ## Example: Predicted vs. measured for one TF
 ggplot(cDNA_df_TF3 %>%
-         filter(tf == "STAT3", condition == "mES_2i_LIF"),
-       aes(x = activity_predicted, y = reporter_activity_minP, color = background)) +
+         filter(tf == "STAT3", condition == "mES_2i_LIF") %>%
+         mutate(spacing = gsub(":.*", "", spacing_background)) %>%
+         mutate(background = gsub(".*:", "", spacing_background)),
+       aes(x = activity_predicted, y = reporter_activity_minP, color = spacing#, shape = background
+           )) +
   geom_abline(lty = 2) +
   geom_point(size = 2) +
-  scale_color_manual(values = c("black", "grey50", "grey80")) +
-  facet_wrap(~spacing) +
-  scale_x_continuous(breaks = c(0,2,4))+
-  scale_y_continuous(breaks = c(0,2,4)) +
-  theme_pubr(border = T)
-
-ggplot(cDNA_df_TF3 %>%
-         filter(tf == "STAT3", condition == "mES_2i_LIF"),
-       aes(x = activity_predicted, y = reporter_activity_minP, color = spacing)) +
-  geom_abline(lty = 2) +
-  geom_point(size = 2) +
-  scale_color_manual(values = c("10bps" = "#7C9EB2", "5bp" = "#BFD0D9")) +
+  scale_color_manual(values = c("10bp" = "#7C9EB2", "5bp" = "#BFD0D9")) +
   scale_x_continuous(breaks = c(0,2,4))+
   scale_y_continuous(breaks = c(0,2,4)) +
   theme_pubr()
@@ -1034,9 +943,10 @@ zero_weights <- weight %>%
                    
 weight_ex <- rbind(weight_ex, zero_weights)
                    
-feature_names <- data.frame("features" = c("minP", "mCMV", "hBGm", "1", "2", "3", "5bp", "10bps", "10bp", "21bp"),
-                            "feature_names" = c("minP", "minCMV", "minHBG", "Spacer 1", "Spacer 2", "Spacer 3", "5bp Spacer", 
-                                                "10bp Spacer", "10bp Distance", "21bp Distance"))
+feature_names <- data.frame("features" = c("minP", "mCMV", "hBGm", "10bp:1", "10bp:2", "10bp:3", "5bp:1",
+                                           "5bp:2", "5bp:3", "10bp", "21bp"),
+                            "feature_names" = c("minP", "minCMV", "minHBG", "10-bp spacer (#1)", "10-bp spacer (#2)", "10-bp spacer (#3)",
+                                                "5-bp spacer (#1)", "5-bp spacer (#2)", "5-bp spacer (#3)", "10-bp distance", "21-bp distance"))
                      
 weight_ex <- weight_ex %>%
   left_join(feature_names)
@@ -1044,8 +954,9 @@ weight_ex <- weight_ex %>%
 
 ggplot(weight_ex %>% 
          mutate(sign = ifelse(pval < 0.05, "Yes", "No")) %>%
-         mutate(feature_names = factor(feature_names, levels = c("minP", "minCMV", "minHBG", "Spacer 1", "Spacer 2", "Spacer 3", "5bp Spacer", 
-                                                                                                        "10bp Spacer", "10bp Distance", "21bp Distance"))),
+         mutate(feature_names = factor(feature_names, levels = c("minP", "minCMV", "minHBG", "10-bp distance", "21-bp distance",
+                                                                 "10-bp spacer (#1)", "10-bp spacer (#2)", "10-bp spacer (#3)",
+                                                                 "5-bp spacer (#1)", "5-bp spacer (#2)", "5-bp spacer (#3)"))),
        aes(x = feature_names, y = weight, alpha = sign)) +
   geom_hline(yintercept = 0) +
   geom_bar_interactive(stat = "identity", color = "black", width = .75) +
@@ -1090,9 +1001,22 @@ pheatmap(weight2 %>%
          color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdBu")))(100),
          angle_col = 90,
          cluster_cols = T,
-         cutree_cols = 10,
+         cutree_cols = 6,
          cutree_rows = 4,
          breaks = myBreaks)
+
+## Plot quality of fit versus median reporter activity
+quality_corr <- cDNA_df_TF3 %>%
+  mutate(median_activity = ave(reporter_activity_minP, tf, FUN = median)) %>%
+  mutate(tf_condition = paste(tf, condition, sep = "_")) %>%
+  distinct(median_activity, pval_adj, tf_condition) %>%
+  filter(tf_condition %in% chosen_conditions$tf_condition)
+
+ggplot(quality_corr, aes(x = median_activity, y = -log10(pval_adj))) +
+  geom_smooth(method = "lm", se = F) +
+  geom_hline(yintercept = -log10(0.05), lty = 2) +
+  geom_point() +
+  theme_pubr()
 
 
 ## Investigate hits with strong impact on spacer length
@@ -1102,7 +1026,7 @@ weight4 <- weight %>%
   #filter(pval_adj < .001) %>%
   mutate(tf = gsub("_.*", "", tf)) %>%
   filter(tf %in% rownames(weight2)) %>%
-  filter(condition == "spacing", pval < 0.05, abs(weight) >= 0.2)
+  filter(condition == "spacing_background", pval < 0.05, abs(weight) >= 0.2)
 
 actual_spacer_lengths <- data.frame(tf = c("CEBPB", "CREB1", "ETS2", "FOS::JUN", "GRHL1", "HNF1A", "HNF4A", "KLF4", "MAF::NFE2", "MTF1", "NFE2L2", 
                                             "NFKB1", "NR1H4::RXRA", "NR1I2", "REL", "SRF", "STAT3", "TCF7L2", "TFCP2L1"),
@@ -1112,15 +1036,31 @@ actual_spacer_lengths <- data.frame(tf = c("CEBPB", "CREB1", "ETS2", "FOS::JUN",
                                              "monomer", "heterodimer", "homodimer", "heterodimer", "heterodimer", 
                                              "homodimer", "homodimer", "homodimer", "monomer", "tetramer"))
 
-binding_modes <- data.frame(tf = c("CEBPB", "CREB1", "E2F1", "ESR1", "ETS2", "FOS::JUN", "GRHL1", "HNF1A", "HNF4A", "IRF3", "KLF4", "MAF::NFE2", "MTF1",
-                                                            "NFAT5", "NFE2L2", "NFIA",
-                                            "NFKB1", "NFYA", "NR1H4::RXRA", "NR1I2",  "POU2F1", "POU5F1::SOX2", "RARA", "RBPJ", "REL", "RXRA", 
-                                             "SOX2", "SP1", "SRF", "STAT1::STAT2", "STAT3", "TCF7L2", "TFCP2L1", "TP53", "VDR::RXRA"),
-                                    mode = c("homodimer", "homodimer", "homodimer", "heterodimer", "homodimer", "heterodimer", "homodimer", "homodimer", "homodimer", "homodimer", 
-                                             "monomer", "heterodimer", 
-                                             "monomer", "homodimer", "heterodimer", "homodimer", "homodimer", "heterodimer", "heterodimer", "heterodimer", "homodimer", "heterodimer", 
-                                             "heterodimer", "monomer", 
-                                             "homodimer", "homodimer", "monomer", "monomer", "homodimer", "heterodimer", "homodimer", "monomer", "tetramer", "tetramer", "heterodimer"))
+binding_modes <- data.frame(tf = c("CEBPB", "CREB1", "E2F1", "ESR1", "ETS2", "FOS::JUN", "GRHL1", 
+                                   "HNF1A", "HNF4A", "IRF3", "KLF4", "MAF::NFE2", "MTF1",
+                                   "NFAT5", "NFE2L2", "NFIA", "NFKB1", "NFYA", "NR1H4::RXRA", "NR1I2",  
+                                   "POU2F1", "POU5F1::SOX2", "RARA", "RBPJ", "REL", "RXRA", 
+                                   "SOX2", "SP1", "SRF", "STAT1::STAT2", "STAT3", "TCF7L2", "TFCP2L1", "TP53", 
+                                   "VDR::RXRA", "AHR::ARNT", "EGR1", "ELK1", "ESRRB", "FOSL1", "FOXA1", "FOXO1",
+                                   "GATA1", "GATA4", "HSF1", "MEF2A", "NR1H2", "NR1I3", "NR3C2", "NR4A1", 
+                                   "NR4A2::RXRA", "NR5A2", "NRF1", "PAX6", "POU5F1", "PPARG::RXRA", "RARA:RXRA",
+                                   "RFX1", "RORA", "SMAD4", "TCF7", "THRA", "THRB", "WT1", "XBP1"),
+                                    mode = c("homodimer", "homodimer", "homodimer", "heterodimer", "homodimer", "heterodimer", 
+                                             "homodimer", "homodimer", "homodimer", "homodimer", "monomer", "heterodimer", 
+                                             "monomer", "homodimer", "heterodimer", "homodimer", "homodimer", "heterodimer", 
+                                             "heterodimer", "heterodimer", "homodimer", "heterodimer", "heterodimer", "monomer", 
+                                             "homodimer", "homodimer", "monomer", "monomer", "homodimer", "heterodimer", "homodimer", 
+                                             "monomer", "tetramer", "tetramer", "heterodimer", "heterodimer", "monomer", "monomer",
+                                             "monomer", "heterodimer", "homodimer", "homodimer", "monomer", "monomer", "homodimer",
+                                             "homodimer", "heterodimer", "monomer", "heterodimer", "monomer", "heterodimer",
+                                             "monomer", "homodimer", "homodimer", "homodimer", "heterodimer", "heterodimer",
+                                             "homodimer", "heterodimer", "monomer", "monomer", "heterodimer", "heterodimer",
+                                             "monomer", "monomer"),
+                            mol_weight = c(36, 43, 47, 119, 55, 106, 70, 67, 52, 47, 54, 129, 81, 38, 116, 55, 74, 78, 108, 102, 76,
+                                           73, 99, 60, 65, 52, 34, 82, 67, 204, 83, 68, 312, 180, 100, 192, 58, 81, 55, 106,
+                                           49, 70, 43, 48, 57, 55, 103, 40, 152, 64, 118, 65, 45, 46, 39, 106, 103, 130, 111,
+                                           61, 68, 110, 106, 52, 54)) %>%
+  mutate(mol_weight = ifelse(mode == "homodimer", mol_weight * 2, mol_weight))
 
 tf_properties <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/garcia_tf-properties.csv") %>%
   dplyr::select("tf" = TF, DNA_binding_mode, chromatin_regulation_mode, TF_superclass, TF_class)
@@ -1143,23 +1083,23 @@ lib2_BSs <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_desi
   dplyr::select("tf" = TF, "seq" = motif) 
 
 BSs_all <- rbind(lib1_BSs, lib2_BSs) %>%
-  mutate(BS_length = nchar(seq))
+  mutate(BS_length = nchar(seq)) %>%
+  mutate(tf = ifelse(tf == "AHR:ARNT", "AHR::ARNT", tf)) %>%
+  mutate(tf = ifelse(tf == "RAR:RXR", "RARA:RXRA", tf))
 
 weight_spacing_length <- weight %>%
   filter(tf %in% chosen_conditions$tf_condition) %>%
   left_join(cDNA_df_TF5) %>%
   #filter(pval_adj < .001) %>%
-  filter(features == "10bps") %>%
+  filter(str_detect(features, "10bp")) %>%
+  mutate(weight = ave(weight, tf, FUN = mean)) %>%
+  mutate(pval = ave(pval, tf, FUN = mean)) %>%
+  dplyr::select(-features) %>%
   mutate(tf = gsub("_.*", "", tf)) %>%
   filter(tf %in% rownames(weight2)) %>%
-  mutate(spacer_sign = ifelse(tf %in% weight4$tf, "Yes", "No")) %>%
-  distinct(tf, spacer_sign, weight, pval_adj, pval) %>%
+  distinct(tf, weight, pval) %>%
+  mutate(spacer_sign = ifelse(pval < 0.05, "Yes", "No")) %>%
   left_join(BSs_all)
-
-ggplot(weight_spacing_length,
-       aes(x = BS_length, y = weight, color = spacer_sign)) +
-  geom_point(size = 2) +
-  scale_color_manual(values = c("Yes" = "#7c9eb2", "No" = "grey80"))
 
 ## Transform to helical turns
 weight_spacing_length2 <- weight_spacing_length %>%
@@ -1175,17 +1115,43 @@ weight_spacing_length2 <- weight_spacing_length %>%
   mutate(dif_spacing = -spacing_degree_transf1 + spacing_degree_transf2) %>%
   left_join(binding_modes)
 
+
+ggplot(weight_spacing_length2,
+       aes(x = BS_length, y = weight)) +
+  geom_point(aes(color = spacer_sign), size = 2) +
+  geom_smooth(method = "lm", se = F) +
+  theme_pubr() +
+  facet_wrap(~mode)
+
+ggplot(weight_spacing_length2,
+       aes(x = BS_length, y = weight)) +
+  geom_point(aes(color = spacer_sign), size = 2) +
+  scale_color_manual(values = c("Yes" = "black", "No" = "grey")) +
+  theme_pubr(legend = "none") 
+
+ggplot(weight_spacing_length2,
+       aes(x = BS_length)) +
+  geom_density(aes(fill = spacer_sign), alpha = .4) +
+  scale_fill_manual(values = c("Yes" = "black", "No" = "grey")) +
+  theme_pubr(legend = "none")
+
 ggplot(weight_spacing_length2,
        aes(x = dif_spacing, y = weight)) +
   geom_point(aes(color = spacer_sign, shape = mode), size = 2) +
   geom_smooth(method = "lm", se = F) +
   theme_pubr()
 
+ggplot(weight_spacing_length2,
+       aes(x = mol_weight, y = weight)) +
+  geom_point(aes(color = spacer_sign, shape = mode), size = 2) +
+  geom_smooth(method = "lm", se = F) +
+  theme_pubr()
 
 ggplot(weight_spacing_length2,
        aes(x = abs(dif_spacing), y = abs(weight))) +
   geom_point(aes(color = spacer_sign, shape = mode), size = 2) +
-  geom_smooth(method = "lm", se = F) 
+  geom_smooth(method = "lm", se = F) +
+  theme_pubr()
 
 
 ## Overview figures: which features matter how much and for which TF?
@@ -1317,6 +1283,10 @@ for (i in unique(cDNA_df_confidence2$tf)){
   x_order2 <- c("promoter", "spacer length", "spacer seq", "distance", "published")
   reporter_features$distance[reporter_features$distance == "10bp"] <- "10bps"
   
+  feature_colors2 <- data.frame(feature = c("hBGm", "mCMV", "minP", "Random", "1", "2", "3", "21bp", "10bps",
+                                            "10bp", "5bp", "romanov", "TF-seq", "long", "promega", 
+                                            "TF-seq2", "TF-seq3", "promega2long", "promega2", ""),
+                                feature2 = 1:20)
   
     ## Do the same as above to create plot_activites, but now create a pheatmap instead of a ggplot
 
@@ -1337,9 +1307,9 @@ for (i in unique(cDNA_df_confidence2$tf)){
          pivot_longer(cols = c("promoter", "spacing", "background", "distance", "commercial_reporter_source"), 
                       names_to = "feature_name", values_to = "feature") %>%
     left_join(feature_colors2) %>%
-    dplyr::select(-color, -feature) %>%
+    dplyr::select(-feature) %>%
     distinct() %>%
-         pivot_wider(names_from = feature_name, values_from = feature_2) %>%
+         pivot_wider(names_from = feature_name, values_from = feature2) %>%
          column_to_rownames("reporter_id") %>%
         dplyr::select(promoter, "spacer length" = spacing,  "spacer seq" = background, distance, "published" = commercial_reporter_source) %>%
     distinct() %>%
@@ -1347,7 +1317,7 @@ for (i in unique(cDNA_df_confidence2$tf)){
     .[,y_order$reporter_id] %>%
     .[x_order2,]
   
-  breaks <- c(0:19)
+  breaks <- c(0:20)
   colors <- c("#B4B4B4","#231F20","#CCCCCC","#F3F3F3","#EFCABD","#E7A08B","#DD6C48","#999999","#F2F2F3",
               "#BFD0D9","#7D9EB2","black","black","black","black","black","black","black","black","white") 
   
@@ -1397,21 +1367,8 @@ for (i in names(plot_list_print)) {
 }
 dev.off()
 
-ggplot(cDNA_df_confidence2 %>%
-         distinct(tf, reporter_id, reporter_dif_minP, commercial_reporter) %>%
-         mutate(n_reporters = as.numeric(ave(reporter_id, tf, FUN = length))) %>%
-         filter(n_reporters > 10) %>%
-         mutate(dif_mean = ave(reporter_dif_minP, tf, FUN = mean)) %>%
-         filter(dif_mean != 0),
-       aes(x = reorder(tf, -dif_mean), y = reporter_dif_minP, shape = commercial_reporter)) +
-  geom_hline(yintercept = 0, lty = 2) +
-  geom_hline(yintercept = 1, lty = 1) +
-  geom_hline(yintercept = -1, lty = 1) +
-  geom_quasirandom(aes(color = ifelse(abs(reporter_dif_minP) > 1, "Yes", "No"))) +
-  scale_color_manual(values = c("Yes" = "black", "No" = "grey")) +
-  theme_pubr(x.text.angle = 90)
 
-
+## Plot number of reporters and confidence levels per TF
 ggplot(cDNA_df_confidence2 %>%
          distinct(tf, reporter_id, conf_level) %>%
          mutate(conf_level_sum = ave(conf_level, tf, FUN = sum)) %>% 
@@ -1426,6 +1383,7 @@ ggplot(cDNA_df_confidence2 %>%
   scale_fill_manual(values = c("0" = "#CCCCCB", "1" = "#EFCABE", "2" = "#E7A08B", "3" = "#DD6840", "4" = "#BF4A27")) +
   coord_flip()
 
+## Plot quality scores per TF
 ggplot(cDNA_df_confidence2 %>%
          filter(quality == "Sensitivity") %>%
          distinct(tf, reporter_id, conf_level, quality_score, commercial_reporter) %>%
@@ -1539,8 +1497,25 @@ ggplot(cDNA_df_plot %>%
 
 
 
-## Figure 4: Showcase how reporter activities change in different conditions
+## Figure 4: Showcase how reporter activities change upon perturbation
+
+Aim: Demonstrate perturbation responses and differences between reporter designs.
 ```{r}
+## Figure S4: Plot perturbation response of all TFs (only one chosen perturbation/TF)
+ggplot(cDNA_df_confidence2 %>%
+         distinct(tf, reporter_id, reporter_dif_minP, commercial_reporter) %>%
+         mutate(n_reporters = as.numeric(ave(reporter_id, tf, FUN = length))) %>%
+         filter(n_reporters > 10) %>%
+         mutate(dif_mean = ave(reporter_dif_minP, tf, FUN = mean)) %>%
+         filter(dif_mean != 0),
+       aes(x = reorder(tf, -dif_mean), y = reporter_dif_minP, shape = commercial_reporter)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_hline(yintercept = 1, lty = 1) +
+  geom_hline(yintercept = -1, lty = 1) +
+  geom_quasirandom(aes(color = ifelse(abs(reporter_dif_minP) > 1, "Yes", "No"))) +
+  scale_color_manual(values = c("Yes" = "grey20", "No" = "grey90")) +
+  theme_pubr(x.text.angle = 90, legend = "none")
+
 ## Showcase examples
 ### TF activation
 #### VDR
@@ -1894,6 +1869,26 @@ ggplot(cDNA_df %>%
   geom_vline(xintercept = 0) +
   xlim(-.75, 11) +
   ylim(-.75, 11) +
+  geom_point(size = 2.5, aes(color = promoter)) +
+  xlab("Activity (log2)") +
+  ylab(paste("Off-target effect (log2)")) +
+  theme_pubr(legend = "none") +
+  scale_color_manual(values = c("mCMV" = "black", "hBGm" = "grey50", "minP" = "grey80", "Random" = "grey90"))
+
+
+### CLOCK
+ggplot(cDNA_df %>% 
+         filter(str_detect(tf, "CLOCK"), condition %in% c("mES_2i_LIF", "mES_2i"), neg_ctrls == "No") %>%
+         distinct(reporter_id, commercial_reporter, spacing, condition, promoter, reporter_activity_minP) %>%
+         spread(key = "condition", value = "reporter_activity_minP"),
+       aes(x = log2(mES_2i_LIF),
+           y = log2(mES_2i), 
+           shape = commercial_reporter)) +
+  geom_abline(lty = 2) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  xlim(-.75, 3) +
+  ylim(-.75, 3) +
   geom_point(size = 2.5, aes(color = promoter)) +
   xlab("Activity (log2)") +
   ylab(paste("Off-target effect (log2)")) +

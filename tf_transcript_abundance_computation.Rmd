@@ -15,6 +15,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(edgeR)
 library (EDASeq)
+library(rtracklayer)
 
 ExonLength <- function(genes) {
   # Get the combined exon length for the genes
@@ -148,8 +149,6 @@ tf_rna$tf[tf_rna$tf == "PPARA"] <- "PPARA::RXRA"
 tf_rna$tf[tf_rna$tf == "PPARG"] <- "PPARG::RXRA"
 tf_rna$tf[tf_rna$tf == "SMAD2"] <- "SMAD2::SMAD3::SMAD4"
 tf_rna$tf[tf_rna$tf == "SMAD3"] <- "SMAD2::SMAD3::SMAD4"
-tf_rna$tf[tf_rna$tf == "SMAD4"] <- "SMAD2::SMAD3::SMAD4"
-tf_rna$tf[tf_rna$tf == "STAT1"] <- "STAT1::STAT2"
 tf_rna$tf[tf_rna$tf == "STAT2"] <- "STAT1::STAT2"
 tf_rna$tf[tf_rna$tf == "VDR"] <- "VDR::RXRA"
 
@@ -163,6 +162,14 @@ tf_rna <- rbind(tf_rna, tf_rna2)
 
 tf_rna2 <- tf_rna %>% filter(tf == "RARA")
 tf_rna2$tf[tf_rna2$tf == "RARA"] <- "RARA:RXRA"
+tf_rna <- rbind(tf_rna, tf_rna2)
+
+tf_rna2 <- tf_rna %>% filter(tf == "SMAD4")
+tf_rna2$tf[tf_rna2$tf == "SMAD4"] <- "SMAD2::SMAD3::SMAD4"
+tf_rna <- rbind(tf_rna, tf_rna2)
+
+tf_rna2 <- tf_rna %>% filter(tf == "STAT1")
+tf_rna2$tf[tf_rna2$tf == "STAT1"] <- "STAT1::STAT2"
 tf_rna <- rbind(tf_rna, tf_rna2)
 
 
