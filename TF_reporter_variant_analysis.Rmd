@@ -246,7 +246,9 @@ ref_conditions <- rbind(ref_conditions1, ref_conditions2) %>%
 ## Data frame with off-target activities
 off_target_activities <- cDNA_df2 %>% 
   filter(tf_target == 2) %>%
+  filter(tf != "SOX2" | (tf == "SOX2" & condition != "mES_POU2F1")) %>%
   mutate(effect_size = as.numeric(effect_size)) %>%
+  mutate(effect_size = ifelse(is.na(effect_size) == T, 0, effect_size)) %>%
   mutate(reporter_dif_mean = ave(reporter_dif_minP, tf, condition, FUN = function(x) median(x, na.rm = T))) %>% 
   mutate(reporter_dif_mean = ifelse(effect_size == 0, -reporter_dif_mean, reporter_dif_mean)) %>%
   ## For some TFs I have multiple off-target perturbations: keep strongest effect only
@@ -254,9 +256,8 @@ off_target_activities <- cDNA_df2 %>%
   arrange(desc(reporter_dif_mean)) %>% 
   top_n(1, wt = reporter_dif_mean) %>%
   ungroup() %>%
-  dplyr::select(reporter_id, tf, commercial_reporter, "off_target_activity" = reporter_dif_minP, condition) %>%
-  distinct() %>%
-  mutate(off_target_activity = ifelse(off_target_activity < 0, 0, off_target_activity))
+  dplyr::select(reporter_id, tf, commercial_reporter, "off_target_activity" = reporter_dif_minP, condition, effect_size) %>%
+  distinct()
 
 on_target_activities <- cDNA_df2 %>% 
   filter(tf_target == 1) %>%
@@ -268,7 +269,7 @@ on_target_activities <- cDNA_df2 %>%
   arrange(desc(reporter_dif_mean)) %>% 
   top_n(1, wt = reporter_dif_mean) %>%
   ungroup() %>%
-  dplyr::select(reporter_id, tf, commercial_reporter, reporter_dif_minP, condition) %>%
+  dplyr::select(reporter_id, tf, commercial_reporter, reporter_dif_minP, condition, effect_size) %>%
   distinct()
 ```
 
@@ -482,7 +483,8 @@ reasonable_corr <- rna_correlations_df %>%
   filter(reasonable == "No")
 
 ## Export correlations
-rna_correlations <- cDNA_df3 %>%
+rna_correlations <- rna_correlations_df %>%
+  filter(reasonable == "Yes") %>%
   distinct(reporter_id, cor_pval, cor) %>%
   mutate(cor_pval = ifelse(reporter_id %in% reasonable_corr$reporter_id, 0, cor_pval)) %>%
   mutate(cor = ifelse(reporter_id %in% reasonable_corr$reporter_id, 0, cor))
@@ -878,7 +880,7 @@ lm_pval_df <- lm_pval_df %>%
   mutate(pval_adj = p.adjust(pval, method = "fdr"))
 
 ## Plot p-values, randomized vs real data
-ggplot(lm_pval_df, aes(x = pval_adj, color = random)) +
+ggplot(lm_pval_df, aes(x = pval, color = random)) +
   geom_vline(xintercept = 0.05, linetype = "dashed") +
   geom_density() +
   theme_pubr(legend = "none") +
@@ -1201,13 +1203,17 @@ reference_activities <- cDNA_df %>%
 
 cDNA_df6 <- reference_activities %>%
   left_join(rna_correlations) %>%
-  left_join(off_target_activities %>% dplyr::select(reporter_id, tf, commercial_reporter, off_target_activity, "off_target_perturbation" = condition)) %>%
-  left_join(on_target_activities %>% dplyr::select(reporter_id, tf, commercial_reporter, reporter_dif_minP, "perturbation_condition" = condition)) %>%
-  mutate(reporter_dif_minP = ifelse(is.na(reporter_dif_minP), 0, reporter_dif_minP)) %>%
-  #mutate(cor_pval = base::pmax(rna_cor, prot_cor)) %>%
-  mutate(off_target_activity = ifelse(is.na(off_target_activity), 0, off_target_activity)) %>%
-  mutate(Sensitivity = abs(reporter_dif_minP) + reporter_activity_minP + cor_pval - abs(off_target_activity)) %>%
-  pivot_longer(cols = c("Sensitivity"), names_to = "quality", values_to = "quality_score") %>%
+  left_join(off_target_activities %>% dplyr::select(reporter_id, tf, commercial_reporter, off_target_activity, 
+                                                    "off_target_perturbation" = condition, effect_size)) %>%
+  mutate(off_target_activity = ifelse(effect_size == 1, -off_target_activity, off_target_activity)) %>%
+  mutate(off_target_activity = ifelse(off_target_activity > 0 & !is.na(off_target_activity), 0, off_target_activity)) %>%
+  dplyr::select(-effect_size) %>%
+  left_join(on_target_activities %>% dplyr::select(reporter_id, tf, commercial_reporter, reporter_dif_minP, 
+                                                   "perturbation_condition" = condition, effect_size)) %>%
+  mutate(reporter_dif_minP = ifelse(effect_size == 0, -reporter_dif_minP, reporter_dif_minP)) %>%
+  dplyr::select(-effect_size) %>%
+  rowwise() %>%
+  mutate(quality_score = sum(c_across(c("reporter_dif_minP", "reporter_activity_minP", "cor_pval", "off_target_activity")), na.rm = T)) %>%
   mutate(quality_score = ifelse(quality_score < 0, 0, quality_score))
 
 lm_pval <- cDNA_df_TF4 %>%
@@ -1230,11 +1236,12 @@ cDNA_df_confidence2 <- cDNA_df6 %>%
                                (commercial_reporter == "No" & n_active > 12 & reporter_activity_minP > 1) |
                                (commercial_reporter == "Yes" & reporter_activity_minP > 1), 1, 0)) %>% 
   ## Add a level if reporter activity follows transcript/protein levels
-  mutate(conf_level = ifelse(cor_pval > 1, conf_level + 1, conf_level)) %>% 
+  mutate(conf_level = ifelse(cor_pval > 1 & !is.na(cor_pval), conf_level + 1, conf_level)) %>% 
   ## Add a level if TF perturbation leads to change in activity
-  mutate(conf_level = ifelse(abs(reporter_dif_minP) > 1, conf_level + 2, conf_level)) %>% 
+  mutate(conf_level = ifelse(reporter_dif_minP > 1 & !is.na(reporter_dif_minP), conf_level + 2, conf_level)) %>% 
   ## Subtract a level if substantial off-target response
-  mutate(conf_level = ifelse(conf_level >= 1 & off_target_activity < -1, conf_level - 1, conf_level))
+  mutate(conf_level = ifelse(conf_level >= 1 & off_target_activity < -1 & !is.na(off_target_activity), conf_level - 1, conf_level))
+  
 
 reporter_features <- cDNA_df %>%
   distinct(promoter, spacing, distance, background, tf, reporter_id)
@@ -1242,9 +1249,8 @@ reporter_features <- cDNA_df %>%
 plot_list_print <- list()
 for (i in unique(cDNA_df_confidence2$tf)){
   
-  
+  ## Generate a data frame with all reporters for a given TF
   cDNA_df_confidence_example <- cDNA_df_confidence2 %>%
-    filter(quality == "Sensitivity") %>%
     filter(tf == i) %>%
     distinct(reporter_id, cor_pval, reporter_dif_minP, reporter_activity_minP, off_target_activity, 
              quality_score, conf_level, pval_adj, commercial_reporter, perturbation_condition, off_target_perturbation,
@@ -1253,20 +1259,58 @@ for (i in unique(cDNA_df_confidence2$tf)){
   ## Only do this for TFs with at least 10 reporters
   if (nrow(cDNA_df_confidence_example) > 10) {
     
-    ## Order reporters by confidence level and quality score
-  
-  x_order <- c("off_target_activity", "reporter_dif_minP", "cor_pval", "reporter_activity_minP")
+  ## Order reporters by confidence level and quality score
   y_order <- cDNA_df_confidence_example %>%
     ## sort by confidence level and then by quality score
-    arrange(desc(conf_level), desc(quality_score)) %>%
+    arrange(desc(conf_level), 
+            desc(quality_score)) %>%
     distinct(reporter_id)
-
   
-  ## Do the same as above to create plot_activites, but now create a pheatmap instead of a ggplot
+  ## Plot the confidence levels of each reporter on top
+  confidence_colors <- c(`0` = "#CCCCCB", `1` = "#EFCABE", `2` = "#E7A08B", `3` = "#DD6840", `4` = "#BF4A27")
+    
+  plot_scores2 <- cDNA_df_confidence_example %>%
+    distinct(reporter_id, conf_level) %>%
+    column_to_rownames("reporter_id")
+  
+  plot_scores3 <- plot_scores2 %>%
+    as.matrix() %>%
+    t() %>%
+    .[,y_order$reporter_id] %>%
+    as.matrix() %>%
+    t()
+
+  n_conf_levels <- length(unique(cDNA_df_confidence_example$conf_level))
+  
+  rownames(plot_scores3) <- "Confidence level"
+  
+  plot_1 <- pheatmap(plot_scores3, cluster_rows = F, cluster_cols = T, show_rownames = F, show_colnames = F, 
+                  breaks = c(-1, 0, 1, 2, 3), color = confidence_colors, clustering_method = "ward.D2",
+                  legend = F, cellwidth = 10, cellheight = 10, 
+                  fontsize = 10, cutree_cols = n_conf_levels, treeheight_col = 0)
+  
+  # Extract hierarchical clustering from plot_scores3
+  hc <- plot_1[["tree_col"]]
+  
+  hc$order <- 1:ncol(plot_scores3)
+
+  plot_1 <- pheatmap(plot_scores3, cluster_rows = F, cluster_cols = hc, show_rownames = F, show_colnames = F, 
+                  breaks = c(-1, 0, 1, 2, 3), color = confidence_colors, clustering_method = "ward.D2",
+                  legend = F, cellwidth = 10, cellheight = 10, 
+                  fontsize = 10, cutree_cols = n_conf_levels, treeheight_col = 0, border_color = "black")
+  
+  hc <- plot_1[["tree_col"]]
+  
+  ## Plot the actual scores underlying the confidence levels underneath
+  
+  x_order <- c("Reporter activity", "TPM correlation", "Perturbation FC", "Off-target activity")
+  
   plot_activities2 <- cDNA_df_confidence_example %>%
          dplyr::select(-conf_level, -quality_score, -commercial_reporter, -off_target_perturbation, -perturbation_condition,
-                       -condition, -tf) %>%
-         pivot_longer(cols = c("reporter_activity_minP", "cor_pval", "reporter_dif_minP", "off_target_activity", "pval_adj"), 
+                       -condition, -tf, reporter_id, "Reporter activity" = reporter_activity_minP,
+                       "TPM correlation" = cor_pval, "Off-target activity" = off_target_activity, "Perturbation FC" = reporter_dif_minP,
+                       pval_adj) %>%
+         pivot_longer(cols = -reporter_id, 
                       names_to = "feature", values_to = "score") %>%
          filter(feature != "pval_adj") %>%
          pivot_wider(names_from = feature, values_from = score) %>%
@@ -1274,21 +1318,22 @@ for (i in unique(cDNA_df_confidence2$tf)){
     t() %>%
     .[,y_order$reporter_id] %>%
     .[x_order,]
-  
-  plot_2 <- pheatmap(plot_activities2, cluster_rows = F, cluster_cols = F, show_rownames = F, show_colnames = F, 
-                  color = colorRampPalette(c("#2166AC", "white", "#DD6940"))(100), breaks = seq(-2, 4, length.out = 100), 
+
+  plot_2 <- pheatmap(plot_activities2, cluster_rows = F, cluster_cols = hc, show_rownames = F, show_colnames = F, 
+                  color = colorRampPalette(c("#2166AC", "white", "#DD6940"))(100), 
+                  breaks = c(seq(-2, 0, length.out=ceiling(100/2) + 1), seq(4/100, 4, length.out=floor(100/2))), 
                   legend_breaks = seq(-2, 4, length.out = 100), legend = F, cellwidth = 10, cellheight = 10, 
-                  fontsize = 10, border_color = NA, border_width = 0, display_numbers = F)
+                  fontsize = 10, treeheight_col = 0, cutree_cols = n_conf_levels, border_color = "black")
   
-  x_order2 <- c("promoter", "spacer length", "spacer seq", "distance", "published")
+  ## Now plot the features of the reporters at the bottom
+  
+  x_order2 <- c("Promoter", "Spacer length", "Spacer sequence", "Distance", "Published/synthetic")
   reporter_features$distance[reporter_features$distance == "10bp"] <- "10bps"
   
   feature_colors2 <- data.frame(feature = c("hBGm", "mCMV", "minP", "Random", "1", "2", "3", "21bp", "10bps",
-                                            "10bp", "5bp", "romanov", "TF-seq", "long", "promega", 
+                                            "5bp", "10bp", "romanov", "TF-seq", "long", "promega", 
                                             "TF-seq2", "TF-seq3", "promega2long", "promega2", ""),
                                 feature2 = 1:20)
-  
-    ## Do the same as above to create plot_activites, but now create a pheatmap instead of a ggplot
 
   plot_features2 <- cDNA_df_confidence_example %>%
          left_join(reporter_features %>%  
@@ -1311,7 +1356,8 @@ for (i in unique(cDNA_df_confidence2$tf)){
     distinct() %>%
          pivot_wider(names_from = feature_name, values_from = feature2) %>%
          column_to_rownames("reporter_id") %>%
-        dplyr::select(promoter, "spacer length" = spacing,  "spacer seq" = background, distance, "published" = commercial_reporter_source) %>%
+        dplyr::select("Promoter" = promoter, "Spacer length" = spacing,  "Spacer sequence" = background, 
+                      "Distance" = distance, "Published/synthetic" = commercial_reporter_source) %>%
     distinct() %>%
     t() %>%
     .[,y_order$reporter_id] %>%
@@ -1321,31 +1367,26 @@ for (i in unique(cDNA_df_confidence2$tf)){
   colors <- c("#B4B4B4","#231F20","#CCCCCC","#F3F3F3","#EFCABD","#E7A08B","#DD6C48","#999999","#F2F2F3",
               "#BFD0D9","#7D9EB2","black","black","black","black","black","black","black","black","white") 
   
-  plot_3 <- pheatmap(plot_features2, cluster_rows = F, cluster_cols = F, show_rownames = T, show_colnames = F, 
+  plot_3 <- pheatmap(plot_features2, cluster_rows = F, cluster_cols = hc, show_rownames = F, show_colnames = F, 
                   color = colors, legend = F, cellwidth = 10, cellheight = 10, breaks = breaks,
-                  fontsize = 10, border_color = NA, border_width = 0, display_numbers = F, na_col = "white")
+                  fontsize = 10, treeheight_col = 0, cutree_cols = n_conf_levels, na_col = "white", border_color = "black")
 
-  confidence_colors <- c(`0` = "#CCCCCB", `1` = "#EFCABE", `2` = "#E7A08B", `3` = "#DD6840", `4` = "#BF4A27")
   
-  ## Do the same as above to create plot_scores, but now create a pheatmap instead of a ggplot
-  plot_scores2 <- cDNA_df_confidence_example %>%
-    distinct(reporter_id, conf_level) %>%
-    column_to_rownames("reporter_id") %>%
-    as.matrix() %>%
-    t() %>%
-    .[,y_order$reporter_id] %>%
-    as.matrix() %>%
-    t()
+  ## Add some labeling at the very top
   
-  plot_1 <- pheatmap(plot_scores2, cluster_rows = F, cluster_cols = F, show_rownames = F, show_colnames = F, 
-                  breaks = c(0, 1, 2, 3, 4), color = confidence_colors, 
-                  legend = F, cellwidth = 10, cellheight = 10, 
-                  fontsize = 10, border_color = NA, border_width = 0,
-             ## Include header indicating the tf, the perturbation, and the cell type
-             main = paste("TF = ", unique(cDNA_df_confidence_example$tf), "\n",
-                          "Perturbation Condition = ", unique(cDNA_df_confidence_example$perturbation_condition), "\n",
-                          "Off target perturbation condition = ", unique(cDNA_df_confidence_example$off_target_perturbation), "\n",
-                          "Cell type = ", unique(cDNA_df_confidence_example$condition), "\n"))
+  cDNA_df_confidence_example <- cDNA_df_confidence_example %>%
+    mutate(condition2 = gsub("_.*", "", condition))
+  
+  title <- grid.text(
+  label = paste("TF = ", unique(cDNA_df_confidence_example$tf), "\n",
+                "Perturbation Condition = ", unique(cDNA_df_confidence_example$perturbation_condition), "\n",
+                "Off target perturbation condition = ", unique(cDNA_df_confidence_example$off_target_perturbation), "\n",
+                "Cell type = ", unique(cDNA_df_confidence_example$condition2), "\n"),
+  x = 0.5,
+  y = 0.97,
+  just = "top",
+  gp = gpar(fontsize = 10)
+)
   
   
   ## Combine the three pheatmaps into one plot
@@ -1354,13 +1395,14 @@ for (i in unique(cDNA_df_confidence2$tf)){
   plot_list[[2]] <- plot_2[[4]]
   plot_list[[3]] <- plot_3[[4]]
   
-  ## Create a grid with the three plots
-  plot_list_print[[i]] <- grid.arrange(arrangeGrob(grobs= plot_list,ncol=1), heights=c(2, 1, 1))
+  ## Create a list that contains all grids
+  plot_list_print[[i]] <- grid.arrange(title, arrangeGrob(grobs = plot_list, ncol=1), heights=c(1, 3, .5, .5))
   
   }
 }
 
-pdf("figures/quality_scores.pdf", width = 8.3, height = 11.7)
+# Generate a pdf that contains all the plots
+pdf("figures/quality_scores.pdf", width = 8.3, height = 3.9)
 for (i in names(plot_list_print)) {
   grid.newpage()
   grid.draw(plot_list_print[[i]])
@@ -1377,15 +1419,13 @@ ggplot(cDNA_df_confidence2 %>%
          mutate(average_level = conf_level_sum / n_reporters) %>%
          mutate(conf_level = factor(conf_level, levels = c("4", "3", "2", "1", "0"))) %>% 
          na.omit(),
-       aes(x = reorder(tf, average_level), fill = conf_level)) +
+       aes(x = reorder(tf, -average_level), fill = conf_level)) +
   geom_bar(stat = "count", position = "stack") +
-  theme_pubr() + 
-  scale_fill_manual(values = c("0" = "#CCCCCB", "1" = "#EFCABE", "2" = "#E7A08B", "3" = "#DD6840", "4" = "#BF4A27")) +
-  coord_flip()
+  theme_pubr(x.text.angle = 90) + 
+  scale_fill_manual(values = c("0" = "#CCCCCB", "1" = "#EFCABE", "2" = "#E7A08B", "3" = "#DD6840", "4" = "#BF4A27"))
 
 ## Plot quality scores per TF
 ggplot(cDNA_df_confidence2 %>%
-         filter(quality == "Sensitivity") %>%
          distinct(tf, reporter_id, conf_level, quality_score, commercial_reporter) %>%
          mutate(conf_level_sum = ave(conf_level, tf, FUN = sum)) %>% 
          mutate(n_reporters = as.numeric(ave(reporter_id, tf, FUN = length))) %>%
@@ -1502,8 +1542,15 @@ ggplot(cDNA_df_plot %>%
 Aim: Demonstrate perturbation responses and differences between reporter designs.
 ```{r}
 ## Figure S4: Plot perturbation response of all TFs (only one chosen perturbation/TF)
+effect_sizes <- rbind(off_target_activities %>% distinct(condition, effect_size), 
+                      on_target_activities %>% distinct(condition, effect_size)) %>%
+  mutate(effect_size = ifelse(is.na(effect_size), 0, effect_size)) %>%
+  dplyr::select("perturbation_condition" = condition, effect_size)
+
 ggplot(cDNA_df_confidence2 %>%
-         distinct(tf, reporter_id, reporter_dif_minP, commercial_reporter) %>%
+         distinct(tf, reporter_id, reporter_dif_minP, commercial_reporter, perturbation_condition) %>%
+         left_join(effect_sizes) %>%
+         mutate(reporter_dif_minP = ifelse(effect_size == 0, -reporter_dif_minP, reporter_dif_minP)) %>%
          mutate(n_reporters = as.numeric(ave(reporter_id, tf, FUN = length))) %>%
          filter(n_reporters > 10) %>%
          mutate(dif_mean = ave(reporter_dif_minP, tf, FUN = mean)) %>%
@@ -1913,7 +1960,7 @@ bad_tfs <- cDNA_df_confidence2 %>%
   distinct(tf)
 
 commercial_ranking <- cDNA_df_confidence2 %>%
-  filter(quality == "Sensitivity", tf %in% bad_tfs$tf) %>%
+  filter(tf %in% bad_tfs$tf) %>%
   group_by(tf) %>%
   arrange(conf_level, quality_score) %>%
   mutate(rank = row_number()) %>%
@@ -1938,7 +1985,6 @@ ggplot(commercial_ranking %>%
 
 ## Plot overview figure of commercial vs. synthetic reporters (only best reporter per TF)
 commercial_ranking <- cDNA_df_confidence2 %>%
-  filter(quality == "Sensitivity") %>%
   group_by(tf) %>%
   arrange(conf_level, quality_score) %>%
   mutate(rank = row_number()) %>%
@@ -2003,7 +2049,6 @@ ggplot(commercial_ranking_best %>%
 
 ### TFs with only published
 commercial_ranking2 <- cDNA_df_confidence2 %>%
-  filter(quality == "Sensitivity") %>%
   group_by(tf) %>%
   arrange(conf_level, quality_score) %>%
   mutate(rank = row_number()) %>%
