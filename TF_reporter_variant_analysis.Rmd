@@ -626,6 +626,68 @@ ggplot(rna_correlations_df %>%
 
 ---
 
+## Correlation with other TFs
+```{r}
+cDNA_df3 <- cDNA_df2 %>%
+  dplyr::select(-tf) %>%
+  merge(tf_rna %>% filter(tf %in% unique(cDNA_df2$tf))) %>%
+  mutate(TPM = ifelse(is.na(TPM), 0, TPM)) %>%
+  mutate(nTPM = ifelse(is.na(nTPM), 0, nTPM)) %>%
+  mutate(log_nTPM = log2(nTPM + 0.01)) %>%
+  mutate(range_TPM = quantile(log_nTPM, probs = 0.95) - quantile(log_nTPM, probs = 0.05)) %>%
+  mutate(range_activity = quantile(reporter_activity_minP, probs = 0.95) - quantile(reporter_activity_minP, probs = 0.05)) %>%
+  mutate(dif_range = range_TPM / range_activity) %>%
+  mutate(log_nTPM = log_nTPM / dif_range) %>%
+  dplyr::select(-range_TPM, -range_activity, -dif_range)
+
+## Compute pearson correlations for each individual reporter of reporter activity vs. nTPM counts across the nine cell types
+for (i in unique(cDNA_df3$reporter_id)) {
+  
+  for (j in unique(cDNA_df3$tf)) {
+  
+    if (nrow(cDNA_df3[cDNA_df3$reporter_id == i,]) > 4) {
+      
+      print(j)
+      
+      cDNA_df3$cor_pval[cDNA_df3$reporter_id == i & cDNA_df3$tf == j] <- cor.test(2^cDNA_df3$reporter_activity_minP[cDNA_df3$reporter_id == i & cDNA_df3$tf == j],
+                                                                    cDNA_df3$nTPM[cDNA_df3$reporter_id == i & cDNA_df3$tf == j], method = "pearson", exact = F)$p.value
+    
+      cDNA_df3$cor[cDNA_df3$reporter_id == i & cDNA_df3$tf == j] <- cor(2^cDNA_df3$reporter_activity_minP[cDNA_df3$reporter_id == i & cDNA_df3$tf == j], 
+                                                 cDNA_df3$nTPM[cDNA_df3$reporter_id == i & cDNA_df3$tf == j], method = "pearson")
+      }
+    
+    else {
+      cDNA_df3$cor_pval[cDNA_df3$reporter_id == i] <- 1
+      cDNA_df3$cor[cDNA_df3$reporter_id == i] <- 0
+    }
+  }
+}
+
+cDNA_df_cor <- cDNA_df3 %>%
+  distinct(reporter_id, tf, cor) %>%
+  spread(key = "tf", value = "cor") %>%
+  mutate(tf = gsub("_.*", "", reporter_id))
+
+for (i in unique(cDNA_df_cor$tf)) {
+  
+  cDNA_df_cor_i <- cDNA_df_cor %>%
+    filter(tf == i) %>%
+    dplyr::select(-tf) %>%
+    column_to_rownames("reporter_id")
+  
+  p <- pheatmap(cDNA_df_cor_i, 
+                show_rownames = F,
+                main = i, cellwidth = 8, 
+                cellheight = 8,  
+                color = colorRampPalette(c("blue", "white", "red"))(100))
+  
+  print(p)
+}
+
+```
+
+---
+
 ## Add proteomics data
 
 Aim: Similar to before: does reporter activity correlate with protein abundance across cell types?
@@ -1524,7 +1586,7 @@ ggplot(cDNA_df_plot %>%
 
 Aim: Demonstrate perturbation responses and differences between reporter designs.
 ```{r}
-## Figure S4: Plot perturbation response of all TFs (only one chosen perturbation/TF)
+## Figure S4E: Plot perturbation response of all TFs (only one chosen perturbation/TF)
 effect_sizes <- rbind(off_target_activities %>% distinct(condition, effect_size), 
                       on_target_activities %>% distinct(condition, effect_size)) %>%
   mutate(effect_size = ifelse(is.na(effect_size), 0, effect_size)) %>%
@@ -1539,6 +1601,22 @@ ggplot(cDNA_df_confidence2 %>%
          mutate(dif_mean = ave(reporter_dif_minP, tf, FUN = mean)) %>%
          filter(dif_mean != 0),
        aes(x = reorder(tf, -dif_mean), y = reporter_dif_minP, shape = commercial_reporter)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_hline(yintercept = 1, lty = 1) +
+  geom_hline(yintercept = -1, lty = 1) +
+  geom_quasirandom(aes(color = ifelse(abs(reporter_dif_minP) > 1, "Yes", "No"))) +
+  scale_color_manual(values = c("Yes" = "grey20", "No" = "grey90")) +
+  theme_pubr(x.text.angle = 90, legend = "none")
+
+## Figure S4F: Plot perturbation response of VDR reporters to all perturbations
+ggplot(cDNA_df %>%
+         filter(tf == "NR1H4::RXRA", stimulation != "no") %>%
+         distinct(tf, reporter_id, reporter_dif_minP, commercial_reporter, condition) %>%
+         left_join(effect_sizes %>% dplyr::select("condition" = perturbation_condition, effect_size)) %>%
+         drop_na(effect_size) %>%
+         mutate(reporter_dif_minP = ifelse(effect_size == 0, -reporter_dif_minP, reporter_dif_minP)) %>%
+         mutate(dif_mean = ave(reporter_dif_minP, tf, condition, FUN = function(x) mean(x, na.rm = T))),
+       aes(x = reorder(condition, -dif_mean), y = reporter_dif_minP, shape = commercial_reporter)) +
   geom_hline(yintercept = 0, lty = 2) +
   geom_hline(yintercept = 1, lty = 1) +
   geom_hline(yintercept = -1, lty = 1) +
@@ -1864,8 +1942,9 @@ ggplot(grhl1_tfcp2l1,
        aes(x = mES_TFCP2L1, y = mES_GRHL1)) +
   geom_hline(yintercept = 0) +
   geom_vline(xintercept = 0) +
-  geom_point(aes(color = spacing), size = 2.5) +
+  geom_point(aes(color = spacing, shape = as.factor(background)), size = 2.5) +
   theme_pubr() +
+  theme(aspect.ratio = 1) +
   facet_wrap(~tf) +
   scale_color_manual(values = c("#7C9EB2", "#BFD0D9"))
 
