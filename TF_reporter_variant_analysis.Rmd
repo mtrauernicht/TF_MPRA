@@ -179,7 +179,7 @@ ggplot_custom <- function(...) ggplot2::ggplot(...) +
 
 ```{r out.width= "80%", fig.align= "center"}
 # Import processed bc counts from the preprocessing step
-cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7124_stimulations/results/mt20240124_reporter_activity_filt_combined.csv", header = T)
+cDNA_df <- read.csv("/Users/m.trauernicht/root/usr/m.trauernicht/projects/SuRE-TF/data/gcf7124_stimulations/results/mt20240124_reporter_activity_filt_combined.csv", header = T)
 
 ## We are not going to use NIH3T3 data, so remove it for now
 cDNA_df <- cDNA_df %>%
@@ -189,7 +189,7 @@ cDNA_df <- cDNA_df %>%
 cDNA_df$stimulation[is.na(cDNA_df$stimulation)] <- "no"
 
 # Load RNA-seq data
-tf_rna <- read_tsv("/DATA/usr/m.trauernicht/data/RNA_seq/rna_tpm_all_tfs.tsv")
+tf_rna <- read_tsv("/Users/m.trauernicht/root/usr/m.trauernicht/data/RNA_seq/rna_tpm_all_tfs.tsv")
 
 ## Prepare data frame for following analyses
 cDNA_df2 <- cDNA_df %>%
@@ -692,7 +692,7 @@ for (i in unique(cDNA_df_cor$tf)) {
 
 Aim: Similar to before: does reporter activity correlate with protein abundance across cell types?
 ```{r, warning=F}
-# proteomics_df_long <- read_tsv("/DATA/usr/m.trauernicht/data/RNA_seq/protein_abundance_all_tfs.tsv")
+# proteomics_df_long <- read_tsv("/Users/m.trauernicht/root/usr/m.trauernicht/data/RNA_seq/protein_abundance_all_tfs.tsv")
 # 
 # ## Combine TF reporter data with RNA-seq data
 # cDNA_df3 <- merge(cDNA_df2, proteomics_df_long, all = T) %>%
@@ -1105,7 +1105,7 @@ ggplot() +
 
 
 ## Investigate hits with strong impact on spacer length
-tf_properties <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/tf_binding_characterization.csv")
+tf_properties <- read_csv2("/Users/m.trauernicht/root/usr/m.trauernicht/projects/SuRE-TF/data/tf_binding_characterization.csv")
 
 weight_spacing <- weight %>%
   filter(tf %in% chosen_conditions$tf_condition) %>%
@@ -2446,7 +2446,7 @@ Looks interesting, but I wouldn't know what to focus on.
 
 ```{r}
 # Load RNA-seq data
-KD_tf_changes <- read_csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gene_counts_tpm_KD.csv") %>%
+KD_tf_changes <- read_csv("/Users/m.trauernicht/root/usr/m.trauernicht/projects/SuRE-TF/data/gene_counts_tpm_KD.csv") %>%
   dplyr::select(condition, "tf" = external_gene_id, TPM_fc_mean) %>%
   distinct() %>%
   mutate(tf = ifelse(tf == "AHR", "AHR::ARNT", tf)) %>%
@@ -3202,7 +3202,7 @@ ggraph(routes_igraph, layout = "stress") +
 ## Compare changes in reporter activity upon SOX2 degradation to changes in TF abundance
 ```{r}
 # Load degron TT-seq data
-sox2_degr <- readRDS("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/DE_SOX2_degron.rds")
+sox2_degr <- readRDS("/Users/m.trauernicht/root/usr/m.trauernicht/projects/SuRE-TF/data/DE_SOX2_degron.rds")
 
 # extract genes
 genes_sox2 <- as.data.frame(sox2_degr$rowRanges@elementMetadata)
