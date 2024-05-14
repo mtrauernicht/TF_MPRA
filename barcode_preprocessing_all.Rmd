@@ -205,7 +205,7 @@ hline <- function(y = 0, color = "black") {
 
 ```{r data import, out.width= "80%", fig.align= "center",  warning= FALSE, message=FALSE}
 # Load metadata file that contains all required information about the sequenced samples
-metadata_df <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20240123_metadata_all.csv") %>%
+metadata_df <- read_csv2("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/mt20240305_metadata_all.csv") %>%
   filter(!condition %in% c("K562", "K562_T3") | (condition %in% c("K562", "K562_T3") & gcf == "gcf7264")) ## Remove old K562 data (noisy)
 
 # Load in barcode counts
@@ -746,8 +746,8 @@ bc_df_pert_dif_long <- bc_df_pert %>%
   mutate(dif_mean = ave(activity_dif, tf, unique_sample, FUN = function(x) mean(x, na.rm = T))) %>%
   mutate(tf_target = as.numeric(str_detect(target, paste0("\\b", tf, "\\b")))) %>%
   mutate(tf_target2 = as.numeric(str_detect(off_target, paste0("\\b", tf, "\\b")))) %>%
-  mutate(tf_target = replace_na(tf_target, 0)) %>%
-  mutate(tf_target2 = replace_na(tf_target2, 0)) %>%
+  mutate(tf_target = tidyr::replace_na(tf_target, 0)) %>%
+  mutate(tf_target2 = tidyr::replace_na(tf_target2, 0)) %>%
   mutate(tf_target = ifelse(tf_target2 == 1, 2, tf_target)) %>%
   mutate(tf_target = ifelse((tf == "SOX2" & condition %in% c("mES_POU5F1", "mES_Pou5f1_AID")), 0, tf_target)) %>%
   mutate(tf_target = ifelse((tf == "POU5F1" & condition %in% c("mES_SOX2", "mES_Sox2_AID")), 0, tf_target)) %>%

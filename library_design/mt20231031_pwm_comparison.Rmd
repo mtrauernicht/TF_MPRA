@@ -100,12 +100,14 @@ gen2_motifs <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_d
 # Combine all motifs
 all_motifs <- rbind(lambert_all_motifs, gen1_motifs, gen2_motifs) %>%
   distinct() %>%
+  mutate(motif_id = ifelse(tf == "SOX9", "M06107_1.94d.txt", motif_id)) %>%
+  mutate(motif_id = ifelse(tf == "SOX2", "M06121_1.94d.txt", motif_id)) %>%
   mutate(selected = ifelse(motif_id %in% gen1_motifs$motif_id | motif_id %in% gen2_motifs$motif_id, "Yes", "No")) %>%
   filter(!motif_id %in% c("M10257_1.94d.txt", "M10277_1.94d.txt", "M10282_1.94d.txt", "M10303_1.94d.txt", 
                           "M00897_1.94d.txt", "M08847_1.94d.txt", "M01568_1.94d.txt", "M01343_1.94d.txt",
                           "M01775_1.94d.txt", "M01230_1.94d.txt", "M00877_1.94d.txt", "M01240_1.94d.txt",
                           "M01025_1.94d.txt", "M01278_1.94d.txt", "M01428_1.94d.txt", "M00497_1.94d.txt",
-                          "M02157_1.94d.txt"))
+                          "M02157_1.94d.txt")) 
 ```
 
 
@@ -154,6 +156,8 @@ for (i in names(seq_logos)) {
   seq_logos_motif[[i]]@name <- i
 }
 
+saveRDS(seq_logos, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/seq_logos.rds")
+
 
 # ## Alternative motif collection
 # motifs <- convert_motifs(MotifDb)
@@ -175,7 +179,10 @@ set.seed(35425)
 motif_cor <- motif_sim %>%
   replace(is.na(.), 0)
 
-motifs_selected <- rbind(gen1_motifs, gen2_motifs)
+motifs_selected <- rbind(gen1_motifs, gen2_motifs) %>%
+  mutate(motif_id = ifelse(tf == "SOX9", "M06107_1.94d.txt", motif_id)) %>%
+  mutate(motif_id = ifelse(tf == "SOX2", "M06121_1.94d.txt", motif_id))
+saveRDS(motifs_selected, "/DATA/usr/m.trauernicht/projects/SuRE-TF/data/library_design/lambert_2018/motifs_selected.rds")
 
 tf_umap <- umap(motif_cor) 
 colnames(tf_umap$layout) <- c("A","B") 
@@ -184,7 +191,7 @@ tf_umap_plot <- tf_umap$layout %>%
   rownames_to_column(var = "motif_id") %>% 
   left_join(all_motifs) %>%
   left_join(tf_clusters) %>%
-  left_join(lambert_clusters) %>%
+  #left_join(lambert_clusters) %>%
   mutate(selected = ifelse(tf %in% motifs_selected$tf, "Yes", "No")) %>%
   mutate(cluster2 = ifelse(cluster <= 10, cluster, ">10")) %>%
   mutate(family2 = ifelse(family %in% c("bHLH", "bZIP", "Ets", "Forkhead", "GATA", "Homeodomain", "Nuclear receptor",
@@ -268,6 +275,17 @@ ggplot(motif_similarity_df_selected,
   theme_pubr(x.text.angle = 90, border = T) +
   scale_fill_gradient2(low = "white", high = "#E17B5C", midpoint = 0.4)
 ```
+
+
+## Scan designed reproter library - compare motif counts per reporter of synthetic vs. published reporters
+Aim: Show that the designed reporters have less secondary TFBSs.
+
+```{r}
+## Load reporter library sequences
+
+## 
+```
+
 
 
 # Session Info
