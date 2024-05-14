@@ -37,6 +37,7 @@ The cells were grown in these condition for 24h after transfection before RNA is
 **Repository guide:**
 - barcode_preprocessing.Rmd contains all quality checks and reporter activity computation steps
 - TF_reporter_variant_analysis.Rmd contains all further analyses and generation of figures
+- py_analysis folder contains jupyter notebook versions of TF_reporter_variant_analysis.Rmd that were used to generate some figures
 - library_design folder contains all code used to generate the TF reporter sequences and an analysis of the selected motifs
 - tf_transcript_abundance_computation.Rmd contains code to compute the transcript abundances (from RNA-seq) of all TFs in all cell types
 - raw_data_analysis folder contains the scripts that were used to generate barcode counts from the raw sequencing files
