@@ -22,29 +22,16 @@ output:
 ---
 
 ### Aim
-~36,000 reporters for 86 TFs were transfected into 9 different cell types + treated with ~90 different siRNAs or various signaling molecules. In this script I will analyze TF reporter activities in detail and review how individual reporters respond to TF concentration variations.
+~36,000 reporters for 86 TFs were transfected into 9 different cell types + tested across ~100 perturbation conditions. In this script I will analyze TF reporter activities in detail and review how individual reporters respond to TF concentration variations.
 
 
 ### Description of input data
-- library = with which library was this sample transfected (1, 2, or 1+2)
-- nchar = barcode length (12 for library 1, 13 for library 2)
 - commercial_reporter = positive control reporter sequence from commercial source
 - neg_ctrls = reporter with mutated TF binding sites?
 - hPGK = positive control, chunk from hPGK promoter (only in lib 1)
 - native_enhancer = genomic mES enhancer sequence chunks from Miguels libraries (only lib 1)
-- activity = rpm + pseudocount cDNA / rpm + pseudocount pDNA
-- mean_activity_sample = mean of activity per unique reporter per sample (individually per replicate)
-- reporter_activity = mean activity per unique reporter per condition (mean of replicates)
-- minP_activity = activity relative to mean of minimal promoter only reporters of that sample
-- mean_activity_sample_minP = mean of minP_activity per unique reporter 
-- reporter_activity_minP = mean of mean_activity_sample_minP per condition
-- nfya_activity = activity relative to mean of nfya reporters (constitutive positive control) of that sample
-- mean_activity_sample_nfya = mean of nfya_activity per unique reporter 
-- reporter_activity_nfya = mean of mean_activity_sample_nfya per condition
-- mean_activity_sample_neg = mean_activity_sample relative to its paired negative control (identical reporter with mutated binding sites)
-- reporter_activity_neg = mean of mean_activity_sample_neg per condition
-- pval_minP = p-value of t-test comparing activity distributions of individual reporters with the distribution of minimal promoter only reporters within the same condition
-- pval_neg = p-value of t-test comparing activity distributions of individual reporters with the distribution of the activities of its paired negative controls within the same condition
+- reporter_activity_minP = mean activity relative to median of negative control reporters (per core promoter)
+- reporter_activity_neg = mean activity relative to its paired negative control (identical reporter with mutated binding sites)
 
 ---
 
@@ -302,7 +289,7 @@ ggplot(cDNA_df2 %>%
   theme_pubr(border = T)
 
 
-## Figure S1G: Compare TF reporters to native enhancer controls
+## Figure S1F: Compare TF reporters to native enhancer controls
 native_activities <- cDNA_df %>%
   filter(condition == "mES_2i_LIF", neg_ctrls == "No") %>%
   distinct(reporter_id, tf, reporter_activity_minP, condition) %>%
@@ -316,7 +303,7 @@ ggplot(native_activities,
   stat_summary(fun = median, fun.min = median, fun.max = median, geom = "crossbar", color = "red", width = 0.25, lwd = 0.4) +
   theme_pubr()
 
-## Figure S2A: Median TF activities in all 9 cell types
+## Figure S2: Median TF activities in all 9 cell types
 tf_activities_median <- cDNA_df %>%
   filter(stimulation == "no",
          neg_ctrls == "No",
@@ -508,7 +495,7 @@ rna_correlations_rem <- rna_correlations_df %>%
   mutate(n_tf = as.numeric(ave(tf, tf, FUN = length))) %>%
   filter(n_tf > 10)
 
-## Plot correlation p-values per TF (export 3x6.5)
+## Figure 3A: Plot correlation p-values per TF (export 3x6.5)
 ggplot(rna_correlations_df %>%
          filter(reasonable == "Yes", tf %in% rna_correlations_rem$tf) %>%
          distinct(reporter_id, cor_pval, cor, tf, commercial_reporter) %>%
@@ -538,7 +525,7 @@ ggplot(cDNA_df3 %>%
   facet_wrap(~promoter) +
   scale_color_gradient(low = "#264653", high = "#9AC1AE")
 
-### GATA4: Impact of spacer sequence (export 3x5.5)
+### Figure 3B: GATA4: Impact of spacer sequence (export 3x5.5)
 ggplot(cDNA_df3 %>%
          filter(reporter_id %in% c("GATA4_10bp_10bp_minP_3", "GATA4_10bp_10bp_minP_1")) %>%
          distinct(cell, reporter_id, reporter_activity_minP, nTPM),
@@ -557,6 +544,7 @@ gata4_plot <- rna_correlations_df %>%
   distinct(reporter_id, cor_pval, spacing, background) %>%
   mutate(mean_cor_pval = ave(cor_pval, spacing, background, FUN = mean))
 
+## Figure S3A
 ggplot() +
   geom_hline(yintercept = 1, lty = 2) +
   geom_bar(data = gata4_plot %>% distinct(mean_cor_pval, spacing, background),
@@ -568,7 +556,7 @@ ggplot() +
   scale_color_manual(values = c("Yes" = colors_diverse[2], "No" = colors_diverse[1])) +
   facet_wrap(~spacing)
 
-### TFCP2L1: Impact of spacer length
+### Figure 3D: TFCP2L1: Impact of spacer length
 ggplot(cDNA_df3 %>%
          filter(reporter_id %in% c("TFCP2L1_10bp_10bp_minP_1", "TFCP2L1_5bp_10bp_minP_1")) %>%
          distinct(cell, reporter_id, reporter_activity_minP, nTPM),
@@ -587,7 +575,7 @@ tfcp2l1_plot <- rna_correlations_df %>%
   distinct(reporter_id, cor_pval, spacing, background) %>%
   mutate(mean_cor_pval = ave(cor_pval, spacing, background, FUN = mean))
 
-## Export 3x4
+## Figure S3C: Export 3x4
 ggplot() +
   geom_hline(yintercept = 1, lty = 2) +
   geom_bar(data = tfcp2l1_plot %>% distinct(mean_cor_pval, spacing, background),
@@ -599,7 +587,7 @@ ggplot() +
   scale_color_manual(values = c("Yes" = colors_diverse[2], "No" = colors_diverse[1])) +
   facet_wrap(~spacing)
 
-### GATA1: Impact of distance
+### Figure 3C: GATA1: Impact of distance
 ggplot(cDNA_df3 %>%
            filter(reporter_id %in% c("GATA1_5bp_10bp_mCMV_2", "GATA1_5bp_21bp_mCMV_2")) %>%
            distinct(cell, reporter_id, reporter_activity_minP, nTPM),
@@ -618,6 +606,7 @@ gata1_plot <- rna_correlations_df %>%
   distinct(reporter_id, cor_pval, distance) %>%
   mutate(mean_cor_pval = ave(cor_pval, distance, FUN = mean))
 
+## Figure S3B
 ggplot() +
   geom_hline(yintercept = 1, lty = 2) +
   geom_bar(data = gata1_plot %>% distinct(mean_cor_pval, distance),
@@ -631,8 +620,6 @@ ggplot() +
 
 
 
-
-
 ### NR5A2: Impact of spacer length - repressive role?
 ggplot(rna_correlations_df %>%
            filter(tf == "NR5A2") %>%
@@ -642,7 +629,7 @@ ggplot(rna_correlations_df %>%
     geom_boxplot(alpha = .2, outlier.shape = NA) +
     theme_pubr()
 ```
-
+Reporter design affects cell-type specificity.
 
 ---
 
@@ -750,7 +737,7 @@ Aim: Similar to before: does reporter activity correlate with protein abundance 
 #   scale_color_gradient2(low = "#264653", mid = "white", high = "#e76f51") +
 #   theme_pubr(border = T, x.text.angle = 90)
 ```
-Some reporter activities correlate surprisingly well with protein abundance.
+Some reporter activities correlate surprisingly well with protein abundance. Don't use this for now - data not reliable enough.
 
 ---
 
@@ -759,7 +746,7 @@ Some reporter activities correlate surprisingly well with protein abundance.
 
 Aim: If the measured activities can be fitted by a linear model, it is likely that the activity is true. If not, we might be looking at noise instead.
 
-```{r log-linear-model-5, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
+```{r ,out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 ## Only include 2-3 most interesting conditions per TF (as determined before)
 ref_conditions_sel <- ref_conditions %>%
   mutate(tf_condition = paste(tf, condition, sep = "_"))
@@ -907,11 +894,11 @@ ggplot(lm_pval_df, aes(x = pval, color = random)) +
   scale_color_manual(values = c("black", "grey")) 
 
 ```
-
+Linear models seem to work very well for most TFs.
 
 ## Identify best condition per TF based on linear models and other data
 
-```{r log-linear-model-5, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
+```{r ,out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
 ## Then integrate the linear models to select the least noisy of the top 2-3 conditions per TF
 cDNA_df_TF4 <- cDNA_df_TF3 %>%
   distinct(tf, condition, pval_adj)
@@ -941,7 +928,7 @@ chosen_conditions <- ref_conditions %>%
 ## Explore linear models for all TFs in the chosen conditions
 
 ```{r log-linear-model-5, out.width= "80%", fig.align= "center", echo=FALSE, warning= FALSE, message = FALSE}
-## Example: Predicted vs. measured for one TF
+## Figure 2B: Predicted vs. measured for one TF
 ggplot(cDNA_df_TF3 %>%
          filter(tf == "STAT3", condition == "mES_2i_LIF") %>%
          mutate(spacing = gsub(":.*", "", spacing_background)) %>%
@@ -973,7 +960,7 @@ feature_names <- data.frame("features" = c("minP", "mCMV", "hBGm", "10bp:1", "10
 weight_ex <- weight_ex %>%
   left_join(feature_names)
                    
-
+## Figure 2C
 ggplot(weight_ex %>% 
          mutate(sign = ifelse(pval < 0.05, "Yes", "No")) %>%
          mutate(feature_names = factor(feature_names, levels = c("minP", "minCMV", "minHBG", "10-bp distance", "21-bp distance",
@@ -1014,6 +1001,7 @@ weight2 <- weight %>%
 myBreaks <- c(seq(-2, 0, length.out=50+1), 
               seq(0.000001, 2, length.out=50))
 
+## Figure 2D
 pheatmap(weight2 %>%
                   t(),
          clustering_method = "ward.D2",
@@ -1109,7 +1097,7 @@ weight_spacing_length2 <- weight_spacing_length %>%
   mutate(spacing_degree_transf2 = cos(spacing_degree2)) %>%
   mutate(dif_spacing = -spacing_degree_transf1 + spacing_degree_transf2)
 
-## Figure 3F: Spacer length importance per binding mode (export 4x4)
+## Spacer length importance per binding mode (export 4x4)
 ggplot(weight_spacing_length2 %>% 
          mutate(mode = factor(mode, levels = c("monomer", "homodimer", "heterodimer", "tetramer"))),
        aes(x = BS_length, y = weight)) +
@@ -1135,7 +1123,7 @@ ggplot(weight_spacing_length2,
   scale_alpha_manual(values = c(0.3, 1)) +
   facet_wrap(~superclass)
 
-## Figure S3D: Zoom in on bZIP TFs (export 4x4)
+## Zoom in on bZIP TFs (export 4x4)
 ggplot(weight_spacing_length2 %>% filter(superclass == "basic"),
        aes(x = BS_length, y = weight)) +
   geom_hline(yintercept = 0) +
@@ -1176,7 +1164,7 @@ exp_variance_plot <- exp_variance_plot %>%
   #filter(total_variance > 50) %>%
   mutate(mean_rel_sum_sq = ave(rel_sum_sq, feature, FUN = mean))
 
-## (export 3x3.5)
+## Figure 2E: (export 3x3.5)
 ggplot(exp_variance_plot,
          aes(x = reorder(feature, -mean_rel_sum_sq), y = rel_sum_sq, color = total_variance)) +
   geom_quasirandom() +
@@ -1249,6 +1237,7 @@ cDNA_df_confidence2 <- cDNA_df6 %>%
 reporter_features <- cDNA_df %>%
   distinct(promoter, spacing, distance, background, tf, reporter_id)
 
+## Figure S6
 plot_list_print <- list()
 for (i in unique(cDNA_df_confidence2$tf)){
   
@@ -1450,7 +1439,7 @@ ggplot(cDNA_df_confidence2 %>%
 ```
 
 
-## Figure 2: Plot activities in chosen conditions
+## Plot activities in chosen conditions
 
 Aim: Get a good overview of reporter activities
 ```{r}
@@ -1520,6 +1509,7 @@ cDNA_df_plot2 <- cDNA_df_plot %>%
 cDNA_df_plot <- cDNA_df_plot %>%
   left_join(cDNA_df_plot2)
 
+## Figure 1E
 ggplot(cDNA_df_plot %>%
            mutate(cell = factor(cell, levels = c("NPC", "mES"))),
        aes(x = reorder(tf, -mean_tf_activity), y = reporter_activity_minP)) +
@@ -1547,11 +1537,10 @@ ggplot(cDNA_df_plot %>%
 
 
 
-## Figure 4: Showcase how reporter activities change upon perturbation
+## Showcase how reporter activities change upon perturbation
 
 Aim: Demonstrate perturbation responses and differences between reporter designs.
 ```{r}
-# Figure S4E: Plot perturbation response of all TFs
 ## Prepare data frame for following analyses
 cDNA_df2 <- cDNA_df %>%
   mutate(tf = gsub("_.*", "", tf)) %>%
@@ -1572,7 +1561,7 @@ selected_conditions <- cDNA_df_confidence2 %>%
   mutate(selected_perturbations = paste(tf, perturbation_condition, sep = "_")) %>%
   mutate(selected_off_perturbations = paste(tf, off_target_perturbation, sep = "_"))
 
-### All direct TF perturbations
+### Figure 4A: All direct TF perturbations
 ggplot(cDNA_df2 %>%
          filter(stimulation %in% c("KD", "overexpression", "degron")) %>%
          filter(!condition %in% c("mES_NR4A2-OE-cDIM12", "mES_OTX2-OE")) %>%
@@ -1593,7 +1582,7 @@ ggplot(cDNA_df2 %>%
   theme_pubr(x.text.angle = 90, legend = "none")
 
 
-### All pathway perturbations
+### Figure 3A: All pathway perturbations
 ggplot(cDNA_df2 %>%
          filter((stimulation %in% c("pathway")) | (condition == "mES_NR4A2-OE-cDIM12")) %>%
          mutate(selected = ifelse(tf %in% selected_conditions$selected_perturbations, "Yes", "No")) %>%
@@ -1614,7 +1603,7 @@ ggplot(cDNA_df2 %>%
   theme_pubr(x.text.angle = 90, legend = "none")
 
 
-### All off-target perturbations
+### Figure S4: All off-target perturbations
 cDNA_df2 <- cDNA_df %>%
   mutate(tf = gsub("_.*", "", tf)) %>%
   dplyr::filter(neg_ctrls == "No", 
@@ -1668,12 +1657,11 @@ ggplot(cDNA_df2 %>%
 
 
 
-## Figure S4F: Plot perturbation response of NR1H4 reporters to all perturbations
+## Figure S4: Plot perturbation response of NR1H4 reporters to all perturbations
 ggplot(cDNA_df %>%
          mutate(tf = gsub("_.*", "", tf)) %>%
          filter(tf == "NR1H4::RXRA", stimulation != "no") %>%
-         distinct(tf, reporter_id, reporter_dif_minP, commercial_reporter, condition) %>%
-         left_join(effect_sizes %>% dplyr::select("condition" = perturbation_condition, effect_size)) %>%
+         distinct(tf, reporter_id, reporter_dif_minP, commercial_reporter, condition, effect_size) %>%
          drop_na(effect_size) %>%
          mutate(reporter_dif_minP = ifelse(effect_size == 0, -reporter_dif_minP, reporter_dif_minP)) %>%
          mutate(dif_mean = ave(reporter_dif_minP, tf, condition, FUN = function(x) mean(x, na.rm = T))),
@@ -2155,7 +2143,7 @@ commercial_ranking_best_comm <- commercial_ranking_best %>%
   mutate(tf = factor(tf, levels = unique(tf))) %>%
   mutate(commercial_reporter = factor(commercial_reporter, levels = c("No", "Yes")))
 
-### Figure 5C: TFs where comparison synthetic vs. published is possible
+### Figure 6C: TFs where comparison synthetic vs. published is possible
 ggplot(commercial_ranking_best_comm,
        aes(y = tf, x = commercial_reporter, fill = as.factor(conf_level))) +
   geom_tile() +
@@ -2164,7 +2152,7 @@ ggplot(commercial_ranking_best_comm,
   scale_fill_manual(values = c("0" = "#CCCCCB", "1" = "#EFCABE", "2" = "#E7A08B", "3" = "#DD6840", "4" = "#BF4A27")) +
   scale_size_manual(values = c("Yes" = .35, "No" = 0))
 
-### Figure 5D: TFs with only synthetic
+### Figure 6D: TFs with only synthetic
 ggplot(commercial_ranking_best %>%
          filter(commercial == F),
        aes(y = reorder(tf, conf_level), x = "x", fill = as.factor(conf_level))) +
@@ -2194,7 +2182,7 @@ commercial_ranking_best_only_comm <- commercial_ranking2 %>%
   distinct(tf, max_rank2, conf_level, commercial_reporter, rank, commercial) %>%
   filter(rank == max_rank2)
 
-### Figure S5D: TFs with only published reporters
+### Figure 6E: TFs with only published reporters
 ggplot(commercial_ranking_best_only_comm,
        aes(y = reorder(tf, conf_level), x = "x", fill = as.factor(conf_level))) +
   geom_tile() +
@@ -2203,44 +2191,30 @@ ggplot(commercial_ranking_best_only_comm,
   scale_fill_manual(values = c("0" = "#CCCCCB", "1" = "#EFCABE", "2" = "#E7A08B", "3" = "#DD6840", "4" = "#BF4A27"))
 
 
-### Figure S6: which thresholds do the primer reporters fullfill?
-binary_confidence <- cDNA_df_confidence2 %>%
-  mutate(activity_thresh = ifelse((commercial_reporter == "No" & pval_adj < 0.05 & reporter_activity_minP > 1) |
-                               (commercial_reporter == "No" & n_active > 12 & reporter_activity_minP > 1) |
-                               (commercial_reporter == "Yes" & reporter_activity_minP > 1), 1, 0)) %>%
-  mutate(cor_thresh = ifelse(cor_pval > 1 & !is.na(cor_pval), conf_level + 1, conf_level)) %>%
-  mutate(dif_thresh = ifelse(reporter_dif_minP > 1 & !is.na(reporter_dif_minP), conf_level + 2, conf_level)) %>% 
-  mutate(off_thresh = ifelse(conf_level >= 1 & off_target_activity < -1 & !is.na(off_target_activity), conf_level - 1, conf_level)) %>%
-  distinct(tf, reporter_id, commercial_reporter, conf_level, activity_thresh, cor_thresh, dif_thresh, off_thresh) %>%
-  group_by(tf, commercial_reporter) %>%
-  arrange(desc(conf_level), desc(quality_score)) %>%
-  mutate(rank = row_number()) %>%
-  filter(rank == 1) %>%
-  ungroup() %>%
-  group_by(tf) %>%
-  mutate(max_conf_level = max(conf_level)) %>%
-  filter(max_conf_level > 1)
-
-
-
-
-
-  mutate(conf_level = ifelse((commercial_reporter == "No" & pval_adj < 0.05 & reporter_activity_minP > 1) |
-                               (commercial_reporter == "No" & n_active > 12 & reporter_activity_minP > 1) |
-                               (commercial_reporter == "Yes" & reporter_activity_minP > 1), 1, 0)) %>% 
-  ## Add a level if reporter activity follows transcript/protein levels
-  mutate(conf_level = ifelse(cor_pval > 1 & !is.na(cor_pval), conf_level + 1, conf_level)) %>% 
-  ## Add a level if TF perturbation leads to change in activity
-  mutate(conf_level = ifelse(reporter_dif_minP > 1 & !is.na(reporter_dif_minP), conf_level + 2, conf_level)) %>% 
-  ## Subtract a level if substantial off-target response
-  mutate(conf_level = ifelse(conf_level >= 1 & off_target_activity < -1 & !is.na(off_target_activity), conf_level - 1, conf_level))
+# ### which thresholds do the primer reporters fullfill?
+# binary_confidence <- cDNA_df_confidence2 %>%
+#   mutate(activity_thresh = ifelse((commercial_reporter == "No" & pval_adj < 0.05 & reporter_activity_minP > 1) |
+#                                (commercial_reporter == "No" & n_active > 12 & reporter_activity_minP > 1) |
+#                                (commercial_reporter == "Yes" & reporter_activity_minP > 1), 1, 0)) %>%
+#   mutate(cor_thresh = ifelse(cor_pval > 1 & !is.na(cor_pval), conf_level + 1, conf_level)) %>%
+#   mutate(dif_thresh = ifelse(reporter_dif_minP > 1 & !is.na(reporter_dif_minP), conf_level + 2, conf_level)) %>% 
+#   mutate(off_thresh = ifelse(conf_level >= 1 & off_target_activity < -1 & !is.na(off_target_activity), conf_level - 1, conf_level)) %>%
+#   distinct(tf, reporter_id, commercial_reporter, conf_level, activity_thresh, cor_thresh, dif_thresh, off_thresh) %>%
+#   group_by(tf, commercial_reporter) %>%
+#   arrange(desc(conf_level), desc(quality_score)) %>%
+#   mutate(rank = row_number()) %>%
+#   filter(rank == 1) %>%
+#   ungroup() %>%
+#   group_by(tf) %>%
+#   mutate(max_conf_level = max(conf_level)) %>%
+#   filter(max_conf_level > 1)
 ```
 
 ---
 
-### Extract best reporter for each TF
+### Extract prime reporter for each TF
 ```{r}
-## Select best reporter for each TF
+## Table S4: Select prime reporter for each TF
 best_reporters <- cDNA_df_confidence2 %>%
   group_by(tf) %>%
   arrange(desc(conf_level), desc(quality_score)) %>%
@@ -2304,7 +2278,7 @@ ggplot(best_reporters_neg %>%
   geom_bar(stat = "identity", fill = "#2278B5", color = "black") +
   theme_pubr(x.text.angle = 90, legend = "none")
 
-## Plot original and mutated reporter activity
+## Figure 6F: Plot original and mutated reporter activity
 reporter_activity <- best_reporters_neg %>%
   dplyr::select(reporter_id, "start_activity" = reporter_activity_minP) %>%
   distinct()
@@ -2378,6 +2352,7 @@ best_reporters_all_2 <- cDNA_df_confidence2 %>%
 best_reporters_all_3 <- best_reporters_all_2 %>%
   rbind(best_reporters_all)
 
+## Figure S7
 ggplot(best_reporters_all_3,
        aes(x = rank, y = reporter_activity_neg)) +
   geom_hline(yintercept = 0, lty = 2) +
@@ -2391,7 +2366,7 @@ ggplot(best_reporters_all_3,
 
 ---
 
-### Figure 6: Explore activities of best reporters in all cell types
+### Explore activities of best reporters in all cell types
 ```{r}
 ## Select set of best reporters
 optimal_reporters <- cDNA_df_confidence2 %>%
@@ -2437,7 +2412,7 @@ for(i in unique(order_dendogram$order)) {
 cluster_tfs2 <- cluster_tfs %>%
   column_to_rownames("tf")
 
-## Figure 6A: Activities of top 3 reporters per cell type
+## Figure 7A: Activities of top 3 reporters per cell type
 p <- pheatmap(heatmap_cell_activities %>% 
              as.matrix(),
          color = colorRampPalette(c("#F2CC8F", "white", "#3D405B"))(100),
@@ -2496,7 +2471,7 @@ tf_umap <- umap(heatmap_cell_activities_cor)
 colnames(tf_umap$layout) <- c("A","B") 
 tf_umap_plot <- tf_umap$layout %>% as.data.frame() %>% rownames_to_column(var = "tf") %>% left_join(cluster_tfs) #Import data from previous line
 
-# Figure 6B: UMAP visualization of Figure 6A (export 7x7)
+# Figure S8B: UMAP visualization of Figure 6A (export 7x7)
 ggplot(tf_umap_plot,
        aes(A,B)) +
   #stat_density2d(geom = "polygon", aes(alpha = ..level..), bins = 8) +
@@ -2622,6 +2597,7 @@ cell_activities_comp2 <- cell_activities_comp %>%
 cell_activities_comp <- cell_activities_comp %>%
   left_join(cell_activities_comp2)
 
+## Figure S8C
 ggplot(cell_activities_comp %>%
          filter(tf == "HNF4A"),
        aes(x = reorder(cell, -synth_activity), y = reporter_activity_minP, color = commercial_reporter, group = commercial_reporter)) + 
@@ -2710,6 +2686,8 @@ overview_effects2 <- overview_effects %>%
 myBreaks <- c(seq(-1.5, 0, length.out=50+1), 
               seq(0.000001, 1.5, length.out=50))
 
+
+## Figure S8D
 pheatmap(overview_effects2,
          color = colorRampPalette(c("#99B2DD", "white", "#E07A5F"))(100),
          clustering_method = "ward.D2",
@@ -3347,6 +3325,8 @@ cDNA_df2_mES2_heatmap <- cDNA_df2_mES2_filt %>%
 myBreaks <- c(seq(-2, 0, length.out=50+1), 
               seq(0.000001, 2, length.out=50))
 
+
+## Figure 7B
 pheatmap(t(cDNA_df2_mES2_heatmap),
          color = colorRampPalette(c("#99B2DD", "white", "#E07A5F"))(100),
          clustering_method = "ward.D2",
