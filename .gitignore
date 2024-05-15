@@ -26,7 +26,6 @@ data/
 *-Ex.R
 
 ### Results ###
-*.html
 *.pdf
 *.png
 *.jpg
