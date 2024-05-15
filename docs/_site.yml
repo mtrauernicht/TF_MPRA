@@ -1,0 +1,15 @@
+name: "my-website"
+navbar:
+  title: "Optimized reporters for multiplexed detection of transcription factor activity"
+  left:
+    - text: "Introduction"
+      href: index.html
+    - text: "TFBS analysis"
+      href: pwm_comparison.html  
+    - text: "Data pre-processing"
+      href: barcode_preprocessing_all.html
+    - text: "Detailed TF Reporter Activity Analysis"
+      href: TF_reporter_variant_analysis.html
+output: 
+  html_document:
+    theme: united
