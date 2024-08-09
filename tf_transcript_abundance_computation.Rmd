@@ -16,6 +16,13 @@ knitr::opts_chunk$set(echo = TRUE)
 library(edgeR)
 library (EDASeq)
 library(rtracklayer)
+library(dplyr)
+library(utils)
+library(stringr)
+library(tidyr)
+library(readr)
+library(ggplot2)
+library(tidyverse)
 
 ExonLength <- function(genes) {
   # Get the combined exon length for the genes
@@ -70,7 +77,7 @@ mES_rna <- tib_fpkm_joshi %>%
 mES_rna$symbol[mES_rna$symbol == "TRP53"] <- "TP53"
 
 mES_rna <- mES_rna %>%
-  setnames(c("symbol", "twoi"), c("tf", "TPM")) %>%
+  dplyr::select("tf" = symbol, "TPM" = twoi) %>%
   #filter(mES_rna$tf %in% tfs$tf) %>%
   mutate(cell = "mES")
 
@@ -100,43 +107,88 @@ proteinatlas_rna_export <- proteinatlas_rna %>%
   
 
 ## Load NPC RNA-seq data and calculate TPM
-npc_rna <- read_delim("/shared/gcf/m.trauernicht/7086/genecounts.txt") 
+npc_rna <- read_delim("/shared/gcf/m.trauernicht/7086/genecounts.txt") %>%
+  filter(gene_biotype == "protein_coding")
 
 ### Get gene lengths of all mm10 genes
-genes <- import("/DATA/usr/m.trauernicht/data/genomes/mm10/gencode.vM10.annotation.gtf")
-gene_length <- ExonLength(genes)
-gene_length <- gene_length %>%
+genes_mouse <- import("/DATA/usr/m.trauernicht/data/genomes/mm10/gencode.vM10.annotation.gtf")
+gene_length_mouse <- ExonLength(genes_mouse)
+gene_length_mouse <- gene_length_mouse %>%
   mutate(gene_id = gsub("\\.[0-9]{1,2}$", "", gene_id)) %>%
   dplyr::select("ensembl_gene_id" = gene_id, exon_length)
 
 npc_rna <- npc_rna %>%
   mutate(gene_length = end_position - start_position) %>%
   dplyr::select("tf" = external_gene_id, "NPC_r1" = `1_NPC_r1`, "NPC_r2" = `2_NPC_r2`, ensembl_gene_id, gene_length) %>%
-  left_join(gene_length) %>%
+  left_join(gene_length_mouse) %>%
   #left_join(transcript_lengths) %>%
   mutate(NPC_counts = (NPC_r1 + NPC_r2) / 2) %>%
   mutate(NPC_rpk = NPC_counts / (exon_length / 1000)) %>%
   mutate(pm = sum(NPC_rpk, na.rm = T) / 1e6) %>%
   mutate(TPM = NPC_rpk / pm) %>%
   mutate(cell = "NPC") %>%
+  mutate(tf = ifelse(tf == "TRP53", "TP53", tf)) %>%
   distinct(tf, TPM, cell) %>%
   mutate(tf = toupper(tf))  %>%
   group_by(tf) %>%
   slice_max(n = 1, order_by = TPM) %>%
   ungroup()
 
-### Attach genes not found in NPC RNA-seq
-npc_rna_add <- mES_rna %>%
-  mutate(TPM = 0) %>%
-  distinct(tf, TPM) %>%
-  filter(!tf %in% npc_rna$tf) %>%
-  mutate(cell = "NPC")
+## Load generated mESC RNA-seq data and calculate TPM
+mES_rna_2 <- read_delim("/shared/gcf/m.trauernicht/7813/genecounts.txt") %>%
+  filter(gene_biotype == "protein_coding")
 
-npc_rna <- rbind(npc_rna, npc_rna_add)
+mES_rna_2 <- mES_rna_2 %>%
+  mutate(gene_length = end_position - start_position) %>%
+  dplyr::select("tf" = external_gene_id, "mES_r3" = `3_mES_2i_LIF_r3`, "mES_r2" = `2_mES_2i_LIF_r2`,
+                "mES_r1" = `1_mES_2i_LIF_r1`,
+                ensembl_gene_id, gene_length) %>%
+  left_join(gene_length_mouse) %>%
+  #left_join(transcript_lengths) %>%
+  mutate(mES_counts = (mES_r1 + mES_r2 + mES_r3) / 3) %>%
+  mutate(mES_rpk = mES_counts / (exon_length / 1000)) %>%
+  mutate(pm = sum(mES_rpk, na.rm = T) / 1e6) %>%
+  mutate(TPM = mES_rpk / pm) %>%
+  mutate(cell = "mESC_gen") %>%
+  distinct(tf, TPM, cell) %>%
+  mutate(tf = toupper(tf))  %>%
+  mutate(tf = ifelse(tf == "TRP53", "TP53", tf)) %>%
+  group_by(tf) %>%
+  slice_max(n = 1, order_by = TPM) %>%
+  ungroup()
+
+## Load generated mESC RNA-seq data and calculate TPM
+hepg2_gen <- read_delim("/shared/gcf/m.trauernicht/7535/genecounts.txt") %>%
+  filter(gene_biotype == "protein_coding", chromosome_name != "MT")
+
+### Get gene lengths of all mm10 genes
+genes <- import("/DATA/usr/m.trauernicht/data/genomes/hg38/gencode.v38.annotation.gtf")
+gene_length <- ExonLength(genes)
+gene_length <- gene_length %>%
+  mutate(gene_id = gsub("\\.[0-9]{1,2}$", "", gene_id)) %>%
+  dplyr::select("ensembl_gene_id" = gene_id, exon_length)
+
+hepg2_gen <- hepg2_gen %>%
+  mutate(gene_length = end_position - start_position) %>%
+  dplyr::select("tf" = external_gene_id, "HEPG2_r1" = `9_NT1_r1`, "HEPG2_r2" = `10_NT2_r1`,
+                "HEPG2_r3" = `11_NT1_r2`, 
+                ensembl_gene_id, gene_length) %>%
+  left_join(gene_length) %>%
+  #left_join(transcript_lengths) %>%
+  mutate(HEPG2_counts = (HEPG2_r1 + HEPG2_r2 + HEPG2_r3) / 3) %>%
+  mutate(HEPG2_rpk = HEPG2_counts / (exon_length / 1000)) %>%
+  mutate(pm = sum(HEPG2_rpk, na.rm = T) / 1e6) %>%
+  mutate(TPM = HEPG2_rpk / pm) %>%
+  mutate(cell = "HEPG2_gen") %>%
+  distinct(tf, TPM, cell) %>%
+  mutate(tf = toupper(tf))  %>%
+  group_by(tf) %>%
+  slice_max(n = 1, order_by = TPM) %>%
+  ungroup()
 
 
 ## Combine data from all cell types and change names back to original TF names
-tf_rna <- rbind(mES_rna, proteinatlas_rna, npc_rna)
+tf_rna <- rbind(mES_rna, mES_rna_2, proteinatlas_rna, npc_rna, hepg2_gen)
 tf_rna$tf[tf_rna$tf == "AHR"] <- "AHR::ARNT"
 tf_rna$tf[tf_rna$tf == "ARNT"] <- "AHR::ARNT"
 tf_rna$tf[tf_rna$tf == "FOS"] <- "FOS::JUN"
@@ -173,17 +225,31 @@ tf_rna2$tf[tf_rna2$tf == "STAT1"] <- "STAT1::STAT2"
 tf_rna <- rbind(tf_rna, tf_rna2)
 
 
+# All unique cells and TFs
+all_cells <- unique(tf_rna$cell)
+all_tfs <- unique(tf_rna$tf)
+
+# Create a complete data frame with all combinations of cell and tf
+all_combinations <- expand.grid(cell = all_cells, tf = all_tfs)
+
+# Join with the original data, filling missing values with 0
+tf_rna_complete <- all_combinations %>%
+  left_join(tf_rna, by = c("cell", "tf")) %>%
+  replace_na(list(TPM = 0))
+
 ## For some heterodimeric TFs I set the TPM to the lowest of the two
-tf_rna <- tf_rna %>%
-  mutate(TPM = ave(TPM, cell, tf, FUN = min)) %>% 
+tf_rna <- tf_rna_complete %>%
+  ##mutate NA to 0
+  mutate(TPM = ifelse(is.na(TPM), 0, TPM)) %>%
+  mutate(TPM = ave(TPM, cell, tf, FUN = function(x) min (x, na.rm = T))) %>% 
   distinct()
 
 tf_rna$TPM[is.na(tf_rna$TPM)] <- 0
 
 ## TPM normalization
 tf_rna2 <- tf_rna %>%
-  mutate(median_tpm = ave(TPM, cell, FUN = median)) %>%
-  mutate(max_median_tpm = max(median_tpm)) %>%
+  mutate(median_tpm = ave(TPM, cell, FUN = function(x) median(x, na.rm = T))) %>%
+  mutate(max_median_tpm = max(median_tpm, na.rm = T)) %>%
   mutate(tpm_norm_factor = median_tpm/max_median_tpm) %>%
   mutate(TPM_norm = TPM/tpm_norm_factor)
 
@@ -196,8 +262,11 @@ tf_rna <- tf_rna2 %>%
 
 ## TMM on TPM values
 tf_rna_mat <- tf_rna %>%
-  distinct(tf, cell, TPM) %>%
-  spread(key = "cell", value = "TPM") %>%
+  mutate(sum_cell = ave(TPM, cell, FUN = sum)) %>%
+  mutate(mil_fac = 1e6/sum_cell) %>%
+  mutate(pTPM = TPM * mil_fac) %>%
+  distinct(tf, cell, pTPM) %>%
+  spread(key = "cell", value = "pTPM") %>%
   column_to_rownames("tf") %>%
   replace(is.na(.), 0)
 
@@ -207,11 +276,69 @@ normfact <- data.frame(calcNormFactors(tf_rna_mat)) %>%
 
 tf_rna <- tf_rna %>%
   left_join(normfact) %>%
-  mutate(nTPM = TPM * norm_factor) %>%
+  mutate(nTPM = TPM / norm_factor) %>%
   distinct(tf, cell, TPM, TPM_norm, nTPM)
-
-write_tsv(tf_rna, "/DATA/usr/m.trauernicht/data/RNA_seq/rna_tpm_all_tfs.tsv")
 ```
+
+## Correlate cells
+```{r}
+## mES cells
+mES_rna_cor <- tf_rna %>%
+  filter(cell %in% c("mES", "mESC_gen")) %>%
+  distinct(tf, cell, nTPM) %>%
+  pivot_wider(names_from = cell, values_from = nTPM)
+
+mES_rna_cor2 <- mES_rna_cor %>% mutate(dif = mESC_gen / mES)
+mES_rna_cor3 <- mES_rna_cor2 %>% mutate(tf_sel = ifelse(tf %in% cDNA_df$tf, "Yes", "No"))
+
+ggplot() +
+  geom_point(data = mES_rna_cor, aes(x = log10(mES), y = log10(mESC_gen)), 
+             alpha = .1) +
+  geom_point(data = mES_rna_cor %>%
+         filter(tf %in% cDNA_df$tf), aes(x = log10(mES), y = log10(mESC_gen)),
+         color = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  geom_smooth(method = "lm") +
+  theme_pubr()
+
+# Compute Pearson correlation
+cor(mES_rna_cor$mES[mES_rna_cor$tf %in% cDNA_df$tf], mES_rna_cor$mESC_gen[mES_rna_cor$tf %in% cDNA_df$tf], use = "pairwise.complete.obs", method = "pearson")
+
+## HEPG2 cells
+hepg2_rna_cor <- tf_rna %>%
+  filter(cell %in% c("HepG2", "HEPG2_gen")) %>%
+  distinct(tf, cell, nTPM) %>%
+  pivot_wider(names_from = cell, values_from = nTPM)
+
+hepg2_rna_cor2 <- hepg2_rna_cor %>% mutate(dif = HEPG2_gen / HepG2)
+hepg2_rna_cor3 <- hepg2_rna_cor2 %>% mutate(tf_sel = ifelse(tf %in% cDNA_df$tf, "Yes", "No"))
+
+ggplot() +
+  geom_point(data = hepg2_rna_cor, aes(x = log10(HepG2), y = log10(HEPG2_gen)), 
+             alpha = .1) +
+  geom_point(data = hepg2_rna_cor %>%
+         filter(tf %in% cDNA_df$tf), aes(x = log10(HepG2), y = log10(HEPG2_gen)),
+         color = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  geom_smooth(method = "lm") +
+  theme_pubr()
+
+# Compute Pearson correlation
+cor(hepg2_rna_cor$HepG2[hepg2_rna_cor$tf %in% cDNA_df$tf], hepg2_rna_cor$HEPG2_gen[hepg2_rna_cor$tf %in% cDNA_df$tf], use = "pairwise.complete.obs")
+```
+
+## Export data
+```{r}
+tf_rna_export <- tf_rna %>%
+  #filter(!cell %in% c("mES", "HepG2")) %>%
+  #mutate(cell = ifelse(cell == "mESC_gen", "mES", cell)) %>%
+  #mutate(cell = ifelse(cell == "HEPG2_gen", "HepG2", cell)) %>%
+  distinct(tf, cell, nTPM)
+  
+
+write_tsv(tf_rna_export, "/DATA/usr/m.trauernicht/data/RNA_seq/rna_tpm_all_tfs.tsv")
+```
+
 
 ## Process protein abundance data
 ```{r}
