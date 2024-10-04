@@ -525,7 +525,7 @@ bc_df_cDNA <- bc_df_filt2 %>%
 bc_df_cDNA <- bc_df_cDNA %>%
   mutate(mean_activity = ave(activity, reporter_id, sample_id, FUN = function(x) quantile(x, 0.5))) %>%
   mutate(deviation = activity / mean_activity) %>%
-  mutate(n_reporters = ave(reporter_id, reporter_id, sample_id, FUN = function(x) as.numeric(length(x))))
+  mutate(n_reporters = as.numeric(ave(reporter_id, reporter_id, sample_id, FUN = function(x) as.numeric(length(x)))))
 
 ## Choose arbitrary cutoff to get rid of most extreme outliers
 ### There can be two cases:
@@ -537,9 +537,9 @@ bc_df_cDNA_filt <- bc_df_cDNA %>%
   filter(n_reporters > 2) ## Remove reporters for which I have measurements from only two or less barcodes left
 
 ## Re-compute amount of barcodes per reporter after deviation filtering and remove those with 2 or less barcodes 
-bc_df_cDNA_filt$n_reporters <- ave(bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$reporter_id,
+bc_df_cDNA_filt$n_reporters <- as.numeric(ave(bc_df_cDNA_filt$reporter_id, bc_df_cDNA_filt$reporter_id,
                                 bc_df_cDNA_filt$sample_id, FUN =
-                                  function(x) as.numeric(length(x)))
+                                  function(x) as.numeric(length(x))))
 
 bc_df_cDNA_filt <- bc_df_cDNA_filt %>%
   filter(n_reporters >= 2)
@@ -575,7 +575,7 @@ bc_df_cDNA_filt$mean_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$r
 
 
 
-### Normalize activities per minimal promoter - use the mean of the lowest active 75% of the mutated TFBS reporters for this
+# ### Normalize activities per minimal promoter - use the mean of the lowest active 75% of the mutated TFBS reporters for this
 # #### I tried different things as well (see below) - but this way seems to get rid of "background" activity most robustly
 # bc_df_cDNA_filt_neg2 <- bc_df_cDNA_filt %>%
 #   dplyr::select(sample_id, reporter_id, tf, promoter, neg_ctrls, mean_activity) %>%
@@ -589,7 +589,7 @@ bc_df_cDNA_filt$mean_activity <- ave(bc_df_cDNA_filt$activity, bc_df_cDNA_filt$r
 #   dplyr::select("tf_activity" = activity, promoter, sample_id) %>%
 #   unique()
 # 
-# mbc_df_cDNA_filt$promoter[bc_df_cDNA_filt$hPGK == "Yes"] <- "minP"
+# bc_df_cDNA_filt$promoter[bc_df_cDNA_filt$hPGK == "Yes"] <- "minP"
 
 ## Other methods to normalize:
 bc_df_cDNA_filt_neg <- bc_df_cDNA_filt %>%
