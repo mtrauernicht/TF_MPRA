@@ -101,6 +101,7 @@ lambert_all_motifs <- lambert_all_motifs_df %>%
   mutate(CIS.BP_ID = paste(CIS.BP_ID, ".txt", sep = "")) %>%
   mutate(tf = gsub("(.*?)_.*", "\\1", motif_ID)) %>%
   mutate(tf = gsub("V\\$","", tf)) %>%
+  mutate(tf = gsub("PBMC-", "", tf)) %>%
   dplyr::select("motif_id" = CIS.BP_ID, tf) %>%
   distinct() %>%
   group_by(tf) %>%
@@ -131,6 +132,61 @@ all_motifs <- rbind(lambert_all_motifs, gen1_motifs, gen2_motifs) %>%
                           "M01775_1.94d.txt", "M01230_1.94d.txt", "M00877_1.94d.txt", "M01240_1.94d.txt",
                           "M01025_1.94d.txt", "M01278_1.94d.txt", "M01428_1.94d.txt", "M00497_1.94d.txt",
                           "M02157_1.94d.txt")) 
+```
+
+
+### Check which of those motifs are relevant in cancer
+
+```{r}
+# Load all lambert TFs
+lambert_tfs <- read_csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/lambert_all_tfs.csv") %>%
+  filter(`...4` == "Yes") %>%
+  dplyr::select("tf" = Name) %>%
+  mutate(tf = toupper(tf)) %>%
+  distinct()
+
+# Load cancer relevant TFs
+cosmic_cancer <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/Census_all.csv", header = T) %>%
+  dplyr::select("tf" = Gene.Symbol) %>%
+  mutate(tf = toupper(tf)) %>%
+  mutate(cancer = "Yes")
+
+# Load prime TF reporters
+prime_reporters <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/best_reporters.csv", header = T) %>%
+  filter(conf_level > 1) %>%
+  mutate(tf = gsub("::RXRA", "", tf)) %>%
+  mutate(tf = gsub("AHR::ARNT", "AHR", tf)) %>%
+  mutate(tf = gsub("MAF::NFE2", "MAF", tf)) %>%
+  mutate(tf = gsub("FOS::JUN", "FOS", tf)) %>% 
+  mutate(tf = gsub("SMAD2::SMAD3::SMAD4", "SMAD2", tf)) %>%
+  distinct(tf) %>%
+  mutate(prime = "Yes")
+
+# Load all selected tfs
+all_tfs <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/best_reporters.csv", header = T) %>%
+  mutate(tf = gsub("::RXRA", "", tf)) %>%
+  mutate(tf = gsub("AHR::ARNT", "AHR", tf)) %>%
+  mutate(tf = gsub("MAF::NFE2", "MAF", tf)) %>%
+  mutate(tf = gsub("FOS::JUN", "FOS", tf)) %>% 
+  mutate(tf = gsub("SMAD2::SMAD3::SMAD4", "SMAD2", tf)) %>%
+  distinct(tf) %>%
+  mutate(selected = "Yes")
+
+# Match with all motifs
+all_motifs_cancer <- lambert_tfs %>%
+  #mutate(tf = ifelse(tf == "AHR:ARNT", "AHR::ARNT", tf)) %>%
+  #mutate(tf = ifelse(tf == "RAR:RXR", "RARA:RXRA", tf)) %>%
+  #mutate(tf = ifelse(tf == "HIF1", "HIF1A", tf)) %>%
+  #mutate(tf = toupper(tf)) %>%
+  left_join(cosmic_cancer, by = "tf") %>%
+  left_join(prime_reporters, by = "tf") %>%
+  left_join(all_tfs, by = "tf") %>%
+  mutate(cancer = ifelse(is.na(cancer), "No", "Yes")) %>%
+  mutate(prime = ifelse(is.na(prime), "No", "Yes")) %>%
+  mutate(selected = ifelse(is.na(selected), "No", "Yes")) %>%
+  dplyr::select("tf", "cancer", "prime", "selected") %>%
+  distinct()
+
 ```
 
 
