@@ -5,7 +5,6 @@
 .Ruserdata
 results/
 data/
-*/*.csv
 */._*
 */*/._*
 */*/*/._*
