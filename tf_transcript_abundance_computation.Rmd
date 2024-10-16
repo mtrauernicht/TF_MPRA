@@ -333,7 +333,7 @@ tf_rna_export <- tf_rna %>%
   #filter(!cell %in% c("mES", "HepG2")) %>%
   #mutate(cell = ifelse(cell == "mESC_gen", "mES", cell)) %>%
   #mutate(cell = ifelse(cell == "HEPG2_gen", "HepG2", cell)) %>%
-  distinct(tf, cell, nTPM)
+  distinct(tf, cell, nTPM, TPM)
   
 
 write_tsv(tf_rna_export, "/DATA/usr/m.trauernicht/data/RNA_seq/rna_tpm_all_tfs.tsv")
