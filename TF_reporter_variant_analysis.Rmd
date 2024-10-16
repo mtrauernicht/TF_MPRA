@@ -166,7 +166,7 @@ ggplot_custom <- function(...) ggplot2::ggplot(...) +
 
 ```{r out.width= "80%", fig.align= "center"}
 # Import processed bc counts from the preprocessing step
-cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data_scripts/mt20241003_reporter_activity_filt_combined.csv", header = T)
+cDNA_df <- read.csv("/DATA/usr/m.trauernicht/projects/SuRE-TF/data/gcf7124_stimulations/results/mt20241003_reporter_activity_filt_combined.csv", header = T)
 
 ## We are not going to use NIH3T3 data, so remove it for now
 cDNA_df <- cDNA_df %>%
